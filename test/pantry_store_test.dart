@@ -34,6 +34,31 @@ void main() {
     expect(store.totalFor('onion'), before - 0.5);
   });
 
+  test(
+    'an insufficient repeated cook leaves inventory and history unchanged',
+    () {
+      final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+      final pancakes = store.recipes.firstWhere(
+        (item) => item.id == 'pancakes',
+      );
+      for (var count = 0; count < 4; count++) {
+        store.cook(pancakes);
+      }
+      final milkBefore = store.totalFor('milk');
+      final eggsBefore = store.totalFor('egg');
+      final historyBefore = store.history.length;
+
+      expect(
+        () => store.cook(pancakes),
+        throwsA(isA<InsufficientInventoryException>()),
+      );
+
+      expect(store.totalFor('milk'), milkBefore);
+      expect(store.totalFor('egg'), eggsBefore);
+      expect(store.history, hasLength(historyBefore));
+    },
+  );
+
   test('food definitions and recipes can be created and updated', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final food = FoodDefinition(

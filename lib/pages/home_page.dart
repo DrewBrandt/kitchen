@@ -836,16 +836,47 @@ Future<void> _showConsume(
 }
 
 void _cook(BuildContext context, PantryStore store, Recipe recipe) {
-  final event = store.cook(recipe);
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text('${recipe.name} deducted from inventory.'),
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: () => store.undo(event.id),
+  // Revalidate at tap time. The button may still be visible for a frame after
+  // another cook has changed inventory (for example, during a double-click).
+  final missing = store.missingFor(recipe);
+  if (missing.isNotEmpty) {
+    _showMissingInventory(context, store, missing);
+    return;
+  }
+
+  try {
+    final event = store.cook(recipe);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${recipe.name} deducted from inventory.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => store.undo(event.id),
+        ),
       ),
-    ),
-  );
+    );
+  } on InsufficientInventoryException catch (exception) {
+    // The store remains the final authority if inventory changes between the
+    // preflight check and its atomic deduction plan.
+    _showMissingInventory(context, store, exception.missing);
+  }
+}
+
+void _showMissingInventory(
+  BuildContext context,
+  PantryStore store,
+  Map<String, double> missing,
+) {
+  final details = missing.entries
+      .map((entry) {
+        final food = store.food(entry.key);
+        final unit = food.conversionFor(food.baseUnit).symbol;
+        return '${food.name} (${store.units.formatAmount(entry.value)} $unit short)';
+      })
+      .join(', ');
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text('Not enough inventory: $details.')));
 }
 
 Future<void> _confirmDeleteRecipe(
