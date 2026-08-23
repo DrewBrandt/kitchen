@@ -467,6 +467,14 @@ class _RecipeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = store.missingFor(recipe);
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final availabilityChip = Chip(
+      avatar: Icon(
+        missing.isEmpty ? Icons.check_circle : Icons.shopping_basket_outlined,
+        size: 18,
+      ),
+      label: Text(missing.isEmpty ? 'Ready' : 'Missing ${missing.length}'),
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -488,22 +496,16 @@ class _RecipeCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${store.units.formatAmount(recipe.servings)} servings',
+                        '${store.units.formatAmount(recipe.servings)} ${recipe.servings == 1 ? 'serving' : 'servings'}',
                       ),
+                      if (compact) ...[
+                        const SizedBox(height: 8),
+                        availabilityChip,
+                      ],
                     ],
                   ),
                 ),
-                Chip(
-                  avatar: Icon(
-                    missing.isEmpty
-                        ? Icons.check_circle
-                        : Icons.shopping_basket_outlined,
-                    size: 18,
-                  ),
-                  label: Text(
-                    missing.isEmpty ? 'Ready' : 'Missing ${missing.length}',
-                  ),
-                ),
+                if (!compact) availabilityChip,
                 PopupMenuButton<String>(
                   tooltip: 'Recipe actions',
                   onSelected: (value) {

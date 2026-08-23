@@ -36,6 +36,14 @@ class UnitService {
 
   String ingredientLabel(FoodDefinition food, RecipeIngredient ingredient) {
     final conversion = food.conversionFor(ingredient.unit);
+    if (food.mode == QuantityMode.counted) {
+      final symbol =
+          (ingredient.amount - 1).abs() < 0.001 &&
+              conversion.symbol.endsWith('s')
+          ? conversion.symbol.substring(0, conversion.symbol.length - 1)
+          : conversion.symbol;
+      return '${formatAmount(ingredient.amount)} $symbol';
+    }
     return '${formatAmount(ingredient.amount)} ${conversion.symbol} ${food.name.toLowerCase()}';
   }
 

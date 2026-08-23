@@ -74,7 +74,8 @@ class PantryStore extends ChangeNotifier {
     _applyDeductions(deductions);
     final event = ConsumptionEvent(
       id: 'event-${++_sequence}',
-      label: '${units.formatAmount(servingCount)} servings of ${recipe.name}',
+      label:
+          '${units.formatAmount(servingCount)} ${servingCount == 1 ? 'serving' : 'servings'} of ${recipe.name}',
       timestamp: DateTime.now(),
       recipeId: recipe.id,
       deductions: deductions,
