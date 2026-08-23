@@ -4,14 +4,16 @@ import 'data/pantry_store.dart';
 import 'pages/home_page.dart';
 
 class PantryApp extends StatefulWidget {
-  const PantryApp({super.key});
+  const PantryApp({super.key, required this.store});
+
+  final PantryStore store;
 
   @override
   State<PantryApp> createState() => _PantryAppState();
 }
 
 class _PantryAppState extends State<PantryApp> {
-  late final PantryStore store = PantryStore.demo();
+  PantryStore get store => widget.store;
 
   @override
   void dispose() {

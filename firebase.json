@@ -1,7 +1,1 @@
-{
-  "functions": [{ "source": "functions", "codebase": "default" }],
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  }
-}
+{"functions":[{"source":"functions","codebase":"default"}],"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"flutter":{"platforms":{"android":{"default":{"projectId":"pantry-tracker-4bc45","appId":"1:36936390054:android:06a34627abef7e2f166b67","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"pantry-tracker-4bc45","configurations":{"android":"1:36936390054:android:06a34627abef7e2f166b67","ios":"1:36936390054:ios:2d5ae7cce744e502166b67","web":"1:36936390054:web:2094daeddbdf8bf3166b67","windows":"1:36936390054:web:399b1b4892678985166b67"}}}}}}

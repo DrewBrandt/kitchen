@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "36936390054",
+    "project_id": "pantry-tracker-4bc45",
+    "storage_bucket": "pantry-tracker-4bc45.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:36936390054:android:06a34627abef7e2f166b67",
+        "android_client_info": {
+          "package_name": "com.drewbrandt.pantry_inventory"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMaNZtjtAIZBjVZyls4KSXfIj9dw5atlc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

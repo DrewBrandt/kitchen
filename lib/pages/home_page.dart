@@ -53,7 +53,20 @@ class _PantryHomePageState extends State<PantryHomePage> {
         final wide = constraints.maxWidth >= 850;
         final content = AnimatedBuilder(
           animation: widget.store,
-          builder: (context, _) => pages[selectedIndex],
+          builder: (context, _) => Column(
+            children: [
+              if (widget.store.isSyncing)
+                const LinearProgressIndicator(minHeight: 2),
+              if (widget.store.syncError != null)
+                MaterialBanner(
+                  content: const Text(
+                    'Cloud sync failed. This change may only exist on this device; check your connection and restart before making more changes.',
+                  ),
+                  actions: const [SizedBox.shrink()],
+                ),
+              Expanded(child: pages[selectedIndex]),
+            ],
+          ),
         );
         if (!wide) {
           return Scaffold(

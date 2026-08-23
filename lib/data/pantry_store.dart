@@ -1,32 +1,77 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/pantry_models.dart';
 import '../services/inventory_service.dart';
 import '../services/unit_service.dart';
+import 'firestore_pantry.dart';
 import 'seed_data.dart';
 
 class PantryStore extends ChangeNotifier {
-  PantryStore.demo({DateTime? now}) : _now = now ?? DateTime.now() {
+  PantryStore.demo({DateTime? now})
+    : _now = now ?? DateTime.now(),
+      _cloud = null {
     final foods = SeedData.foods();
     _foods = {for (final food in foods) food.id: food};
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
   }
 
+  PantryStore._cloud({
+    required DateTime now,
+    required CloudPantryData data,
+    required FirestorePantry cloud,
+  }) : _now = now,
+       _cloud = cloud {
+    _foods = {for (final food in data.foods) food.id: food};
+    _lots = data.lots;
+    _recipes = data.recipes;
+    _history.addAll(data.history);
+  }
+
+  static Future<PantryStore> loadCloud({
+    FirebaseFirestore? firestore,
+    DateTime? now,
+  }) async {
+    final currentTime = now ?? DateTime.now();
+    final cloud = FirestorePantry(firestore ?? FirebaseFirestore.instance);
+    final data = await cloud.load();
+    if (!data.isEmpty) {
+      return PantryStore._cloud(now: currentTime, data: data, cloud: cloud);
+    }
+    final seeded = PantryStore.demo(now: currentTime);
+    await cloud.seed(
+      CloudPantryData(
+        foods: seeded.foods,
+        lots: seeded.lots,
+        recipes: seeded.recipes,
+        history: seeded.history,
+      ),
+    );
+    seeded._cloud = cloud;
+    return seeded;
+  }
+
   final DateTime _now;
   final InventoryService inventory = InventoryService();
   final UnitService units = const UnitService();
+  FirestorePantry? _cloud;
   late final Map<String, FoodDefinition> _foods;
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
   final List<ConsumptionEvent> _history = [];
-  int _sequence = 0;
+  int _pendingWrites = 0;
+  Object? _syncError;
 
   List<FoodDefinition> get foods => List.unmodifiable(_foods.values);
   List<InventoryLot> get lots => List.unmodifiable(_lots);
   List<Recipe> get recipes => List.unmodifiable(_recipes);
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   DateTime get now => _now;
+  bool get isSyncing => _pendingWrites > 0;
+  Object? get syncError => _syncError;
 
   FoodDefinition food(String id) =>
       _foods[id] ?? (throw StateError('Unknown food $id'));
@@ -73,7 +118,7 @@ class PantryStore extends ChangeNotifier {
     final deductions = inventory.planDeductions(requirements, _lots);
     _applyDeductions(deductions);
     final event = ConsumptionEvent(
-      id: 'event-${++_sequence}',
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
       label:
           '${units.formatAmount(servingCount)} ${servingCount == 1 ? 'serving' : 'servings'} of ${recipe.name}',
       timestamp: DateTime.now(),
@@ -81,6 +126,13 @@ class PantryStore extends ChangeNotifier {
       deductions: deductions,
     );
     _history.add(event);
+    final affectedIds = deductions.map((item) => item.lotId).toSet();
+    _queue(
+      _cloud?.saveConsumption(
+        event,
+        _lots.where((lot) => affectedIds.contains(lot.id)),
+      ),
+    );
     notifyListeners();
     return event;
   }
@@ -95,7 +147,7 @@ class PantryStore extends ChangeNotifier {
     final deductions = inventory.planDeductions({food.id: requirement}, _lots);
     _applyDeductions(deductions);
     final event = ConsumptionEvent(
-      id: 'event-${++_sequence}',
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
       label:
           label ??
           '${units.formatAmount(amount)} ${food.conversionFor(unit).symbol} ${food.name.toLowerCase()}',
@@ -103,6 +155,13 @@ class PantryStore extends ChangeNotifier {
       deductions: deductions,
     );
     _history.add(event);
+    final affectedIds = deductions.map((item) => item.lotId).toSet();
+    _queue(
+      _cloud?.saveConsumption(
+        event,
+        _lots.where((lot) => affectedIds.contains(lot.id)),
+      ),
+    );
     notifyListeners();
     return event;
   }
@@ -115,17 +174,16 @@ class PantryStore extends ChangeNotifier {
     DateTime? bestBy,
   }) {
     final quantity = units.toBase(food, amount, unit);
-    _lots = [
-      ..._lots,
-      InventoryLot(
-        id: 'lot-${DateTime.now().microsecondsSinceEpoch}',
-        foodId: food.id,
-        quantityBase: quantity,
-        location: location,
-        purchasedAt: DateTime.now(),
-        bestBy: bestBy,
-      ),
-    ];
+    final lot = InventoryLot(
+      id: 'lot-${DateTime.now().microsecondsSinceEpoch}',
+      foodId: food.id,
+      quantityBase: quantity,
+      location: location,
+      purchasedAt: DateTime.now(),
+      bestBy: bestBy,
+    );
+    _lots = [..._lots, lot];
+    _queue(_cloud?.saveLot(lot));
     notifyListeners();
   }
 
@@ -142,6 +200,7 @@ class PantryStore extends ChangeNotifier {
       throw ArgumentError('The base unit must have a conversion of 1');
     }
     _foods[food.id] = food;
+    _queue(_cloud?.saveFood(food));
     notifyListeners();
   }
 
@@ -155,6 +214,7 @@ class PantryStore extends ChangeNotifier {
       throw StateError('This food is still used by a recipe');
     }
     _foods.remove(foodId);
+    _queue(_cloud?.deleteFood(foodId));
     notifyListeners();
   }
 
@@ -179,11 +239,13 @@ class PantryStore extends ChangeNotifier {
     } else {
       _recipes[index] = recipe;
     }
+    _queue(_cloud?.saveRecipe(recipe));
     notifyListeners();
   }
 
   void deleteRecipe(String recipeId) {
     _recipes = _recipes.where((item) => item.id != recipeId).toList();
+    _queue(_cloud?.deleteRecipe(recipeId));
     notifyListeners();
   }
 
@@ -203,8 +265,34 @@ class PantryStore extends ChangeNotifier {
         quantityBase: _lots[lotIndex].quantityBase + deduction.quantityBase,
       );
     }
-    _history[index] = event.markUndone(DateTime.now());
+    final undone = event.markUndone(DateTime.now());
+    _history[index] = undone;
+    final affectedIds = event.deductions.map((item) => item.lotId).toSet();
+    _queue(
+      _cloud?.saveUndo(
+        undone,
+        _lots.where((lot) => affectedIds.contains(lot.id)),
+      ),
+    );
     notifyListeners();
+  }
+
+  void _queue(Future<void>? write) {
+    if (write == null) return;
+    _pendingWrites++;
+    _syncError = null;
+    unawaited(
+      write
+          .then((_) {
+            _pendingWrites--;
+            notifyListeners();
+          })
+          .catchError((Object error) {
+            _pendingWrites--;
+            _syncError = error;
+            notifyListeners();
+          }),
+    );
   }
 
   void _applyDeductions(List<LotDeduction> deductions) {
