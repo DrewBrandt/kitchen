@@ -18,7 +18,7 @@ class PantryStore extends ChangeNotifier {
   final UnitService units = const UnitService();
   late final Map<String, FoodDefinition> _foods;
   late List<InventoryLot> _lots;
-  late final List<Recipe> _recipes;
+  late List<Recipe> _recipes;
   final List<ConsumptionEvent> _history = [];
   int _sequence = 0;
 
@@ -30,6 +30,21 @@ class PantryStore extends ChangeNotifier {
 
   FoodDefinition food(String id) =>
       _foods[id] ?? (throw StateError('Unknown food $id'));
+
+  String nextId(String name) {
+    final base = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    var candidate = base.isEmpty ? 'item' : base;
+    var suffix = 2;
+    while (_foods.containsKey(candidate) ||
+        _recipes.any((item) => item.id == candidate)) {
+      candidate = '$base-${suffix++}';
+    }
+    return candidate;
+  }
+
   double totalFor(String foodId) => inventory.totalFor(foodId, _lots);
 
   List<InventoryLot> lotsFor(String foodId) =>
@@ -110,6 +125,64 @@ class PantryStore extends ChangeNotifier {
         bestBy: bestBy,
       ),
     ];
+    notifyListeners();
+  }
+
+  void saveFood(FoodDefinition food) {
+    if (food.name.trim().isEmpty) {
+      throw ArgumentError('Food name is required');
+    }
+    if (food.conversions.isEmpty) {
+      throw ArgumentError('At least one unit conversion is required');
+    }
+    if (!food.conversions.any(
+      (item) => item.unit == food.baseUnit && item.baseAmount == 1,
+    )) {
+      throw ArgumentError('The base unit must have a conversion of 1');
+    }
+    _foods[food.id] = food;
+    notifyListeners();
+  }
+
+  void deleteFood(String foodId) {
+    if (_lots.any((lot) => lot.foodId == foodId && lot.quantityBase > 0)) {
+      throw StateError('Remove this food from inventory before deleting it');
+    }
+    if (_recipes.any(
+      (recipe) => recipe.ingredients.any((item) => item.foodId == foodId),
+    )) {
+      throw StateError('This food is still used by a recipe');
+    }
+    _foods.remove(foodId);
+    notifyListeners();
+  }
+
+  void saveRecipe(Recipe recipe) {
+    if (recipe.name.trim().isEmpty ||
+        recipe.servings <= 0 ||
+        recipe.ingredients.isEmpty) {
+      throw ArgumentError(
+        'Recipe name, servings, and ingredients are required',
+      );
+    }
+    for (final ingredient in recipe.ingredients) {
+      final definition = food(ingredient.foodId);
+      definition.conversionFor(ingredient.unit);
+      if (ingredient.amount <= 0) {
+        throw ArgumentError('Ingredient amounts must be positive');
+      }
+    }
+    final index = _recipes.indexWhere((item) => item.id == recipe.id);
+    if (index < 0) {
+      _recipes = [..._recipes, recipe];
+    } else {
+      _recipes[index] = recipe;
+    }
+    notifyListeners();
+  }
+
+  void deleteRecipe(String recipeId) {
+    _recipes = _recipes.where((item) => item.id != recipeId).toList();
     notifyListeners();
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pantry_inventory/data/pantry_store.dart';
+import 'package:pantry_inventory/models/pantry_models.dart';
 
 void main() {
   test('cooking deducts a recipe and undo restores every lot', () {
@@ -31,5 +32,32 @@ void main() {
     store.consume(onion, 0.5, 'each');
 
     expect(store.totalFor('onion'), before - 0.5);
+  });
+
+  test('food definitions and recipes can be created and updated', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final food = FoodDefinition(
+      id: store.nextId('Greek yogurt'),
+      name: 'Greek yogurt',
+      mode: QuantityMode.counted,
+      baseUnit: 'each',
+      conversions: const [
+        UnitConversion(unit: 'each', symbol: 'cups', baseAmount: 1),
+      ],
+      defaultLocation: StorageLocation.fridge,
+    );
+    store.saveFood(food);
+    final recipe = Recipe(
+      id: store.nextId('Yogurt bowl'),
+      name: 'Yogurt bowl',
+      servings: 1,
+      ingredients: [RecipeIngredient(foodId: food.id, amount: 1, unit: 'each')],
+      instructions: const ['Open and enjoy.'],
+    );
+
+    store.saveRecipe(recipe);
+
+    expect(store.food(food.id).name, 'Greek yogurt');
+    expect(store.recipes.any((item) => item.id == recipe.id), isTrue);
   });
 }

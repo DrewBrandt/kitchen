@@ -45,6 +45,24 @@ class FoodDefinition {
     (conversion) => conversion.unit.toLowerCase() == unit.toLowerCase(),
     orElse: () => throw ArgumentError('Unsupported unit "$unit" for $name'),
   );
+
+  FoodDefinition copyWith({
+    String? id,
+    String? name,
+    QuantityMode? mode,
+    String? baseUnit,
+    List<UnitConversion>? conversions,
+    String? emoji,
+    StorageLocation? defaultLocation,
+  }) => FoodDefinition(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    mode: mode ?? this.mode,
+    baseUnit: baseUnit ?? this.baseUnit,
+    conversions: conversions ?? this.conversions,
+    emoji: emoji ?? this.emoji,
+    defaultLocation: defaultLocation ?? this.defaultLocation,
+  );
 }
 
 class InventoryLot {
@@ -102,6 +120,22 @@ class Recipe {
   final List<RecipeIngredient> ingredients;
   final List<String> instructions;
   final String emoji;
+
+  Recipe copyWith({
+    String? id,
+    String? name,
+    double? servings,
+    List<RecipeIngredient>? ingredients,
+    List<String>? instructions,
+    String? emoji,
+  }) => Recipe(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    servings: servings ?? this.servings,
+    ingredients: ingredients ?? this.ingredients,
+    instructions: instructions ?? this.instructions,
+    emoji: emoji ?? this.emoji,
+  );
 }
 
 class LotDeduction {

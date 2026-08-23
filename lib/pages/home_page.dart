@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../data/pantry_store.dart';
 import '../models/pantry_models.dart';
+import '../widgets/food_editor_dialog.dart';
+import '../widgets/grocery_import_dialog.dart';
+import '../widgets/recipe_editor_dialog.dart';
 
 class PantryHomePage extends StatefulWidget {
   const PantryHomePage({super.key, required this.store});
@@ -308,10 +311,27 @@ class _InventoryPage extends StatelessWidget {
     title: 'Inventory',
     subtitle:
         'Counted items stay natural; measured items convert behind the scenes.',
-    action: FilledButton.icon(
-      onPressed: () => _showAddLot(context, store),
-      icon: const Icon(Icons.add),
-      label: const Text('Add groceries'),
+    action: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => showFoodEditor(context, store),
+          icon: const Icon(Icons.add_box_outlined),
+          label: const Text('Define food'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _showAddLot(context, store),
+          icon: const Icon(Icons.add),
+          label: const Text('Add one lot'),
+        ),
+        FilledButton.icon(
+          onPressed: () => showGroceryImportDialog(context, store),
+          icon: const Icon(Icons.playlist_add),
+          label: const Text('Import groceries'),
+        ),
+      ],
     ),
     child: LayoutBuilder(
       builder: (context, constraints) {
@@ -376,6 +396,12 @@ class _FoodCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Edit food definition',
+                  onPressed: () =>
+                      showFoodEditor(context, store, existing: food),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
               ],
             ),
             const SizedBox(height: 18),
@@ -415,6 +441,11 @@ class _RecipesPage extends StatelessWidget {
     title: 'Recipes',
     subtitle:
         'Cook a recipe and its ingredients come out of inventory together.',
+    action: FilledButton.icon(
+      onPressed: () => showRecipeEditor(context, store),
+      icon: const Icon(Icons.add),
+      label: const Text('New recipe'),
+    ),
     child: Column(
       children: store.recipes
           .map(
@@ -472,6 +503,32 @@ class _RecipeCard extends StatelessWidget {
                   label: Text(
                     missing.isEmpty ? 'Ready' : 'Missing ${missing.length}',
                   ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Recipe actions',
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      showRecipeEditor(context, store, existing: recipe);
+                    } else if (value == 'delete') {
+                      _confirmDeleteRecipe(context, store, recipe);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -787,6 +844,33 @@ void _cook(BuildContext context, PantryStore store, Recipe recipe) {
       ),
     ),
   );
+}
+
+Future<void> _confirmDeleteRecipe(
+  BuildContext context,
+  PantryStore store,
+  Recipe recipe,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Delete ${recipe.name}?'),
+      content: const Text(
+        'Past cooking history will remain, but the recipe itself will be removed.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed == true) store.deleteRecipe(recipe.id);
 }
 
 String _dayPart() {

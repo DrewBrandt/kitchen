@@ -25,6 +25,21 @@ A personal kitchen inventory that tracks pantry, fridge, and freezer stock; stor
 7. Reject an entire cooking action if any ingredient is insufficient.
 8. Record exact lot deductions and allow one-click undo.
 9. Highlight lots expiring within seven days.
+10. Create and edit food definitions, conversions, and recipes in the app.
+11. Review structured grocery rows before applying any of them.
+
+## Codex interaction contract
+
+The normal long-term workflow is conversational:
+
+1. The user describes groceries in English or asks Codex to import a recipe.
+2. Codex reads the current structured inventory through the authenticated API.
+3. Codex resolves names and units, preserving a recipe source URL when applicable.
+4. Codex asks about materially ambiguous package quantities instead of guessing.
+5. Codex sends validated JSON to the food, grocery, or recipe endpoint.
+6. The API validates the complete request before committing any writes.
+
+Natural language is deliberately not accepted by the mutation endpoint. Interpretation belongs in the conversation layer; the durable API remains deterministic and testable. The bearer token is stored as a Firebase Functions secret and is never embedded in the Flutter app.
 
 ## Canonical data model
 
@@ -76,8 +91,8 @@ The eventual Firestore implementation must perform validation, deductions, and h
 
 ## Next milestones
 
-1. Replace the in-memory store with a separately configured Firebase project.
-2. Add recipe creation/editing and a food-definition editor.
-3. Add pasted grocery text and CSV import with a review screen.
+1. Configure a separate Firebase project and deploy the scaffolded authenticated API.
+2. Replace the Flutter in-memory store with Firestore repositories.
+3. Add API consumption-history endpoints so conversational quick-use and cooking can be recorded remotely.
 4. Add shopping-list generation and recipe suggestions.
 5. Add nutrition, barcode lookup, receipt capture, and opened-item shelf life.
