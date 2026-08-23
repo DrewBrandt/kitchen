@@ -85,4 +85,35 @@ void main() {
     expect(store.food(food.id).name, 'Greek yogurt');
     expect(store.recipes.any((item) => item.id == recipe.id), isTrue);
   });
+
+  test('nutrition scales with food units and recipe servings', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final eggs = store
+        .food('egg')
+        .copyWith(
+          nutrition: const NutritionFacts(
+            basisBaseAmount: 1,
+            totals: NutritionTotals(calories: 70, proteinG: 6),
+          ),
+        );
+    store.saveFood(eggs);
+    final butter = store
+        .food('butter')
+        .copyWith(
+          nutrition: const NutritionFacts(
+            basisBaseAmount: 14.175,
+            totals: NutritionTotals(calories: 100, fatG: 11),
+          ),
+        );
+    store.saveFood(butter);
+    final recipe = store.recipes.firstWhere(
+      (item) => item.id == 'scrambled-eggs',
+    );
+
+    final total = store.nutritionForRecipe(recipe)!;
+
+    expect(total.calories, closeTo(190, 0.001));
+    expect(total.proteinG, closeTo(12, 0.001));
+    expect(total.fatG, closeTo(5.5, 0.001));
+  });
 }

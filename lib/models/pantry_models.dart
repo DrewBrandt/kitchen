@@ -2,6 +2,63 @@ enum QuantityMode { counted, measured }
 
 enum StorageLocation { pantry, fridge, freezer }
 
+class NutritionTotals {
+  const NutritionTotals({
+    this.calories = 0,
+    this.proteinG = 0,
+    this.carbsG = 0,
+    this.fatG = 0,
+    this.fiberG = 0,
+    this.sugarG = 0,
+    this.sodiumMg = 0,
+  });
+
+  final double calories;
+  final double proteinG;
+  final double carbsG;
+  final double fatG;
+  final double fiberG;
+  final double sugarG;
+  final double sodiumMg;
+
+  NutritionTotals scale(double factor) => NutritionTotals(
+    calories: calories * factor,
+    proteinG: proteinG * factor,
+    carbsG: carbsG * factor,
+    fatG: fatG * factor,
+    fiberG: fiberG * factor,
+    sugarG: sugarG * factor,
+    sodiumMg: sodiumMg * factor,
+  );
+
+  NutritionTotals operator +(NutritionTotals other) => NutritionTotals(
+    calories: calories + other.calories,
+    proteinG: proteinG + other.proteinG,
+    carbsG: carbsG + other.carbsG,
+    fatG: fatG + other.fatG,
+    fiberG: fiberG + other.fiberG,
+    sugarG: sugarG + other.sugarG,
+    sodiumMg: sodiumMg + other.sodiumMg,
+  );
+}
+
+class NutritionFacts {
+  const NutritionFacts({
+    required this.basisBaseAmount,
+    required this.totals,
+    this.source = '',
+    this.estimated = false,
+  });
+
+  final double basisBaseAmount;
+  final NutritionTotals totals;
+  final String source;
+  final bool estimated;
+
+  NutritionTotals forBaseAmount(double amount) =>
+      totals.scale(amount / basisBaseAmount);
+}
+
 extension StorageLocationLabel on StorageLocation {
   String get label => switch (this) {
     StorageLocation.pantry => 'Pantry',
@@ -31,6 +88,7 @@ class FoodDefinition {
     required this.conversions,
     this.emoji = '🥫',
     this.defaultLocation = StorageLocation.pantry,
+    this.nutrition,
   });
 
   final String id;
@@ -40,6 +98,7 @@ class FoodDefinition {
   final List<UnitConversion> conversions;
   final String emoji;
   final StorageLocation defaultLocation;
+  final NutritionFacts? nutrition;
 
   UnitConversion conversionFor(String unit) => conversions.firstWhere(
     (conversion) => conversion.unit.toLowerCase() == unit.toLowerCase(),
@@ -54,6 +113,8 @@ class FoodDefinition {
     List<UnitConversion>? conversions,
     String? emoji,
     StorageLocation? defaultLocation,
+    NutritionFacts? nutrition,
+    bool clearNutrition = false,
   }) => FoodDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -62,6 +123,7 @@ class FoodDefinition {
     conversions: conversions ?? this.conversions,
     emoji: emoji ?? this.emoji,
     defaultLocation: defaultLocation ?? this.defaultLocation,
+    nutrition: clearNutrition ? null : nutrition ?? this.nutrition,
   );
 }
 
@@ -158,6 +220,7 @@ class ConsumptionEvent {
     required this.deductions,
     this.recipeId,
     this.undoneAt,
+    this.nutrition,
   });
 
   final String id;
@@ -166,6 +229,7 @@ class ConsumptionEvent {
   final String? recipeId;
   final List<LotDeduction> deductions;
   final DateTime? undoneAt;
+  final NutritionTotals? nutrition;
 
   ConsumptionEvent markUndone(DateTime at) => ConsumptionEvent(
     id: id,
@@ -174,6 +238,7 @@ class ConsumptionEvent {
     recipeId: recipeId,
     deductions: deductions,
     undoneAt: at,
+    nutrition: nutrition,
   );
 }
 

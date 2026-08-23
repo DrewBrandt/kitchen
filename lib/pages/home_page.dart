@@ -425,6 +425,19 @@ class _FoodCard extends StatelessWidget {
             Text(
               '$lots ${lots == 1 ? 'lot' : 'lots'} · ${food.defaultLocation.label}',
             ),
+            if (food.nutrition != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _nutritionLabel(food.nutrition!.totals),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                '${food.nutrition!.estimated ? 'Estimated' : 'Label data'} per serving',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -480,6 +493,7 @@ class _RecipeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = store.missingFor(recipe);
+    final recipeNutrition = store.nutritionForRecipe(recipe);
     final compact = MediaQuery.sizeOf(context).width < 600;
     final availabilityChip = Chip(
       avatar: Icon(
@@ -558,6 +572,20 @@ class _RecipeCard extends StatelessWidget {
                 );
               }).toList(),
             ),
+            if (recipeNutrition != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.monitor_heart_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${_nutritionLabel(recipeNutrition.scale(1 / recipe.servings))} per serving',
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
@@ -612,7 +640,7 @@ class _HistoryPage extends StatelessWidget {
                           ),
                         ),
                         subtitle: Text(
-                          '${event.deductions.length} lot ${event.deductions.length == 1 ? 'change' : 'changes'}${event.undoneAt == null ? '' : ' · Undone'}',
+                          '${event.deductions.length} lot ${event.deductions.length == 1 ? 'change' : 'changes'}${event.nutrition == null ? '' : ' · ${_nutritionLabel(event.nutrition!)}'}${event.undoneAt == null ? '' : ' · Undone'}',
                         ),
                         trailing: event.undoneAt == null
                             ? TextButton(
@@ -936,4 +964,12 @@ String _relativeDate(DateTime now, DateTime date) {
   if (days == 0) return 'Today';
   if (days == 1) return 'Tomorrow';
   return 'In $days days';
+}
+
+String _nutritionLabel(NutritionTotals nutrition) =>
+    '${nutrition.calories.round()} cal · ${_compactNumber(nutrition.proteinG)}g protein · ${_compactNumber(nutrition.carbsG)}g carbs · ${_compactNumber(nutrition.fatG)}g fat';
+
+String _compactNumber(double value) {
+  if ((value - value.round()).abs() < 0.05) return '${value.round()}';
+  return value.toStringAsFixed(1);
 }

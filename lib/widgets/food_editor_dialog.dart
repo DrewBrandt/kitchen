@@ -32,6 +32,13 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
   late final conversions = TextEditingController(
     text: _conversionText(widget.existing),
   );
+  late final nutrition = TextEditingController(
+    text: _nutritionText(widget.existing),
+  );
+  late final nutritionSource = TextEditingController(
+    text: widget.existing?.nutrition?.source ?? '',
+  );
+  late bool nutritionEstimated = widget.existing?.nutrition?.estimated ?? false;
   late QuantityMode mode = widget.existing?.mode ?? QuantityMode.counted;
   late StorageLocation location =
       widget.existing?.defaultLocation ?? StorageLocation.pantry;
@@ -44,11 +51,29 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
         .join('\n');
   }
 
+  static String _nutritionText(FoodDefinition? food) {
+    final facts = food?.nutrition;
+    if (facts == null) return '';
+    final totals = facts.totals;
+    return [
+      facts.basisBaseAmount,
+      totals.calories,
+      totals.proteinG,
+      totals.carbsG,
+      totals.fatG,
+      totals.fiberG,
+      totals.sugarG,
+      totals.sodiumMg,
+    ].join(', ');
+  }
+
   @override
   void dispose() {
     name.dispose();
     emoji.dispose();
     conversions.dispose();
+    nutrition.dispose();
+    nutritionSource.dispose();
     super.dispose();
   }
 
@@ -150,6 +175,30 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nutrition,
+              decoration: const InputDecoration(
+                labelText: 'Nutrition (optional)',
+                helperText:
+                    'Base amount, calories, protein g, carbs g, fat g, fiber g, sugar g, sodium mg',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nutritionSource,
+              decoration: const InputDecoration(
+                labelText: 'Nutrition source',
+                hintText: 'Package label, manufacturer, or USDA estimate',
+              ),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Nutrition values are estimated'),
+              value: nutritionEstimated,
+              onChanged: (value) =>
+                  setState(() => nutritionEstimated = value ?? false),
+            ),
             if (error != null) ...[
               const SizedBox(height: 10),
               Text(
@@ -205,6 +254,34 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
           'Name and a first/base conversion of 1 are required',
         );
       }
+      NutritionFacts? parsedNutrition;
+      if (nutrition.text.trim().isNotEmpty) {
+        final values = nutrition.text
+            .split(',')
+            .map((value) => double.tryParse(value.trim()))
+            .toList();
+        if (values.length != 8 ||
+            values.any((value) => value == null || value < 0) ||
+            values.first! <= 0) {
+          throw const FormatException(
+            'Nutrition needs eight non-negative numbers and a positive base amount',
+          );
+        }
+        parsedNutrition = NutritionFacts(
+          basisBaseAmount: values[0]!,
+          totals: NutritionTotals(
+            calories: values[1]!,
+            proteinG: values[2]!,
+            carbsG: values[3]!,
+            fatG: values[4]!,
+            fiberG: values[5]!,
+            sugarG: values[6]!,
+            sodiumMg: values[7]!,
+          ),
+          source: nutritionSource.text.trim(),
+          estimated: nutritionEstimated,
+        );
+      }
       Navigator.pop(
         context,
         FoodDefinition(
@@ -215,6 +292,7 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
           conversions: parsed,
           emoji: emoji.text.trim().isEmpty ? '🥫' : emoji.text.trim(),
           defaultLocation: location,
+          nutrition: parsedNutrition,
         ),
       );
     } on FormatException catch (exception) {

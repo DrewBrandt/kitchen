@@ -92,6 +92,36 @@ class PantryStore extends ChangeNotifier {
 
   double totalFor(String foodId) => inventory.totalFor(foodId, _lots);
 
+  NutritionTotals? nutritionForBaseAmount(
+    FoodDefinition food,
+    double baseAmount,
+  ) => food.nutrition?.forBaseAmount(baseAmount);
+
+  NutritionTotals? nutritionForAmount(
+    FoodDefinition food,
+    double amount,
+    String unit,
+  ) => nutritionForBaseAmount(food, units.toBase(food, amount, unit));
+
+  NutritionTotals? nutritionForRecipe(Recipe recipe, {double? servings}) {
+    final servingCount = servings ?? recipe.servings;
+    var found = false;
+    var total = const NutritionTotals();
+    for (final ingredient in recipe.ingredients) {
+      final definition = food(ingredient.foodId);
+      final nutrition = nutritionForAmount(
+        definition,
+        ingredient.amount * (servingCount / recipe.servings),
+        ingredient.unit,
+      );
+      if (nutrition != null) {
+        found = true;
+        total = total + nutrition;
+      }
+    }
+    return found ? total : null;
+  }
+
   List<InventoryLot> lotsFor(String foodId) =>
       _lots.where((lot) => lot.foodId == foodId).toList();
 
@@ -124,6 +154,7 @@ class PantryStore extends ChangeNotifier {
       timestamp: DateTime.now(),
       recipeId: recipe.id,
       deductions: deductions,
+      nutrition: nutritionForRecipe(recipe, servings: servingCount),
     );
     _history.add(event);
     final affectedIds = deductions.map((item) => item.lotId).toSet();
@@ -153,6 +184,7 @@ class PantryStore extends ChangeNotifier {
           '${units.formatAmount(amount)} ${food.conversionFor(unit).symbol} ${food.name.toLowerCase()}',
       timestamp: DateTime.now(),
       deductions: deductions,
+      nutrition: nutritionForAmount(food, amount, unit),
     );
     _history.add(event);
     final affectedIds = deductions.map((item) => item.lotId).toSet();

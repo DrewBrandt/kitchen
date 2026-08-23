@@ -116,6 +116,20 @@ class FirestorePantry {
           },
         )
         .toList(),
+    'nutrition': food.nutrition == null
+        ? null
+        : {
+            'basis_base_amount': food.nutrition!.basisBaseAmount,
+            'calories': food.nutrition!.totals.calories,
+            'protein_g': food.nutrition!.totals.proteinG,
+            'carbs_g': food.nutrition!.totals.carbsG,
+            'fat_g': food.nutrition!.totals.fatG,
+            'fiber_g': food.nutrition!.totals.fiberG,
+            'sugar_g': food.nutrition!.totals.sugarG,
+            'sodium_mg': food.nutrition!.totals.sodiumMg,
+            'source': food.nutrition!.source,
+            'estimated': food.nutrition!.estimated,
+          },
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -163,10 +177,35 @@ class FirestorePantry {
     'undone_at': event.undoneAt == null
         ? null
         : Timestamp.fromDate(event.undoneAt!),
+    'nutrition': event.nutrition == null
+        ? null
+        : _nutritionTotalsData(event.nutrition!),
   };
+
+  Map<String, Object?> _nutritionTotalsData(NutritionTotals totals) => {
+    'calories': totals.calories,
+    'protein_g': totals.proteinG,
+    'carbs_g': totals.carbsG,
+    'fat_g': totals.fatG,
+    'fiber_g': totals.fiberG,
+    'sugar_g': totals.sugarG,
+    'sodium_mg': totals.sodiumMg,
+  };
+
+  NutritionTotals _nutritionTotalsFromData(Map<String, dynamic> data) =>
+      NutritionTotals(
+        calories: (data['calories'] as num? ?? 0).toDouble(),
+        proteinG: (data['protein_g'] as num? ?? 0).toDouble(),
+        carbsG: (data['carbs_g'] as num? ?? 0).toDouble(),
+        fatG: (data['fat_g'] as num? ?? 0).toDouble(),
+        fiberG: (data['fiber_g'] as num? ?? 0).toDouble(),
+        sugarG: (data['sugar_g'] as num? ?? 0).toDouble(),
+        sodiumMg: (data['sodium_mg'] as num? ?? 0).toDouble(),
+      );
 
   FoodDefinition _foodFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
+    final nutritionData = data['nutrition'] as Map<String, dynamic>?;
     return FoodDefinition(
       id: doc.id,
       name: data['name'] as String,
@@ -184,6 +223,15 @@ class FirestorePantry {
           baseAmount: (item['base_amount'] as num).toDouble(),
         );
       }).toList(),
+      nutrition: nutritionData == null
+          ? null
+          : NutritionFacts(
+              basisBaseAmount: (nutritionData['basis_base_amount'] as num)
+                  .toDouble(),
+              totals: _nutritionTotalsFromData(nutritionData),
+              source: nutritionData['source'] as String? ?? '',
+              estimated: nutritionData['estimated'] as bool? ?? false,
+            ),
     );
   }
 
@@ -224,6 +272,7 @@ class FirestorePantry {
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final data = doc.data();
+    final nutritionData = data['nutrition'] as Map<String, dynamic>?;
     return ConsumptionEvent(
       id: doc.id,
       label: data['label'] as String,
@@ -238,6 +287,9 @@ class FirestorePantry {
         );
       }).toList(),
       undoneAt: (data['undone_at'] as Timestamp?)?.toDate(),
+      nutrition: nutritionData == null
+          ? null
+          : _nutritionTotalsFromData(nutritionData),
     );
   }
 }
