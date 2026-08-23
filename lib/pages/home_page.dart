@@ -580,7 +580,7 @@ class _RecipeCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${_nutritionLabel(recipeNutrition.scale(1 / recipe.servings))} per serving',
+                      'Approx. ${_nutritionLabel(recipeNutrition.scale(1 / recipe.servings))} per serving · based on ingredient profiles',
                     ),
                   ),
                 ],
