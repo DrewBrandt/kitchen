@@ -26,7 +26,12 @@ type FoodRecord = {
 };
 
 export const pantryApi = onRequest(
-  { region: "us-east1", secrets: [pantryApiToken], timeoutSeconds: 60 },
+  {
+    region: "us-east4",
+    secrets: [pantryApiToken],
+    timeoutSeconds: 60,
+    maxInstances: 1,
+  },
   async (request, response) => {
     response.set("Content-Type", "application/json");
     if (request.method === "OPTIONS") {
