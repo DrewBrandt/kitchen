@@ -21,7 +21,7 @@ class _PantryAppState extends State<PantryApp> {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF5D7C50);
+    const seed = Color(0xFFD7943B);
     return MaterialApp(
       title: 'Pantry',
       debugShowCheckedModeBanner: false,
@@ -48,25 +48,25 @@ class _PantryAppState extends State<PantryApp> {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF10140F),
+        scaffoldBackgroundColor: const Color(0xFF11100F),
         cardTheme: const CardThemeData(
           elevation: 0,
           margin: EdgeInsets.zero,
-          color: Color(0xFF191E17),
+          color: Color(0xFF1C1A18),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF10140F),
+          backgroundColor: Color(0xFF11100F),
           surfaceTintColor: Colors.transparent,
         ),
         navigationRailTheme: const NavigationRailThemeData(
-          backgroundColor: Color(0xFF10140F),
+          backgroundColor: Color(0xFF11100F),
         ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
           filled: true,
-          fillColor: Color(0xFF1C221A),
+          fillColor: Color(0xFF24201C),
         ),
-        dividerTheme: const DividerThemeData(color: Color(0xFF30382D)),
+        dividerTheme: const DividerThemeData(color: Color(0xFF3A342D)),
       ),
       home: PantryHomePage(store: store),
     );
