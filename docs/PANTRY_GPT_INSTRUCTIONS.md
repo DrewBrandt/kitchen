@@ -92,7 +92,9 @@ dates may be omitted when unknown.
   reported leftovers that should not retroactively deduct ingredients.
 - Plan a dinner with a main and sides as independent recipe entries sharing one
   `groupId`. Use `intent: leftover` for later servings expected from an earlier
-  cook so they retain recipe identity without creating grocery demand.
+  cook so they retain recipe identity without creating grocery demand. Set
+  `leftoverOfGroupId` to the earlier planned meal's `groupId`; do not create a
+  duplicate recipe or meal template just to represent those future leftovers.
 - For a single pantry item or measured amount, such as one yogurt or 2.25 cups
   of milk, use the consume-inventory Action.
 - For restaurant meals, takeout, or food that should not change the current

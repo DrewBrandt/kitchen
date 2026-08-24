@@ -281,9 +281,13 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
     }
     const sourceId = optionalString(item.sourceId);
     const groupId = optionalString(item.groupId);
+    const leftoverOfGroupId = optionalString(item.leftoverOfGroupId);
     const intent = (optionalString(item.intent) ?? "prepare").toLowerCase();
     if (!["prepare", "leftover"].includes(intent)) {
       throw new ValidationError(`entries[${index}].intent is invalid`);
+    }
+    if (leftoverOfGroupId != null && intent !== "leftover") {
+      throw new ValidationError(`entries[${index}].leftoverOfGroupId requires intent "leftover"`);
     }
     const servings = item.servings == null ? 1 : positiveNumber(item.servings, `entries[${index}].servings`);
     let name: string;
@@ -331,6 +335,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
         source,
         source_id: sourceId ?? null,
         group_id: groupId ?? null,
+        leftover_of_group_id: leftoverOfGroupId ?? null,
         intent,
         name,
         emoji,
@@ -343,6 +348,29 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
   });
   if (new Set(entries.map((entry) => entry.id)).size !== entries.length) {
     throw new ValidationError("Plan entry IDs must be unique");
+  }
+  const sourceGroupDates = new Map<string, Date>();
+  for (const document of mealSnapshot.docs) {
+    const data = document.data();
+    const timestamp = data.date;
+    if (
+      !(timestamp instanceof Timestamp) ||
+      (timestamp.toDate() >= weekStart && timestamp.toDate() < weekEnd)
+    ) continue;
+    if (typeof data.group_id === "string") sourceGroupDates.set(data.group_id, timestamp.toDate());
+  }
+  for (const entry of entries) {
+    if (entry.data.group_id != null) {
+      sourceGroupDates.set(entry.data.group_id, entry.data.date.toDate());
+    }
+  }
+  for (const [index, entry] of entries.entries()) {
+    const sourceGroupId = entry.data.leftover_of_group_id;
+    if (sourceGroupId == null) continue;
+    const sourceDate = sourceGroupDates.get(sourceGroupId);
+    if (sourceDate == null || sourceDate >= entry.data.date.toDate()) {
+      throw new ValidationError(`entries[${index}].leftoverOfGroupId must reference an earlier planned meal`);
+    }
   }
 
   const available = new Map<string, number>();

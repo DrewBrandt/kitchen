@@ -939,11 +939,14 @@ components:
         groupId:
           type: string
           description: Groups independent recipe entries into one planned meal.
+        leftoverOfGroupId:
+          type: string
+          description: References the groupId of an earlier planned meal that will supply these leftovers.
         intent:
           type: string
           enum: [prepare, leftover]
           default: prepare
-          description: Leftovers retain recipe identity without adding grocery demand.
+          description: Leftovers retain recipe identity without adding grocery demand. Pair with leftoverOfGroupId when referencing an earlier entry in the plan.
         name:
           type: string
         emoji:

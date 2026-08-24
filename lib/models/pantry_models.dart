@@ -484,6 +484,7 @@ class PlannedMeal {
     required this.servings,
     this.sourceId,
     this.groupId,
+    this.leftoverOfGroupId,
     this.intent = PlannedMealIntent.prepare,
     this.note = '',
     this.completedAt,
@@ -495,6 +496,12 @@ class PlannedMeal {
   final PlannedMealSource source;
   final String? sourceId;
   final String? groupId;
+
+  /// The earlier planner meal this entry expects to eat from.
+  ///
+  /// The underlying [source] and [sourceId] are retained so the leftover can
+  /// still be consumed and displayed without creating a saved recipe or meal.
+  final String? leftoverOfGroupId;
   final PlannedMealIntent intent;
   final String name;
   final String emoji;
@@ -508,6 +515,7 @@ class PlannedMeal {
     PlannedMealSource? source,
     String? sourceId,
     String? groupId,
+    String? leftoverOfGroupId,
     PlannedMealIntent? intent,
     String? name,
     String? emoji,
@@ -522,6 +530,7 @@ class PlannedMeal {
     source: source ?? this.source,
     sourceId: sourceId ?? this.sourceId,
     groupId: groupId ?? this.groupId,
+    leftoverOfGroupId: leftoverOfGroupId ?? this.leftoverOfGroupId,
     intent: intent ?? this.intent,
     name: name ?? this.name,
     emoji: emoji ?? this.emoji,

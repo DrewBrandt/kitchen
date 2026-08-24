@@ -729,6 +729,7 @@ class FirestorePantry {
     'source': meal.source.name,
     'source_id': meal.sourceId,
     'group_id': meal.groupId,
+    'leftover_of_group_id': meal.leftoverOfGroupId,
     'intent': meal.intent.name,
     'name': meal.name,
     'emoji': meal.emoji,
@@ -780,6 +781,7 @@ class FirestorePantry {
       source: PlannedMealSource.values.byName(data['source'] as String),
       sourceId: data['source_id'] as String?,
       groupId: data['group_id'] as String?,
+      leftoverOfGroupId: data['leftover_of_group_id'] as String?,
       intent: PlannedMealIntent.values.byName(
         data['intent'] as String? ?? 'prepare',
       ),

@@ -5285,11 +5285,22 @@ Future<void> _showPlannedMealEditor(
   PantryStore store,
   DateTime day,
 ) async {
+  final leftoverSources = <String, List<PlannedMeal>>{};
+  for (final meal in store.plannedMeals.where(
+    (meal) =>
+        meal.groupId != null &&
+        meal.intent == PlannedMealIntent.prepare &&
+        meal.date.isBefore(DateTime(day.year, day.month, day.day)),
+  )) {
+    leftoverSources.putIfAbsent(meal.groupId!, () => []).add(meal);
+  }
   var source = store.recipes.isNotEmpty
       ? PlannedMealSource.recipe
       : store.externalFoods.isNotEmpty
       ? PlannedMealSource.external
       : PlannedMealSource.custom;
+  var planType = source.name;
+  String? leftoverOfGroupId = leftoverSources.keys.firstOrNull;
   var slot = MealSlot.dinner;
   var intent = PlannedMealIntent.prepare;
   Recipe? recipe = store.recipes.isEmpty ? null : store.recipes.first;
@@ -5338,35 +5349,78 @@ Future<void> _showPlannedMealEditor(
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonFormField<PlannedMealSource>(
-                        initialValue: source,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: planType,
                         decoration: const InputDecoration(labelText: 'Type'),
-                        items: const [
-                          DropdownMenuItem(
-                            value: PlannedMealSource.recipe,
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'recipe',
                             child: Text('Recipe'),
                           ),
-                          DropdownMenuItem(
-                            value: PlannedMealSource.meal,
+                          const DropdownMenuItem(
+                            value: 'meal',
                             child: Text('Combined meal'),
                           ),
-                          DropdownMenuItem(
-                            value: PlannedMealSource.external,
+                          const DropdownMenuItem(
+                            value: 'external',
                             child: Text('Eating out'),
                           ),
-                          DropdownMenuItem(
-                            value: PlannedMealSource.custom,
+                          const DropdownMenuItem(
+                            value: 'custom',
                             child: Text('Simple note'),
                           ),
+                          if (leftoverSources.isNotEmpty)
+                            const DropdownMenuItem(
+                              value: 'plannedLeftovers',
+                              child: Text('Leftovers from plan'),
+                            ),
                         ],
-                        onChanged: (value) =>
-                            setDialogState(() => source = value!),
+                        onChanged: (value) => setDialogState(() {
+                          planType = value!;
+                          if (value != 'plannedLeftovers') {
+                            source = PlannedMealSource.values.byName(value);
+                          } else if (leftoverOfGroupId != null) {
+                            servings.text = _compactNumber(
+                              leftoverSources[leftoverOfGroupId]!
+                                  .first
+                                  .servings,
+                            );
+                          }
+                        }),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (source == PlannedMealSource.recipe)
+                if (planType == 'plannedLeftovers')
+                  DropdownButtonFormField<String>(
+                    initialValue: leftoverOfGroupId,
+                    decoration: const InputDecoration(
+                      labelText: 'Earlier meal',
+                      helperText:
+                          'References the planned meal; no new saved recipe or meal.',
+                    ),
+                    items: leftoverSources.entries
+                        .map(
+                          (entry) => DropdownMenuItem(
+                            value: entry.key,
+                            child: Text(
+                              '${_monthDay(entry.value.first.date)} · '
+                              '${entry.value.map((meal) => meal.name).join(' + ')}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setDialogState(() {
+                      leftoverOfGroupId = value;
+                      if (value != null) {
+                        servings.text = _compactNumber(
+                          leftoverSources[value]!.first.servings,
+                        );
+                      }
+                    }),
+                  )
+                else if (source == PlannedMealSource.recipe)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -5466,8 +5520,9 @@ Future<void> _showPlannedMealEditor(
                     ],
                   ),
                 const SizedBox(height: 12),
-                if (source == PlannedMealSource.recipe ||
-                    source == PlannedMealSource.meal) ...[
+                if (planType != 'plannedLeftovers' &&
+                    (source == PlannedMealSource.recipe ||
+                        source == PlannedMealSource.meal)) ...[
                   DropdownButtonFormField<PlannedMealIntent>(
                     initialValue: intent,
                     decoration: const InputDecoration(labelText: 'Plan as'),
@@ -5528,11 +5583,19 @@ Future<void> _showPlannedMealEditor(
             onPressed: () {
               final servingCount = double.tryParse(servings.text);
               final invalidSource =
-                  (source == PlannedMealSource.recipe &&
+                  (planType == 'plannedLeftovers' &&
+                      leftoverOfGroupId == null) ||
+                  (planType != 'plannedLeftovers' &&
+                      source == PlannedMealSource.recipe &&
                       selectedRecipes.isEmpty) ||
-                  (source == PlannedMealSource.meal && mealTemplate == null) ||
-                  (source == PlannedMealSource.external && external == null) ||
-                  (source == PlannedMealSource.custom &&
+                  (planType != 'plannedLeftovers' &&
+                      source == PlannedMealSource.meal &&
+                      mealTemplate == null) ||
+                  (planType != 'plannedLeftovers' &&
+                      source == PlannedMealSource.external &&
+                      external == null) ||
+                  (planType != 'plannedLeftovers' &&
+                      source == PlannedMealSource.custom &&
                       name.text.trim().isEmpty);
               if (servingCount == null || servingCount <= 0 || invalidSource) {
                 setDialogState(
@@ -5552,6 +5615,31 @@ Future<void> _showPlannedMealEditor(
     final servingCount = double.parse(servings.text);
     final timestamp = DateTime.now().microsecondsSinceEpoch;
     final groupId = 'meal-$timestamp';
+    if (planType == 'plannedLeftovers') {
+      final sourceMeals = leftoverSources[leftoverOfGroupId]!;
+      for (final sourceMeal in sourceMeals) {
+        store.savePlannedMeal(
+          PlannedMeal(
+            id: 'plan-$timestamp-${sourceMeal.id}',
+            groupId: groupId,
+            leftoverOfGroupId: leftoverOfGroupId,
+            intent: PlannedMealIntent.leftover,
+            date: DateTime(day.year, day.month, day.day),
+            slot: slot,
+            source: sourceMeal.source,
+            sourceId: sourceMeal.sourceId,
+            name: sourceMeal.name,
+            emoji: sourceMeal.emoji,
+            servings: servingCount,
+            note: note.text.trim(),
+          ),
+        );
+      }
+      for (final controller in [name, emoji, servings, note]) {
+        controller.dispose();
+      }
+      return;
+    }
     if (source == PlannedMealSource.recipe) {
       for (final selected in selectedRecipes) {
         store.savePlannedMeal(

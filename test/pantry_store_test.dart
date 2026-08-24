@@ -329,6 +329,49 @@ void main() {
     expect(store.groceryItems.where((item) => item.fromPlan), isEmpty);
   });
 
+  test('a later leftover can reference an earlier planned meal', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'monday-pancakes',
+        groupId: 'monday-dinner',
+        date: DateTime(2026, 8, 24),
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: 4,
+      ),
+    );
+    final requirementsForOriginalCook = store.plannedRequirementsBase;
+
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'wednesday-pancakes',
+        groupId: 'wednesday-lunch',
+        leftoverOfGroupId: 'monday-dinner',
+        intent: PlannedMealIntent.leftover,
+        date: DateTime(2026, 8, 26),
+        slot: MealSlot.lunch,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: 2,
+      ),
+    );
+
+    final leftover = store.plannedMeals.last;
+    expect(leftover.leftoverOfGroupId, 'monday-dinner');
+    expect(
+      store.plannedRequirementsBase,
+      requirementsForOriginalCook,
+      reason: 'only the original cook should add ingredient demand',
+    );
+  });
+
   test('grouped recipe components can be removed as one meal', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final recipes = store.recipes.take(2).toList();

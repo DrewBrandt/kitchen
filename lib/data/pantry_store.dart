@@ -1055,6 +1055,20 @@ class PantryStore extends ChangeNotifier {
         !_mealTemplates.any((template) => template.id == meal.sourceId)) {
       throw ArgumentError('Planned compound meal does not exist');
     }
+    if (meal.leftoverOfGroupId != null) {
+      if (meal.intent != PlannedMealIntent.leftover) {
+        throw ArgumentError('A planned-meal reference must be leftovers');
+      }
+      final sources = _plannedMeals.where(
+        (item) => item.groupId == meal.leftoverOfGroupId,
+      );
+      if (sources.isEmpty ||
+          sources.any((source) => !source.date.isBefore(meal.date))) {
+        throw ArgumentError(
+          'Leftovers must reference an earlier meal in the plan',
+        );
+      }
+    }
     final index = _plannedMeals.indexWhere((item) => item.id == meal.id);
     if (index < 0) {
       _plannedMeals = [..._plannedMeals, meal];

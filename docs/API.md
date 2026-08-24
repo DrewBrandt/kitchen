@@ -251,6 +251,7 @@ Content-Type: application/json
       "source": "recipe",
       "sourceId": "butter-chicken",
       "groupId": "wednesday-lunch",
+      "leftoverOfGroupId": "monday-dinner",
       "intent": "leftover",
       "servings": 1
     }
@@ -267,6 +268,10 @@ Manual grocery items and checked state for unchanged foods are preserved.
 entries use `sourceId`; custom entries require `name`. Give recipe components
 the same `groupId` to display them as one meal. `intent` defaults to `prepare`;
 use `leftover` to retain recipe identity without adding grocery demand.
+Set `leftoverOfGroupId` to the earlier meal's `groupId` to link future
+leftovers directly to that planner meal before it has been cooked. The linked
+entries keep their underlying recipe components; no new saved recipe or meal
+template is created.
 
 ## Add a manual grocery item
 
