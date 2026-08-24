@@ -15,6 +15,8 @@ const _border = Color(0xFF29302C);
 const _amber = Color(0xFFF0B85A);
 const _herb = Color(0xFF7DD89A);
 const _berry = Color(0xFFE77986);
+const _sky = Color(0xFF70C7E8);
+const _violet = Color(0xFFB89BEA);
 
 class PantryHomePage extends StatefulWidget {
   const PantryHomePage({
@@ -50,6 +52,11 @@ class _PantryHomePageState extends State<PantryHomePage> {
       label: 'Recipes',
     ),
     NavigationDestination(
+      icon: Icon(Icons.storefront_outlined),
+      selectedIcon: Icon(Icons.storefront),
+      label: 'Eating out',
+    ),
+    NavigationDestination(
       icon: Icon(Icons.monitor_heart_outlined),
       selectedIcon: Icon(Icons.monitor_heart),
       label: 'Food log',
@@ -63,10 +70,11 @@ class _PantryHomePageState extends State<PantryHomePage> {
         store: widget.store,
         onOpenInventory: () => setState(() => selectedIndex = 1),
         onOpenRecipes: () => setState(() => selectedIndex = 2),
-        onOpenFoodLog: () => setState(() => selectedIndex = 3),
+        onOpenFoodLog: () => setState(() => selectedIndex = 4),
       ),
       _InventoryPage(store: widget.store),
       _RecipesPage(store: widget.store),
+      _EatingOutPage(store: widget.store),
       _FoodLogPage(store: widget.store),
     ];
     return LayoutBuilder(
@@ -141,6 +149,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
                 selectedIndex: selectedIndex,
                 inventoryCount: widget.store.foods.length,
                 recipeCount: widget.store.recipes.length,
+                externalFoodCount: widget.store.externalFoods.length,
                 onSelected: (value) => setState(() => selectedIndex = value),
                 onSignOut: widget.onSignOut,
               ),
@@ -158,6 +167,7 @@ class _PantrySidebar extends StatelessWidget {
     required this.selectedIndex,
     required this.inventoryCount,
     required this.recipeCount,
+    required this.externalFoodCount,
     required this.onSelected,
     required this.onSignOut,
   });
@@ -165,6 +175,7 @@ class _PantrySidebar extends StatelessWidget {
   final int selectedIndex;
   final int inventoryCount;
   final int recipeCount;
+  final int externalFoodCount;
   final ValueChanged<int> onSelected;
   final VoidCallback onSignOut;
 
@@ -226,12 +237,18 @@ class _PantrySidebar extends StatelessWidget {
               selected: selectedIndex == 2,
               onTap: () => onSelected(2),
             ),
+            _SidebarDestination(
+              label: 'Eating out',
+              badge: '$externalFoodCount',
+              selected: selectedIndex == 3,
+              onTap: () => onSelected(3),
+            ),
             const SizedBox(height: 24),
             const _NavGroupLabel('Eating'),
             _SidebarDestination(
               label: 'Food log',
-              selected: selectedIndex == 3,
-              onTap: () => onSelected(3),
+              selected: selectedIndex == 4,
+              onTap: () => onSelected(4),
             ),
             const Spacer(),
             const Divider(),
@@ -767,6 +784,7 @@ class _InventoryPage extends StatelessWidget {
               .map(
                 (food) => SizedBox(
                   width: width,
+                  height: 340,
                   child: _FoodCard(store: store, food: food),
                 ),
               )
@@ -882,6 +900,7 @@ class _FoodCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
+            const Spacer(),
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerRight,
@@ -1005,6 +1024,7 @@ class _RecipeSection extends StatelessWidget {
             final width = constraints.maxWidth >= 720
                 ? (constraints.maxWidth - 14) / 2
                 : constraints.maxWidth;
+            final cardHeight = constraints.maxWidth < 480 ? 560.0 : 450.0;
             return Wrap(
               spacing: 14,
               runSpacing: 14,
@@ -1012,6 +1032,7 @@ class _RecipeSection extends StatelessWidget {
                   .map(
                     (recipe) => SizedBox(
                       width: width,
+                      height: cardHeight,
                       child: _RecipeCard(store: store, recipe: recipe),
                     ),
                   )
@@ -1167,6 +1188,7 @@ class _RecipeCard extends StatelessWidget {
                 ],
               ),
             ],
+            const Spacer(),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
@@ -1183,6 +1205,197 @@ class _RecipeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EatingOutPage extends StatelessWidget {
+  const _EatingOutPage({required this.store});
+
+  final PantryStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = <String, List<ExternalFood>>{};
+    for (final food in store.externalFoods) {
+      final place = food.brand.trim().isEmpty ? 'Other' : food.brand.trim();
+      grouped.putIfAbsent(place, () => []).add(food);
+    }
+    final places = grouped.entries.toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    for (final place in places) {
+      place.value.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+    }
+
+    return _PageShell(
+      eyebrow:
+          '${store.externalFoods.length} saved items · ${places.length} ${places.length == 1 ? 'place' : 'places'}',
+      title: 'Eating out',
+      subtitle:
+          'Restaurant and packaged foods that never touch inventory — saved once, logged in a tap.',
+      action: FilledButton.icon(
+        onPressed: () => showExternalFoodEditor(context, store),
+        icon: const Icon(Icons.add),
+        label: const Text('Save food'),
+      ),
+      child: places.isEmpty
+          ? const _EmptyCard(
+              icon: Icons.storefront_outlined,
+              text:
+                  'Save a restaurant order or packaged food, then it will appear here under its place or brand.',
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth >= 760
+                    ? (constraints.maxWidth - 14) / 2
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: places
+                      .map(
+                        (place) => SizedBox(
+                          width: width,
+                          child: _EatingOutPlaceCard(
+                            store: store,
+                            name: place.key,
+                            foods: place.value,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _EatingOutPlaceCard extends StatelessWidget {
+  const _EatingOutPlaceCard({
+    required this.store,
+    required this.name,
+    required this.foods,
+  });
+
+  final PantryStore store;
+  final String name;
+  final List<ExternalFood> foods;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _raised,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _initials(name),
+                  style: const TextStyle(
+                    color: _muted,
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${foods.length} saved ${foods.length == 1 ? 'item' : 'items'}',
+                      style: const TextStyle(color: _muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ...foods.map(
+            (food) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
+                decoration: BoxDecoration(
+                  color: _raised,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Text(food.emoji, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(food.name, style: const TextStyle(fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${food.servingLabel} · ${_nutritionLabel(food.nutrition)}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _faint,
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit ${food.name}',
+                      onPressed: () => showExternalFoodEditor(
+                        context,
+                        store,
+                        existing: food,
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      color: _faint,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    OutlinedButton(
+                      onPressed: () => _showLogKnownFood(
+                        context,
+                        store,
+                        food,
+                        DateTime.now(),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        minimumSize: const Size(0, 32),
+                      ),
+                      child: const Text('Log'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _FoodLogPage extends StatefulWidget {
@@ -1222,11 +1435,6 @@ class _FoodLogPageState extends State<_FoodLogPage> {
         spacing: 8,
         runSpacing: 8,
         children: [
-          OutlinedButton.icon(
-            onPressed: () => showExternalFoodEditor(context, store),
-            icon: const Icon(Icons.bookmark_add_outlined),
-            label: const Text('Save food'),
-          ),
           FilledButton.icon(
             onPressed: () => _showExternalMeal(context, store, selectedDay),
             icon: const Icon(Icons.add),
@@ -1259,7 +1467,8 @@ class _FoodLogPageState extends State<_FoodLogPage> {
             ],
           ),
           const SizedBox(height: 12),
-          _NutritionSummary(
+          _MealContributionChart(
+            events: events,
             nutrition: nutrition,
             targets: store.nutritionTargets,
             onEdit: () => _showNutritionTargets(context, store),
@@ -1269,65 +1478,19 @@ class _FoodLogPageState extends State<_FoodLogPage> {
             children: [
               Expanded(
                 child: Text(
-                  'Known outside foods',
+                  'Meals and snacks',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               Text(
-                'Reusable · never touches inventory',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (store.externalFoods.isEmpty)
-            const _EmptyCard(
-              icon: Icons.bookmarks_outlined,
-              text:
-                  'Save a restaurant order or packaged snack to log it again without another lookup.',
-            )
-          else
-            ...store.externalFoods.map(
-              (food) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Text(food.emoji)),
-                    title: Text(food.name),
-                    subtitle: Text(
-                      '${food.brand.isEmpty ? food.servingLabel : '${food.brand} · ${food.servingLabel}'} · ${_nutritionLabel(food.nutrition)}',
-                    ),
-                    trailing: Wrap(
-                      spacing: 4,
-                      children: [
-                        IconButton(
-                          tooltip: 'Edit saved food',
-                          onPressed: () => showExternalFoodEditor(
-                            context,
-                            store,
-                            existing: food,
-                          ),
-                          icon: const Icon(Icons.edit_outlined),
-                        ),
-                        FilledButton(
-                          onPressed: () => _showLogKnownFood(
-                            context,
-                            store,
-                            food,
-                            selectedDay,
-                          ),
-                          child: const Text('Log'),
-                        ),
-                      ],
-                    ),
-                  ),
+                '${events.length} ${events.length == 1 ? 'entry' : 'entries'}',
+                style: const TextStyle(
+                  color: _faint,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
                 ),
               ),
-            ),
-          const SizedBox(height: 20),
-          Text(
-            'Meals and snacks',
-            style: Theme.of(context).textTheme.titleLarge,
+            ],
           ),
           const SizedBox(height: 10),
           if (events.isEmpty)
@@ -1338,28 +1501,449 @@ class _FoodLogPageState extends State<_FoodLogPage> {
           else
             ...events.map(
               (event) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Icon(_eventIcon(event.kind))),
-                    title: Text(event.label),
-                    subtitle: Text(
-                      '${_eventSource(event)}${event.nutrition == null ? '' : ' · ${_nutritionLabel(event.nutrition!)}'}${event.note.isEmpty ? '' : '\n${event.note}'}',
-                    ),
-                    isThreeLine: event.note.isNotEmpty,
-                    trailing: TextButton(
-                      onPressed: () => store.undo(event.id),
-                      child: Text(
-                        event.kind == ConsumptionKind.external
-                            ? 'Remove'
-                            : 'Undo',
-                      ),
-                    ),
-                  ),
+                padding: const EdgeInsets.only(bottom: 9),
+                child: _FoodLogEventCard(
+                  event: event,
+                  onUndo: () => store.undo(event.id),
                 ),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _MealContributionChart extends StatelessWidget {
+  const _MealContributionChart({
+    required this.events,
+    required this.nutrition,
+    required this.targets,
+    required this.onEdit,
+  });
+
+  final List<ConsumptionEvent> events;
+  final NutritionTotals nutrition;
+  final NutritionTargets targets;
+  final VoidCallback onEdit;
+
+  static const colors = [_amber, _herb, _sky, _berry, _violet];
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <_ContributionMetric>[
+      _ContributionMetric(
+        label: 'Calories',
+        unit: 'cal',
+        target: targets.calories,
+        total: nutrition.calories,
+        value: (n) => n.calories,
+      ),
+      _ContributionMetric(
+        label: 'Protein',
+        unit: 'g',
+        target: targets.proteinG,
+        total: nutrition.proteinG,
+        value: (n) => n.proteinG,
+      ),
+      _ContributionMetric(
+        label: 'Carbs',
+        unit: 'g',
+        target: targets.carbsG,
+        total: nutrition.carbsG,
+        value: (n) => n.carbsG,
+      ),
+      _ContributionMetric(
+        label: 'Fat',
+        unit: 'g',
+        target: targets.fatG,
+        total: nutrition.fatG,
+        value: (n) => n.fatG,
+      ),
+      _ContributionMetric(
+        label: 'Fiber',
+        unit: 'g',
+        target: targets.fiberG,
+        total: nutrition.fiberG,
+        value: (n) => n.fiberG,
+      ),
+      _ContributionMetric(
+        label: 'Sodium',
+        unit: 'mg',
+        target: targets.sodiumMg,
+        total: nutrition.sodiumMg,
+        value: (n) => n.sodiumMg,
+        isLimit: true,
+      ),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'How each food built your day',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Each color is one logged food or meal.',
+                        style: TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(onPressed: onEdit, child: const Text('Targets')),
+              ],
+            ),
+            const SizedBox(height: 18),
+            if (events.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Log something to see where today’s nutrients came from.',
+                  style: TextStyle(color: _muted),
+                ),
+              )
+            else ...[
+              Wrap(
+                spacing: 16,
+                runSpacing: 10,
+                children: events.indexed.map((entry) {
+                  final (index, event) = entry;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colors[index % colors.length],
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        event.label,
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 22),
+              ...rows.map(
+                (metric) => _ContributionRow(
+                  metric: metric,
+                  events: events,
+                  colors: colors,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 2,
+                    height: 12,
+                    child: ColoredBox(color: _ink),
+                  ),
+                  SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      'The white mark is your daily target; sodium’s is a limit.',
+                      style: TextStyle(color: _faint, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContributionMetric {
+  const _ContributionMetric({
+    required this.label,
+    required this.unit,
+    required this.target,
+    required this.total,
+    required this.value,
+    this.isLimit = false,
+  });
+
+  final String label;
+  final String unit;
+  final double target;
+  final double total;
+  final double Function(NutritionTotals) value;
+  final bool isLimit;
+}
+
+class _ContributionRow extends StatelessWidget {
+  const _ContributionRow({
+    required this.metric,
+    required this.events,
+    required this.colors,
+  });
+
+  final _ContributionMetric metric;
+  final List<ConsumptionEvent> events;
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 15),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final bar = _ContributionBar(
+          values: events
+              .map(
+                (event) =>
+                    metric.value(event.nutrition ?? const NutritionTotals()),
+              )
+              .toList(),
+          colors: colors,
+          target: metric.target,
+          total: metric.total,
+          isLimit: metric.isLimit,
+        );
+        final value = Text(
+          '${_compactNumber(metric.total)} of ${_compactNumber(metric.target)} ${metric.unit}',
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            color: metric.isLimit && metric.total > metric.target
+                ? _berry
+                : _muted,
+            fontFamily: 'monospace',
+            fontSize: 12,
+          ),
+        );
+        if (constraints.maxWidth < 560) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      metric.label,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  value,
+                ],
+              ),
+              const SizedBox(height: 7),
+              bar,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            SizedBox(
+              width: 74,
+              child: Text(metric.label, style: const TextStyle(fontSize: 13)),
+            ),
+            Expanded(child: bar),
+            const SizedBox(width: 14),
+            SizedBox(width: 136, child: value),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _ContributionBar extends StatelessWidget {
+  const _ContributionBar({
+    required this.values,
+    required this.colors,
+    required this.target,
+    required this.total,
+    required this.isLimit,
+  });
+
+  final List<double> values;
+  final List<Color> colors;
+  final double target;
+  final double total;
+  final bool isLimit;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 22,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final max = target * 1.25;
+        final scale = total > max && total > 0 ? max / total : 1.0;
+        final segments = <Widget>[];
+        var left = 0.0;
+        for (final (index, rawValue) in values.indexed) {
+          final width = max == 0
+              ? 0.0
+              : constraints.maxWidth * rawValue * scale / max;
+          if (width > 0) {
+            segments.add(
+              Positioned(
+                left: left,
+                top: 0,
+                bottom: 0,
+                width: width,
+                child: ColoredBox(color: colors[index % colors.length]),
+              ),
+            );
+          }
+          left += width;
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Stack(
+            children: [
+              const Positioned.fill(child: ColoredBox(color: _raised)),
+              ...segments,
+              if (isLimit && total > target)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: constraints.maxWidth * .8,
+                  right: 0,
+                  child: ColoredBox(color: _berry.withValues(alpha: .12)),
+                ),
+              Positioned(
+                top: 0,
+                bottom: 0,
+                left: constraints.maxWidth * .8,
+                child: const SizedBox(width: 2, child: ColoredBox(color: _ink)),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _FoodLogEventCard extends StatelessWidget {
+  const _FoodLogEventCard({required this.event, required this.onUndo});
+
+  final ConsumptionEvent event;
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final source =
+        '${_eventSource(event)}${event.note.isEmpty ? '' : ' · ${event.note}'}';
+    final nutrition = event.nutrition == null
+        ? 'No nutrition data'
+        : _nutritionLabel(event.nutrition!);
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: _border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final identity = Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _raised,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(_eventIcon(event.kind), size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.label,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        source,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+            final action = TextButton(
+              onPressed: onUndo,
+              style: TextButton.styleFrom(
+                foregroundColor: _faint,
+                minimumSize: const Size(64, 36),
+              ),
+              child: Text(
+                event.kind == ConsumptionKind.external ? 'Remove' : 'Undo',
+              ),
+            );
+            if (constraints.maxWidth < 620) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  identity,
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          nutrition,
+                          style: const TextStyle(
+                            color: _muted,
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      action,
+                    ],
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: identity),
+                const SizedBox(width: 18),
+                Text(
+                  nutrition,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                action,
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -2246,6 +2830,20 @@ Future<void> _confirmDeleteRecipe(
     ),
   );
   if (confirmed == true) store.deleteRecipe(recipe.id);
+}
+
+String _initials(String value) {
+  final words = value
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .toList();
+  if (words.isEmpty) return '—';
+  if (words.length == 1) {
+    final word = words.first;
+    return word.substring(0, word.length >= 2 ? 2 : 1).toUpperCase();
+  }
+  return '${words.first[0]}${words.last[0]}'.toUpperCase();
 }
 
 String _dayPart() {

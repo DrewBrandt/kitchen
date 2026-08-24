@@ -45,7 +45,7 @@ Future<void> showExternalFoodEditor(
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
         title: Text(
-          existing == null ? 'Save known outside food' : 'Edit known food',
+          existing == null ? 'Save food from away' : 'Edit saved food',
         ),
         content: SizedBox(
           width: 540,
@@ -82,7 +82,8 @@ Future<void> showExternalFoodEditor(
                       child: TextField(
                         controller: brand,
                         decoration: const InputDecoration(
-                          labelText: 'Restaurant or brand',
+                          labelText: 'Place or brand',
+                          hintText: 'Chick-fil-A, Greene Turtle, Fairlife',
                         ),
                       ),
                     ),
@@ -153,8 +154,13 @@ Future<void> showExternalFoodEditor(
           FilledButton(
             onPressed: () {
               final values = fields.map((field) => number(field.$2));
-              if (name.text.trim().isEmpty || serving.text.trim().isEmpty) {
-                setDialogState(() => error = 'Name and serving are required.');
+              if (name.text.trim().isEmpty ||
+                  brand.text.trim().isEmpty ||
+                  serving.text.trim().isEmpty) {
+                setDialogState(
+                  () =>
+                      error = 'Name, place or brand, and serving are required.',
+                );
               } else if (values.any((item) => item < 0) ||
                   !values.any((item) => item > 0)) {
                 setDialogState(
