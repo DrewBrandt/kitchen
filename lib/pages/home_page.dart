@@ -868,7 +868,11 @@ class _FoodLogPageState extends State<_FoodLogPage> {
             ],
           ),
           const SizedBox(height: 12),
-          _NutritionSummary(nutrition: nutrition),
+          _NutritionSummary(
+            nutrition: nutrition,
+            targets: store.nutritionTargets,
+            onEdit: () => _showNutritionTargets(context, store),
+          ),
           const SizedBox(height: 20),
           Text(
             'Meals and snacks',
@@ -911,8 +915,14 @@ class _FoodLogPageState extends State<_FoodLogPage> {
 }
 
 class _NutritionSummary extends StatelessWidget {
-  const _NutritionSummary({required this.nutrition});
+  const _NutritionSummary({
+    required this.nutrition,
+    required this.targets,
+    required this.onEdit,
+  });
   final NutritionTotals nutrition;
+  final NutritionTargets targets;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -921,10 +931,30 @@ class _NutritionSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Daily nutrition',
-            style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Daily nutrition',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.tune, size: 18),
+                label: const Text('Targets'),
+              ),
+            ],
           ),
+          if (targets.label.isNotEmpty) ...[
+            Text(
+              targets.label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -934,20 +964,39 @@ class _NutritionSummary extends StatelessWidget {
                 label: 'Calories',
                 value: nutrition.calories,
                 unit: 'cal',
+                target: targets.calories,
               ),
               _NutrientTile(
                 label: 'Protein',
                 value: nutrition.proteinG,
                 unit: 'g',
+                target: targets.proteinG,
               ),
-              _NutrientTile(label: 'Carbs', value: nutrition.carbsG, unit: 'g'),
-              _NutrientTile(label: 'Fat', value: nutrition.fatG, unit: 'g'),
-              _NutrientTile(label: 'Fiber', value: nutrition.fiberG, unit: 'g'),
+              _NutrientTile(
+                label: 'Carbs',
+                value: nutrition.carbsG,
+                unit: 'g',
+                target: targets.carbsG,
+              ),
+              _NutrientTile(
+                label: 'Fat',
+                value: nutrition.fatG,
+                unit: 'g',
+                target: targets.fatG,
+              ),
+              _NutrientTile(
+                label: 'Fiber',
+                value: nutrition.fiberG,
+                unit: 'g',
+                target: targets.fiberG,
+              ),
               _NutrientTile(label: 'Sugar', value: nutrition.sugarG, unit: 'g'),
               _NutrientTile(
                 label: 'Sodium',
                 value: nutrition.sodiumMg,
                 unit: 'mg',
+                target: targets.sodiumMg,
+                isLimit: true,
               ),
             ],
           ),
@@ -962,33 +1011,57 @@ class _NutrientTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.unit,
+    this.target,
+    this.isLimit = false,
   });
   final String label;
   final double value;
   final String unit;
+  final double? target;
+  final bool isLimit;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 132,
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: 3),
-        Text(
-          '${_compactNumber(value)} $unit',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final percent = target == null ? null : value / target!;
+    final overLimit = isLimit && percent != null && percent > 1;
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 3),
+          Text(
+            '${_compactNumber(value)} $unit',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (percent != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${(percent * 100).round()}% of ${isLimit ? 'limit' : 'target'}',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: overLimit ? Theme.of(context).colorScheme.error : null,
+              ),
+            ),
+            const SizedBox(height: 5),
+            LinearProgressIndicator(
+              value: percent.clamp(0, 1),
+              minHeight: 4,
+              color: overLimit ? Theme.of(context).colorScheme.error : null,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _EmptyCard extends StatelessWidget {
@@ -1009,6 +1082,120 @@ class _EmptyCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+Future<void> _showNutritionTargets(
+  BuildContext context,
+  PantryStore store,
+) async {
+  final current = store.nutritionTargets;
+  final calories = TextEditingController(
+    text: _compactNumber(current.calories),
+  );
+  final protein = TextEditingController(text: _compactNumber(current.proteinG));
+  final carbs = TextEditingController(text: _compactNumber(current.carbsG));
+  final fat = TextEditingController(text: _compactNumber(current.fatG));
+  final fiber = TextEditingController(text: _compactNumber(current.fiberG));
+  final sodium = TextEditingController(text: _compactNumber(current.sodiumMg));
+  final fields = <(String, TextEditingController, String)>[
+    ('Calories', calories, 'cal'),
+    ('Protein', protein, 'g'),
+    ('Carbs', carbs, 'g'),
+    ('Fat', fat, 'g'),
+    ('Fiber', fiber, 'g'),
+    ('Sodium limit', sodium, 'mg'),
+  ];
+  String? error;
+  double? number(TextEditingController controller) =>
+      double.tryParse(controller.text.trim());
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Daily nutrition targets'),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                current.label,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: fields
+                    .map(
+                      (field) => SizedBox(
+                        width: 150,
+                        child: TextField(
+                          controller: field.$2,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: field.$1,
+                            suffixText: field.$3,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Sugar has no percentage because the log contains total sugar, while dietary guidance limits added sugar.',
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (fields.any(
+                (field) => number(field.$2) == null || number(field.$2)! <= 0,
+              )) {
+                setDialogState(() => error = 'Every target must be positive.');
+              } else {
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text('Save targets'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (submitted == true) {
+    store.saveNutritionTargets(
+      NutritionTargets(
+        calories: number(calories)!,
+        proteinG: number(protein)!,
+        carbsG: number(carbs)!,
+        fatG: number(fat)!,
+        fiberG: number(fiber)!,
+        sodiumMg: number(sodium)!,
+        label: current.label,
+      ),
+    );
+  }
+  for (final controller in [calories, protein, carbs, fat, fiber, sodium]) {
+    controller.dispose();
+  }
 }
 
 Future<void> _showExternalMeal(

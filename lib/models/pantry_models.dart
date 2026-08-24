@@ -61,6 +61,36 @@ class NutritionFacts {
       totals.scale(amount / basisBaseAmount);
 }
 
+class NutritionTargets {
+  const NutritionTargets({
+    required this.calories,
+    required this.proteinG,
+    required this.carbsG,
+    required this.fatG,
+    required this.fiberG,
+    required this.sodiumMg,
+    this.label = '',
+  });
+
+  static const defaults = NutritionTargets(
+    calories: 2000,
+    proteinG: 50,
+    carbsG: 275,
+    fatG: 78,
+    fiberG: 28,
+    sodiumMg: 2300,
+    label: 'General FDA Daily Values',
+  );
+
+  final double calories;
+  final double proteinG;
+  final double carbsG;
+  final double fatG;
+  final double fiberG;
+  final double sodiumMg;
+  final String label;
+}
+
 extension StorageLocationLabel on StorageLocation {
   String get label => switch (this) {
     StorageLocation.pantry => 'Pantry',

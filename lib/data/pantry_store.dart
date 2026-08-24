@@ -17,6 +17,7 @@ class PantryStore extends ChangeNotifier {
     _foods = {for (final food in foods) food.id: food};
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
+    _nutritionTargets = NutritionTargets.defaults;
   }
 
   PantryStore._cloud({
@@ -28,6 +29,7 @@ class PantryStore extends ChangeNotifier {
     _foods = {for (final food in data.foods) food.id: food};
     _lots = data.lots;
     _recipes = data.recipes;
+    _nutritionTargets = data.nutritionTargets;
     _history.addAll(data.history);
   }
 
@@ -48,6 +50,7 @@ class PantryStore extends ChangeNotifier {
         lots: seeded.lots,
         recipes: seeded.recipes,
         history: seeded.history,
+        nutritionTargets: seeded.nutritionTargets,
       ),
     );
     seeded._cloud = cloud;
@@ -61,6 +64,7 @@ class PantryStore extends ChangeNotifier {
   late final Map<String, FoodDefinition> _foods;
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
+  late NutritionTargets _nutritionTargets;
   final List<ConsumptionEvent> _history = [];
   int _pendingWrites = 0;
   Object? _syncError;
@@ -69,6 +73,7 @@ class PantryStore extends ChangeNotifier {
   List<InventoryLot> get lots => List.unmodifiable(_lots);
   List<Recipe> get recipes => List.unmodifiable(_recipes);
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
+  NutritionTargets get nutritionTargets => _nutritionTargets;
   DateTime get now => _now;
   bool get isSyncing => _pendingWrites > 0;
   Object? get syncError => _syncError;
@@ -329,6 +334,23 @@ class PantryStore extends ChangeNotifier {
       _recipes[index] = recipe;
     }
     _queue(_cloud?.saveRecipe(recipe));
+    notifyListeners();
+  }
+
+  void saveNutritionTargets(NutritionTargets targets) {
+    final values = [
+      targets.calories,
+      targets.proteinG,
+      targets.carbsG,
+      targets.fatG,
+      targets.fiberG,
+      targets.sodiumMg,
+    ];
+    if (values.any((value) => !value.isFinite || value <= 0)) {
+      throw ArgumentError('Nutrition targets must be positive numbers');
+    }
+    _nutritionTargets = targets;
+    _queue(_cloud?.saveNutritionTargets(targets));
     notifyListeners();
   }
 

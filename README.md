@@ -13,6 +13,7 @@ The current vertical slice includes:
 - earliest-expiry-first recipe deductions
 - quick consumption
 - daily calorie, macro, fiber, sugar, and sodium totals
+- private, editable nutrition targets with goal and limit percentages
 - outside meal, takeout, drink, and snack logging without inventory changes
 - reversible history
 - responsive desktop and mobile navigation

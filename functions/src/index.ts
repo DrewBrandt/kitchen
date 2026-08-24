@@ -66,6 +66,10 @@ export const pantryApi = onRequest(
         await logExternalMeal(asObject(request.body), response);
         return;
       }
+      if (request.method === "POST" && path === "/v1/targets") {
+        await saveNutritionTargets(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/access") {
         await grantAccess(asObject(request.body), response);
         return;
@@ -86,17 +90,19 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history] = await Promise.all([
+  const [foods, lots, recipes, history, nutritionTargets] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
     db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
+    db.collection("settings").doc("nutrition").get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     lots: lots.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
     exportedAt: new Date().toISOString(),
   });
 }
@@ -227,6 +233,21 @@ async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise
     note: optionalString(body.note) ?? "",
   });
   response.status(201).json({ id: reference.id, status: "logged" });
+}
+
+async function saveNutritionTargets(body: JsonObject, response: ApiResponse): Promise<void> {
+  const targets = {
+    calories: positiveNumber(body.calories, "calories"),
+    protein_g: positiveNumber(body.proteinG, "proteinG"),
+    carbs_g: positiveNumber(body.carbsG, "carbsG"),
+    fat_g: positiveNumber(body.fatG, "fatG"),
+    fiber_g: positiveNumber(body.fiberG, "fiberG"),
+    sodium_mg: positiveNumber(body.sodiumMg, "sodiumMg"),
+    label: optionalString(body.label) ?? "Personalized targets",
+    updated_at: FieldValue.serverTimestamp(),
+  };
+  await db.collection("settings").doc("nutrition").set(targets);
+  response.status(200).json({ status: "saved" });
 }
 
 async function loadFoods(): Promise<FoodRecord[]> {

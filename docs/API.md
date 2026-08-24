@@ -67,6 +67,29 @@ Content-Type: application/json
 Only `label` and at least one positive nutrition value are required. If
 `timestamp` is omitted, Firebase records the current time.
 
+## Save daily nutrition targets
+
+Targets are private, editable, and used by the Food Log percentage displays:
+
+```http
+POST /v1/targets
+Content-Type: application/json
+
+{
+  "calories": 2500,
+  "proteinG": 130,
+  "carbsG": 300,
+  "fatG": 83,
+  "fiberG": 38,
+  "sodiumMg": 2300,
+  "label": "Age 28 · 6 ft · 180 lb · light activity · gradual loss"
+}
+```
+
+Calories and macronutrients are planning targets; sodium is displayed as a
+limit. Total sugar intentionally has no percentage because nutrition labels do
+not distinguish all naturally occurring sugar from added sugar consistently.
+
 ## Read current inventory
 
 ```http

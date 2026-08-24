@@ -8,12 +8,14 @@ class CloudPantryData {
     required this.lots,
     required this.recipes,
     required this.history,
+    required this.nutritionTargets,
   });
 
   final List<FoodDefinition> foods;
   final List<InventoryLot> lots;
   final List<Recipe> recipes;
   final List<ConsumptionEvent> history;
+  final NutritionTargets nutritionTargets;
 
   bool get isEmpty => foods.isEmpty && lots.isEmpty && recipes.isEmpty;
 }
@@ -30,11 +32,15 @@ class FirestorePantry {
       db.collection('recipes').get(),
       db.collection('consumption_history').orderBy('timestamp').get(),
     ]);
+    final targets = await db.collection('settings').doc('nutrition').get();
     return CloudPantryData(
       foods: results[0].docs.map(_foodFromDoc).toList(),
       lots: results[1].docs.map(_lotFromDoc).toList(),
       recipes: results[2].docs.map(_recipeFromDoc).toList(),
       history: results[3].docs.map(_eventFromDoc).toList(),
+      nutritionTargets: targets.exists
+          ? _nutritionTargetsFromData(targets.data()!)
+          : NutritionTargets.defaults,
     );
   }
 
@@ -49,6 +55,10 @@ class FirestorePantry {
     for (final recipe in data.recipes) {
       batch.set(db.collection('recipes').doc(recipe.id), _recipeData(recipe));
     }
+    batch.set(
+      db.collection('settings').doc('nutrition'),
+      _nutritionTargetsData(data.nutritionTargets),
+    );
     await batch.commit();
   }
 
@@ -65,6 +75,11 @@ class FirestorePantry {
 
   Future<void> deleteRecipe(String id) =>
       db.collection('recipes').doc(id).delete();
+
+  Future<void> saveNutritionTargets(NutritionTargets targets) => db
+      .collection('settings')
+      .doc('nutrition')
+      .set(_nutritionTargetsData(targets));
 
   Future<void> saveConsumption(
     ConsumptionEvent event,
@@ -194,6 +209,28 @@ class FirestorePantry {
     'sugar_g': totals.sugarG,
     'sodium_mg': totals.sodiumMg,
   };
+
+  Map<String, Object?> _nutritionTargetsData(NutritionTargets targets) => {
+    'calories': targets.calories,
+    'protein_g': targets.proteinG,
+    'carbs_g': targets.carbsG,
+    'fat_g': targets.fatG,
+    'fiber_g': targets.fiberG,
+    'sodium_mg': targets.sodiumMg,
+    'label': targets.label,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  NutritionTargets _nutritionTargetsFromData(Map<String, dynamic> data) =>
+      NutritionTargets(
+        calories: (data['calories'] as num? ?? 2000).toDouble(),
+        proteinG: (data['protein_g'] as num? ?? 50).toDouble(),
+        carbsG: (data['carbs_g'] as num? ?? 275).toDouble(),
+        fatG: (data['fat_g'] as num? ?? 78).toDouble(),
+        fiberG: (data['fiber_g'] as num? ?? 28).toDouble(),
+        sodiumMg: (data['sodium_mg'] as num? ?? 2300).toDouble(),
+        label: data['label'] as String? ?? '',
+      );
 
   NutritionTotals _nutritionTotalsFromData(Map<String, dynamic> data) =>
       NutritionTotals(

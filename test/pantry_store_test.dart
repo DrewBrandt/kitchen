@@ -144,4 +144,22 @@ void main() {
     expect(store.nutritionForDay(DateTime(2026, 8, 23)).calories, 0);
     expect(store.totalFor('egg'), eggsBefore);
   });
+
+  test('nutrition targets can be personalized', () {
+    final store = PantryStore.demo();
+    const targets = NutritionTargets(
+      calories: 2500,
+      proteinG: 130,
+      carbsG: 300,
+      fatG: 83,
+      fiberG: 38,
+      sodiumMg: 2300,
+      label: 'Personalized starting target',
+    );
+
+    store.saveNutritionTargets(targets);
+
+    expect(store.nutritionTargets, same(targets));
+    expect(store.nutritionTargets.proteinG, 130);
+  });
 }
