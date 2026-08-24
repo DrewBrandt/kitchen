@@ -24,6 +24,22 @@ The token is not displayed or passed through chat. Never store it in the Flutter
 client or commit it to Git. Use `tools/pantry_api.ps1` for authenticated calls;
 POST bodies are supplied as JSON files with `-BodyFile`.
 
+## Allow a Google account
+
+Firestore access is denied until the authenticated account's Firebase UID is
+explicitly allowlisted. The signed-in app displays the UID when access is
+missing. Approve it through the private API:
+
+```http
+POST /v1/access
+Content-Type: application/json
+
+{"uid": "firebase-auth-uid"}
+```
+
+This route is protected by the same private bearer token. A UID identifies an
+account but is not itself a credential.
+
 ## Read current inventory
 
 ```http

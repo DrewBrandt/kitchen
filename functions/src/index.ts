@@ -29,6 +29,7 @@ export const pantryApi = onRequest(
   {
     region: "us-east4",
     secrets: [pantryApiToken],
+    invoker: "public",
     timeoutSeconds: 60,
     maxInstances: 1,
   },
@@ -59,6 +60,10 @@ export const pantryApi = onRequest(
       }
       if (request.method === "POST" && path === "/v1/recipes") {
         await createRecipe(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/access") {
+        await grantAccess(asObject(request.body), response);
         return;
       }
       response.status(404).json({ error: "Unknown route" });
@@ -175,6 +180,18 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
     updated_at: FieldValue.serverTimestamp(),
   }, { merge: true });
   response.status(200).json({ id, status: "saved" });
+}
+
+async function grantAccess(body: JsonObject, response: ApiResponse): Promise<void> {
+  const uid = requiredString(body.uid, "uid");
+  if (uid.length > 128 || uid.includes("/")) {
+    throw new ValidationError("uid is invalid");
+  }
+  await db.collection("app_access").doc(uid).set({
+    role: "owner",
+    updated_at: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  response.status(200).json({ uid, status: "allowed" });
 }
 
 async function loadFoods(): Promise<FoodRecord[]> {
