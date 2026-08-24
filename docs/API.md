@@ -348,6 +348,42 @@ Content-Type: application/json
 
 Manual items remain on the list independently of meal-plan recalculation.
 
+## Calendar synchronization
+
+Planning writes from Flutter and `POST /v1/plans` atomically update
+`settings/planning_sync`. The Firestore-triggered reconciler then updates only
+events carrying Pantry's private managed-event properties. A plan write remains
+successful when Google is temporarily unavailable.
+
+```http
+GET /v1/calendar/status
+POST /v1/calendar/sync
+DELETE /v1/calendar/events
+```
+
+The status response never contains OAuth credentials. The POST route requests
+an idempotent reconciliation. The DELETE route requests removal of
+Pantry-managed events only and disables future synchronization; it cannot
+delete unrelated Calendar events.
+
+Recipe writes may include explicit preparation reminders:
+
+```json
+{
+  "preparationRules": [
+    {
+      "id": "thaw-chicken",
+      "kind": "thaw",
+      "label": "Move chicken to the refrigerator",
+      "leadHours": 24
+    }
+  ]
+}
+```
+
+The Flutter recipe editor uses the equivalent line format
+`24 | thaw | Move chicken to the refrigerator`.
+
 ## Reconcile existing inventory
 
 Use this route for corrections where the submitted lots replace all current

@@ -428,6 +428,11 @@ class FirestorePantry {
         _groceryItemData(item),
       );
     }
+    batch.set(db.collection('settings').doc('planning_sync'), {
+      'generation': db.collection('settings').doc().id,
+      'action': 'sync',
+      'requested_at': FieldValue.serverTimestamp(),
+    });
     await batch.commit();
   }
 
@@ -583,6 +588,16 @@ class FirestorePantry {
         : _nutritionTotalsData(recipe.nutritionOverride!),
     'portions': recipe.portions
         .map((portion) => {'name': portion.name, 'servings': portion.servings})
+        .toList(),
+    'preparation_rules': recipe.preparationRules
+        .map(
+          (rule) => {
+            'id': rule.id,
+            'kind': rule.kind,
+            'label': rule.label,
+            'lead_hours': rule.leadHours,
+          },
+        )
         .toList(),
     'source_url': recipe.sourceUrl.trim().isEmpty
         ? null
@@ -963,6 +978,18 @@ class FirestorePantry {
           servings: (portion['servings'] as num).toDouble(),
         );
       }).toList(),
+      preparationRules:
+          (data['preparation_rules'] as List<dynamic>? ?? const []).map((
+            value,
+          ) {
+            final rule = value as Map<String, dynamic>;
+            return RecipePreparationRule(
+              id: rule['id'] as String,
+              kind: rule['kind'] as String? ?? 'prep',
+              label: rule['label'] as String,
+              leadHours: (rule['lead_hours'] as num).toDouble(),
+            );
+          }).toList(),
       sourceUrl: data['source_url'] as String? ?? '',
       sourceNote: data['source_note'] as String? ?? '',
       promptForFeedback: data['prompt_for_feedback'] as bool? ?? true,

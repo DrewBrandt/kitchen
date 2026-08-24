@@ -34,6 +34,7 @@ migrate_working_dir/
 /build/
 /coverage/
 /.firebase/
+/merging.lock
 
 # Local credentials and API tokens must never be committed.
 .env

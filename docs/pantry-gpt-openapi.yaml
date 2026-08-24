@@ -136,6 +136,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/calendar/status:
+    get:
+      operationId: getCalendarSyncStatus
+      summary: Read sanitized Pantry Planner synchronization status
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /v1/calendar/sync:
+    post:
+      operationId: requestCalendarSync
+      summary: Request an idempotent Pantry Planner reconciliation
+      x-openai-isConsequential: true
+      responses:
+        '202': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /v1/calendar/events:
+    delete:
+      operationId: removePantryCalendarEvents
+      summary: Remove only events managed by Pantry
+      x-openai-isConsequential: true
+      responses:
+        '202': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /v1/foods:
     get:
       operationId: findPantryFoods
@@ -988,6 +1011,20 @@ components:
         servings:
           type: number
           minimum: 0.000001
+    PreparationRule:
+      type: object
+      additionalProperties: false
+      required: [id, kind, label, leadHours]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        leadHours:
+          type: number
+          minimum: 0.000001
     Recipe:
       type: object
       additionalProperties: false
@@ -1026,6 +1063,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecipePortion'
+        preparationRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreparationRule'
     MealPlanEntry:
       type: object
       additionalProperties: false

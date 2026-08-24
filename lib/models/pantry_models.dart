@@ -306,6 +306,20 @@ class RecipePortion {
   final double servings;
 }
 
+class RecipePreparationRule {
+  const RecipePreparationRule({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.leadHours,
+  });
+
+  final String id;
+  final String kind;
+  final String label;
+  final double leadHours;
+}
+
 class Recipe {
   const Recipe({
     required this.id,
@@ -314,6 +328,7 @@ class Recipe {
     required this.ingredients,
     required this.instructions,
     this.portions = const [],
+    this.preparationRules = const [],
     this.emoji = '🍽️',
     this.nutritionOverride,
     this.sourceUrl = '',
@@ -327,6 +342,7 @@ class Recipe {
   final List<RecipeIngredient> ingredients;
   final List<String> instructions;
   final List<RecipePortion> portions;
+  final List<RecipePreparationRule> preparationRules;
   final String emoji;
   final NutritionTotals? nutritionOverride;
   final String sourceUrl;
@@ -340,6 +356,7 @@ class Recipe {
     List<RecipeIngredient>? ingredients,
     List<String>? instructions,
     List<RecipePortion>? portions,
+    List<RecipePreparationRule>? preparationRules,
     String? emoji,
     NutritionTotals? nutritionOverride,
     bool clearNutritionOverride = false,
@@ -353,6 +370,7 @@ class Recipe {
     ingredients: ingredients ?? this.ingredients,
     instructions: instructions ?? this.instructions,
     portions: portions ?? this.portions,
+    preparationRules: preparationRules ?? this.preparationRules,
     emoji: emoji ?? this.emoji,
     nutritionOverride: clearNutritionOverride
         ? null

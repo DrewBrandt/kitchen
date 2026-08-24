@@ -1,5 +1,47 @@
 # Google Calendar integration
 
+## Implementation status
+
+Implemented in the application and Cloud Functions:
+
+- chronological `first_needed_date` grocery derivation
+- atomic planning-sync markers from Flutter and Pantry GPT writes
+- disabled-by-default settings and connection controls in the Planning page
+- owner-authenticated OAuth connection using the narrow
+  `calendar.app.created` scope
+- encrypted server-only refresh-token storage
+- creation and reuse of the `Pantry Planner` secondary calendar
+- idempotent grocery and explicit recipe-preparation event reconciliation
+- retry handling, sanitized status, manual sync, and managed-event cleanup
+
+Production activation requires the one-time Google OAuth setup below. Live
+end-to-end verification must use a test Google Calendar after those credentials
+are configured.
+
+## One-time production setup
+
+1. Enable Google Calendar API in Firebase project `pantry-tracker-4bc45`.
+2. Configure the Google Auth consent screen for the private owner account.
+3. Create a **Web application** OAuth client and register this exact redirect:
+
+   ```text
+   https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/calendarAuth
+   ```
+
+4. Store the client ID and client secret without printing or committing them:
+
+   ```powershell
+   firebase functions:secrets:set GOOGLE_CALENDAR_CLIENT_ID
+   firebase functions:secrets:set GOOGLE_CALENDAR_CLIENT_SECRET
+   firebase functions:secrets:set CALENDAR_TOKEN_KEY
+   ```
+
+   `CALENDAR_TOKEN_KEY` must be a randomly generated value of at least 20
+   characters. It encrypts the refresh token before the token is stored in the
+   server-only `_private_calendar_credentials` collection.
+5. Deploy Functions, Firestore rules/indexes, and Hosting. Sign into Pantry,
+   open Planning, and choose **Connect Google Calendar**.
+
 ## Outcome
 
 Synchronize meal-plan actions to a dedicated Google Calendar so reminders are

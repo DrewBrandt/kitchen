@@ -11,8 +11,44 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
-    match /{document=**} {
+    match /foods/{document} {
       allow read, write: if hasPantryAccess();
     }
+    match /products/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /inventory_lots/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /recipes/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /consumption_history/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /settings/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /external_foods/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /meal_plan/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /grocery_list/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /prepared_batches/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /meal_templates/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+    match /recipe_feedback/{document} {
+      allow read, write: if hasPantryAccess();
+    }
+
+    // Calendar OAuth state and encrypted refresh tokens are server-only. No
+    // client rule matches these collections.
   }
 }
