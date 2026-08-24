@@ -299,6 +299,7 @@ void main() {
         item.quantityBase,
         closeTo(required - store.totalFor(item.foodId!), 0.0001),
       );
+      expect(item.firstNeededDate, DateTime(2026, 8, 24));
     }
 
     store.setPlannedMealCompleted('monday-pancakes', true);
@@ -394,6 +395,49 @@ void main() {
     expect(store.plannedMeals, hasLength(2));
     store.deletePlannedMealGroup('monday-dinner');
     expect(store.plannedMeals, isEmpty);
+  });
+
+  test('planned grocery need dates follow meal order, not insertion order', () {
+    PantryStore buildStore(Iterable<DateTime> dates) {
+      final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+      final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+      for (final date in dates) {
+        store.savePlannedMeal(
+          PlannedMeal(
+            id: 'pancakes-${date.day}',
+            date: date,
+            slot: MealSlot.dinner,
+            source: PlannedMealSource.recipe,
+            sourceId: recipe.id,
+            name: recipe.name,
+            emoji: recipe.emoji,
+            servings: 20,
+          ),
+        );
+      }
+      return store;
+    }
+
+    final laterFirst = buildStore([
+      DateTime(2026, 8, 28),
+      DateTime(2026, 8, 24),
+    ]);
+    final earlierFirst = buildStore([
+      DateTime(2026, 8, 24),
+      DateTime(2026, 8, 28),
+    ]);
+    final laterFirstDates = {
+      for (final item in laterFirst.groceryItems)
+        item.foodId: item.firstNeededDate,
+    };
+    final earlierFirstDates = {
+      for (final item in earlierFirst.groceryItems)
+        item.foodId: item.firstNeededDate,
+    };
+
+    expect(laterFirstDates, isNotEmpty);
+    expect(laterFirstDates, earlierFirstDates);
+    expect(laterFirstDates.values, contains(DateTime(2026, 8, 24)));
   });
 
   test('manual grocery items can be checked and removed independently', () {

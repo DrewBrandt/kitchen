@@ -568,6 +568,7 @@ class GroceryListItem {
     this.foodId,
     this.quantityBase,
     this.quantityLabel = '',
+    this.firstNeededDate,
   });
 
   final String id;
@@ -578,6 +579,7 @@ class GroceryListItem {
   final String? foodId;
   final double? quantityBase;
   final String quantityLabel;
+  final DateTime? firstNeededDate;
 
   GroceryListItem copyWith({bool? checked}) => GroceryListItem(
     id: id,
@@ -588,6 +590,7 @@ class GroceryListItem {
     foodId: foodId,
     quantityBase: quantityBase,
     quantityLabel: quantityLabel,
+    firstNeededDate: firstNeededDate,
   );
 }
 

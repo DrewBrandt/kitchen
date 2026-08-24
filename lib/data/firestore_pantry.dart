@@ -749,6 +749,9 @@ class FirestorePantry {
     'food_id': item.foodId,
     'quantity_base': item.quantityBase,
     'quantity_label': item.quantityLabel,
+    'first_needed_date': item.firstNeededDate == null
+        ? null
+        : Timestamp.fromDate(item.firstNeededDate!),
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -806,6 +809,7 @@ class FirestorePantry {
       foodId: data['food_id'] as String?,
       quantityBase: (data['quantity_base'] as num?)?.toDouble(),
       quantityLabel: data['quantity_label'] as String? ?? '',
+      firstNeededDate: (data['first_needed_date'] as Timestamp?)?.toDate(),
     );
   }
 

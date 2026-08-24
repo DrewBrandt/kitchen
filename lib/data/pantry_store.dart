@@ -984,8 +984,11 @@ class PantryStore extends ChangeNotifier {
       )
       .toList();
 
-  Map<String, double> get plannedRequirementsBase {
+  ({Map<String, double> requirements, Map<String, DateTime> firstNeededDates})
+  get _plannedRequirementSummary {
     final requirements = <String, double>{};
+    final firstNeededDates = <String, DateTime>{};
+    final remainingInventory = <String, double>{};
     final availablePrepared = <String, double>{};
     for (final batch in _preparedBatches.where(
       (item) =>
@@ -996,10 +999,21 @@ class PantryStore extends ChangeNotifier {
       availablePrepared[batch.sourceId!] =
           (availablePrepared[batch.sourceId!] ?? 0) + batch.remainingServings;
     }
-    for (final meal in _plannedMeals.where(
-      (item) =>
-          item.completedAt == null && item.intent == PlannedMealIntent.prepare,
-    )) {
+    final pendingMeals =
+        _plannedMeals
+            .where(
+              (item) =>
+                  item.completedAt == null &&
+                  item.intent == PlannedMealIntent.prepare,
+            )
+            .toList()
+          ..sort((a, b) {
+            final byDate = a.date.compareTo(b.date);
+            if (byDate != 0) return byDate;
+            final bySlot = a.slot.index.compareTo(b.slot.index);
+            return bySlot != 0 ? bySlot : a.id.compareTo(b.id);
+          });
+    for (final meal in pendingMeals) {
       final recipeNeeds = <String, double>{};
       if (meal.source == PlannedMealSource.recipe && meal.sourceId != null) {
         recipeNeeds[meal.sourceId!] = meal.servings;
@@ -1037,11 +1051,30 @@ class PantryStore extends ChangeNotifier {
           );
           requirements[ingredient.foodId] =
               (requirements[ingredient.foodId] ?? 0) + amountBase;
+          final remaining = remainingInventory.putIfAbsent(
+            ingredient.foodId,
+            () => totalFor(ingredient.foodId),
+          );
+          if (amountBase > remaining + 0.0001 &&
+              !firstNeededDates.containsKey(ingredient.foodId)) {
+            firstNeededDates[ingredient.foodId] = DateTime(
+              meal.date.year,
+              meal.date.month,
+              meal.date.day,
+            );
+          }
+          remainingInventory[ingredient.foodId] = remaining - amountBase;
         }
       }
     }
-    return requirements;
+    return (requirements: requirements, firstNeededDates: firstNeededDates);
   }
+
+  Map<String, double> get plannedRequirementsBase =>
+      _plannedRequirementSummary.requirements;
+
+  Map<String, DateTime> get plannedFirstNeededDates =>
+      _plannedRequirementSummary.firstNeededDates;
 
   void savePlannedMeal(PlannedMeal meal) {
     if (meal.name.trim().isEmpty || meal.servings <= 0) {
@@ -1160,7 +1193,8 @@ class PantryStore extends ChangeNotifier {
     };
     final manual = _groceryItems.where((item) => !item.fromPlan).toList();
     final planned = <GroceryListItem>[];
-    for (final requirement in plannedRequirementsBase.entries) {
+    final summary = _plannedRequirementSummary;
+    for (final requirement in summary.requirements.entries) {
       final shortage = requirement.value - totalFor(requirement.key);
       if (shortage <= 0.0001) continue;
       final definition = food(requirement.key);
@@ -1173,6 +1207,7 @@ class PantryStore extends ChangeNotifier {
           fromPlan: true,
           foodId: requirement.key,
           quantityBase: shortage,
+          firstNeededDate: summary.firstNeededDates[requirement.key],
         ),
       );
     }

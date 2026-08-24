@@ -226,6 +226,11 @@ Returns dated meal-plan entries and the current grocery list. This is the
 preferred read before changing a plan because manually added groceries and
 checked shopping state are durable.
 
+Plan-generated grocery items include `first_needed_date`, the first planned
+meal date on which chronological ingredient demand exceeds current inventory.
+This field is intended for shopping deadlines and calendar synchronization;
+manual grocery items leave it unset.
+
 ## Replace one week’s meal plan
 
 ```http

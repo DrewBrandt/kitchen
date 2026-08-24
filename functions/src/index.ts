@@ -234,7 +234,15 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
   const recipes = new Map(recipeSnapshot.docs.map((doc) => [doc.id, doc.data()]));
   const externalFoods = new Map(externalSnapshot.docs.map((doc) => [doc.id, doc.data()]));
   const mealTemplates = new Map(mealTemplateSnapshot.docs.map((doc) => [doc.id, doc.data()]));
+  const available = new Map<string, number>();
+  for (const lot of lotSnapshot.docs) {
+    const data = lot.data();
+    const foodId = String(data.food_id);
+    available.set(foodId, (available.get(foodId) ?? 0) + Number(data.quantity_base));
+  }
   const requirements = new Map<string, number>();
+  const firstNeededDates = new Map<string, Date>();
+  const recipeRequirements: Array<{ date: Date; recipeId: string; wantedServings: number }> = [];
   const availablePrepared = new Map<string, number>();
   for (const document of preparedSnapshot.docs) {
     const data = document.data();
@@ -244,7 +252,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       (availablePrepared.get(data.source_id) ?? 0) + Number(data.remaining_servings),
     );
   }
-  const addRecipeRequirements = (recipeId: string, wantedServings: number): void => {
+  const addRecipeRequirements = (recipeId: string, wantedServings: number, neededOn: Date): void => {
     const recipe = recipes.get(recipeId);
     if (recipe == null) throw new ValidationError(`Unknown recipe "${recipeId}"`);
     const onHand = availablePrepared.get(recipeId) ?? 0;
@@ -262,7 +270,13 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       const conversion = food.conversions.find((candidate) => candidate.unit === unit);
       if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
       const amountBase = Number(ingredient.amount) * conversion.baseAmount * servingsToPrepare / recipeServings;
-      requirements.set(foodId, (requirements.get(foodId) ?? 0) + amountBase);
+      const previousRequired = requirements.get(foodId) ?? 0;
+      const nextRequired = previousRequired + amountBase;
+      requirements.set(foodId, nextRequired);
+      const onHand = available.get(foodId) ?? 0;
+      if (previousRequired <= onHand + 0.0001 && nextRequired > onHand + 0.0001) {
+        firstNeededDates.set(foodId, neededOn);
+      }
     }
   };
   const entries = asArray(body.entries, "entries").map((value, index) => {
@@ -299,7 +313,9 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       const recipe = recipes.get(sourceId) ?? {};
       name = optionalString(item.name) ?? String(recipe.name);
       emoji = optionalString(item.emoji) ?? String(recipe.emoji ?? "🍽️");
-      if (intent === "prepare") addRecipeRequirements(sourceId, servings);
+      if (intent === "prepare") {
+        recipeRequirements.push({ date, recipeId: sourceId, wantedServings: servings });
+      }
     } else if (source === "meal") {
       if (sourceId == null || !mealTemplates.has(sourceId)) {
         throw new ValidationError(`entries[${index}] references an unknown combined meal`);
@@ -313,7 +329,11 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
         const recipeId = requiredString(component.recipe_id, `components[${componentIndex}].recipe_id`);
         const componentServings = positiveNumber(component.servings, `components[${componentIndex}].servings`);
         if (intent === "prepare") {
-          addRecipeRequirements(recipeId, componentServings * servings / templateServings);
+          recipeRequirements.push({
+            date,
+            recipeId,
+            wantedServings: componentServings * servings / templateServings,
+          });
         }
       }
     } else if (source === "external") {
@@ -373,11 +393,9 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
     }
   }
 
-  const available = new Map<string, number>();
-  for (const lot of lotSnapshot.docs) {
-    const data = lot.data();
-    const foodId = String(data.food_id);
-    available.set(foodId, (available.get(foodId) ?? 0) + Number(data.quantity_base));
+  recipeRequirements.sort((a, b) => a.date.getTime() - b.date.getTime());
+  for (const requirement of recipeRequirements) {
+    addRecipeRequirements(requirement.recipeId, requirement.wantedServings, requirement.date);
   }
   const checked = new Map<string, boolean>();
   for (const document of grocerySnapshot.docs) {
@@ -414,6 +432,9 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       food_id: foodId,
       quantity_base: quantityBase,
       quantity_label: "",
+      first_needed_date: firstNeededDates.has(foodId)
+        ? Timestamp.fromDate(firstNeededDates.get(foodId)!)
+        : null,
       updated_at: FieldValue.serverTimestamp(),
     });
     groceryCount += 1;
