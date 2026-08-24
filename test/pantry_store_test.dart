@@ -149,6 +149,28 @@ void main() {
     expect(total.fatG, closeTo(5.5, 0.001));
   });
 
+  test('recipe preparation reminders require unique valid rules', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.first.copyWith(
+      preparationRules: const [
+        RecipePreparationRule(
+          id: 'thaw-chicken',
+          kind: 'thaw',
+          label: 'Move chicken to the refrigerator',
+          leadHours: 24,
+        ),
+        RecipePreparationRule(
+          id: 'thaw-chicken',
+          kind: 'thaw',
+          label: 'Duplicate',
+          leadHours: 12,
+        ),
+      ],
+    );
+
+    expect(() => store.saveRecipe(recipe), throwsArgumentError);
+  });
+
   test(
     'recipe nutrition override replaces ingredient nutrition and scales',
     () {

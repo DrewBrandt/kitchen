@@ -4,6 +4,10 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
 
+import { readCalendarStatus, requestCalendarReconciliation } from "./calendar";
+
+export { calendarAuth, syncPlanningCalendar } from "./calendar";
+
 initializeApp();
 
 const db = getFirestore();
@@ -77,6 +81,24 @@ export const pantryApi = onRequest(
       }
       if (request.method === "POST" && path === "/v1/plans") {
         await replacePlanning(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/calendar/status") {
+        response.status(200).json(await readCalendarStatus());
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/calendar/sync") {
+        response.status(202).json({
+          status: "requested",
+          generation: await requestCalendarReconciliation(),
+        });
+        return;
+      }
+      if (request.method === "DELETE" && path === "/v1/calendar/events") {
+        response.status(202).json({
+          status: "cleanup requested",
+          generation: await requestCalendarReconciliation("clear"),
+        });
         return;
       }
       if (request.method === "POST" && path === "/v1/grocery-items") {
@@ -443,6 +465,11 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
     });
     groceryCount += 1;
   }
+  batch.set(db.collection("settings").doc("planning_sync"), {
+    generation: db.collection("settings").doc().id,
+    action: "sync",
+    requested_at: FieldValue.serverTimestamp(),
+  });
   await batch.commit();
   response.status(200).json({
     status: "planned",
@@ -455,7 +482,8 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
 async function addManualGroceryItem(body: JsonObject, response: ApiResponse): Promise<void> {
   const name = requiredString(body.name, "name");
   const reference = db.collection("grocery_list").doc();
-  await reference.set({
+  const batch = db.batch();
+  batch.set(reference, {
     name,
     emoji: optionalString(body.emoji) ?? "🛒",
     checked: false,
@@ -465,6 +493,12 @@ async function addManualGroceryItem(body: JsonObject, response: ApiResponse): Pr
     quantity_label: optionalString(body.quantityLabel) ?? "",
     updated_at: FieldValue.serverTimestamp(),
   });
+  batch.set(db.collection("settings").doc("planning_sync"), {
+    generation: db.collection("settings").doc().id,
+    action: "sync",
+    requested_at: FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
   response.status(201).json({ id: reference.id, status: "added" });
 }
 
@@ -1098,11 +1132,26 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
         servings: positiveNumber(portion.servings, `portions[${index}].servings`),
       };
     });
+  const preparationRules = body.preparationRules == null
+    ? []
+    : asArray(body.preparationRules, "preparationRules").map((value, index) => {
+      const rule = asObject(value);
+      return {
+        id: requiredString(rule.id, `preparationRules[${index}].id`),
+        kind: requiredString(rule.kind, `preparationRules[${index}].kind`).toLowerCase(),
+        label: requiredString(rule.label, `preparationRules[${index}].label`),
+        lead_hours: positiveNumber(rule.leadHours, `preparationRules[${index}].leadHours`),
+      };
+    });
+  if (new Set(preparationRules.map((rule) => rule.id)).size !== preparationRules.length) {
+    throw new ValidationError("preparationRules IDs must be unique");
+  }
   const id = optionalString(body.id) ?? slug(name);
   const nutritionOverride = body.nutritionOverride == null
     ? null
     : nutritionFromBody(asObject(body.nutritionOverride));
-  await db.collection("recipes").doc(id).set({
+  const batch = db.batch();
+  batch.set(db.collection("recipes").doc(id), {
     name,
     emoji: optionalString(body.emoji) ?? "🍽️",
     servings: positiveNumber(body.servings, "servings"),
@@ -1110,6 +1159,7 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
     instructions: asOptionalStringArray(body.instructions),
     nutrition_override: nutritionOverride,
     portions,
+    preparation_rules: preparationRules,
     source_url: optionalString(body.sourceUrl) ?? null,
     source_note: optionalString(body.sourceNote) ?? null,
     ...(body.promptForFeedback == null
@@ -1117,6 +1167,12 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
       : { prompt_for_feedback: requiredBoolean(body.promptForFeedback, "promptForFeedback") }),
     updated_at: FieldValue.serverTimestamp(),
   }, { merge: true });
+  batch.set(db.collection("settings").doc("planning_sync"), {
+    generation: db.collection("settings").doc().id,
+    action: "sync",
+    requested_at: FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
   response.status(200).json({ id, status: "saved" });
 }
 

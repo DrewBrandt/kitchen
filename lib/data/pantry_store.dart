@@ -129,6 +129,7 @@ class PantryStore extends ChangeNotifier {
     }),
   );
   List<GroceryListItem> get groceryItems => List.unmodifiable(_groceryItems);
+  bool get isCloudBacked => _cloud != null;
   DateTime get now => _now;
   bool get isSyncing => _pendingWrites > 0;
   Object? get syncError => _syncError ?? _cloudWatchError;
@@ -951,6 +952,20 @@ class PantryStore extends ChangeNotifier {
       if (ingredient.amount <= 0) {
         throw ArgumentError('Ingredient amounts must be positive');
       }
+    }
+    if (recipe.preparationRules.any(
+          (rule) =>
+              rule.id.trim().isEmpty ||
+              rule.kind.trim().isEmpty ||
+              rule.label.trim().isEmpty ||
+              !rule.leadHours.isFinite ||
+              rule.leadHours <= 0,
+        ) ||
+        recipe.preparationRules.map((rule) => rule.id).toSet().length !=
+            recipe.preparationRules.length) {
+      throw ArgumentError(
+        'Preparation reminders need unique IDs, labels, kinds, and positive lead hours',
+      );
     }
     final index = _recipes.indexWhere((item) => item.id == recipe.id);
     if (index < 0) {

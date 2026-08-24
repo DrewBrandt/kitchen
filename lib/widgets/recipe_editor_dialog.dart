@@ -63,6 +63,11 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
         .map((portion) => '${portion.name} = ${portion.servings}')
         .join('\n'),
   );
+  late final preparationRules = TextEditingController(
+    text: widget.existing?.preparationRules
+        .map((rule) => '${rule.leadHours} | ${rule.kind} | ${rule.label}')
+        .join('\n'),
+  );
   late bool overrideNutrition = widget.existing?.nutritionOverride != null;
   late final calories = TextEditingController(
     text: _nutritionValue(widget.existing?.nutritionOverride?.calories ?? 0),
@@ -116,6 +121,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     sourceUrl.dispose();
     sourceNote.dispose();
     portions.dispose();
+    preparationRules.dispose();
     for (final controller in [
       calories,
       protein,
@@ -232,6 +238,18 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
                 labelText: 'Named portions (optional)',
                 helperText:
                     'One per line, such as “Tall glass = 2.25” or “Half glass = 1.25”.',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: preparationRules,
+              minLines: 2,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Calendar preparation reminders (optional)',
+                helperText:
+                    'One per line: lead hours | kind | instruction. Example: 24 | thaw | Move chicken to the refrigerator',
                 alignLabelWithHint: true,
               ),
             ),
@@ -402,6 +420,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     }
     final parsedIngredients = <RecipeIngredient>[];
     final parsedPortions = <RecipePortion>[];
+    final parsedPreparationRules = <RecipePreparationRule>[];
     for (final line in portions.text.split(RegExp(r'\r?\n'))) {
       if (line.trim().isEmpty) continue;
       final separator = line.lastIndexOf('=');
@@ -421,6 +440,38 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
       }
       parsedPortions.add(
         RecipePortion(name: portionName, servings: portionServings),
+      );
+    }
+    for (final line in preparationRules.text.split(RegExp(r'\r?\n'))) {
+      if (line.trim().isEmpty) continue;
+      final parts = line.split('|').map((part) => part.trim()).toList();
+      final leadHours = parts.isEmpty ? null : double.tryParse(parts[0]);
+      if (parts.length != 3 ||
+          leadHours == null ||
+          leadHours <= 0 ||
+          parts[1].isEmpty ||
+          parts[2].isEmpty) {
+        setState(
+          () => error =
+              'Preparation reminders must use “positive hours | kind | instruction”.',
+        );
+        return;
+      }
+      final kind = _ruleId(parts[1]);
+      final id = '$kind-${_ruleId(parts[2])}';
+      if (parsedPreparationRules.any((rule) => rule.id == id)) {
+        setState(
+          () => error = 'Preparation reminder instructions must be unique.',
+        );
+        return;
+      }
+      parsedPreparationRules.add(
+        RecipePreparationRule(
+          id: id,
+          kind: kind,
+          label: parts[2],
+          leadHours: leadHours,
+        ),
       );
     }
     for (final draft in ingredients) {
@@ -454,6 +505,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
             .where((line) => line.isNotEmpty)
             .toList(),
         portions: parsedPortions,
+        preparationRules: parsedPreparationRules,
         emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
         nutritionOverride: nutritionOverride,
         sourceUrl: sourceUrl.text.trim(),
@@ -461,5 +513,13 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
         promptForFeedback: promptForFeedback,
       ),
     );
+  }
+
+  String _ruleId(String value) {
+    final normalized = value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return normalized.isEmpty ? 'prep' : normalized;
   }
 }

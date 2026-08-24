@@ -5,6 +5,7 @@ import '../models/pantry_models.dart';
 import '../widgets/food_editor_dialog.dart';
 import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
+import '../widgets/calendar_sync_card.dart';
 import '../widgets/product_editor_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 import '../widgets/recipe_detail_dialog.dart';
@@ -2136,6 +2137,13 @@ class _PlanningPageState extends State<_PlanningPage> {
             constraints: const BoxConstraints(maxWidth: 900),
             child: _WeekCalendar(store: widget.store, weekStart: weekStart),
           ),
+          if (widget.store.isCloudBacked) ...[
+            const SizedBox(height: 18),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: const CalendarSyncCard(),
+            ),
+          ],
         ],
       ),
     );
