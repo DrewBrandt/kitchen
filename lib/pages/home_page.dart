@@ -5,6 +5,7 @@ import '../models/pantry_models.dart';
 import '../widgets/food_editor_dialog.dart';
 import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
+import '../widgets/product_editor_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 import '../widgets/recipe_portion_dialog.dart';
 
@@ -1148,6 +1149,11 @@ class _InventoryPage extends StatelessWidget {
           label: const Text('Define food'),
         ),
         OutlinedButton.icon(
+          onPressed: () => showProductEditor(context, store),
+          icon: const Icon(Icons.qr_code_2),
+          label: const Text('Define product'),
+        ),
+        OutlinedButton.icon(
           onPressed: () => _showAddLot(context, store),
           icon: const Icon(Icons.add),
           label: const Text('Add one lot'),
@@ -1234,6 +1240,39 @@ class _FoodCard extends StatelessWidget {
                   ),
                   child: const Text('Edit'),
                 ),
+                PopupMenuButton<String>(
+                  tooltip: 'Products for ${food.name}',
+                  icon: const Icon(Icons.inventory_2_outlined, size: 20),
+                  onSelected: (value) {
+                    if (value == 'new') {
+                      showProductEditor(context, store, initialFood: food);
+                    } else {
+                      showProductEditor(
+                        context,
+                        store,
+                        existing: store.product(value),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'new',
+                      child: Text('Add product…'),
+                    ),
+                    ...store
+                        .productsFor(food.id)
+                        .map(
+                          (product) => PopupMenuItem(
+                            value: product.id,
+                            child: Text(
+                              product.brand.isEmpty
+                                  ? product.name
+                                  : '${product.brand} ${product.name}',
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 18),
@@ -1276,6 +1315,21 @@ class _FoodCard extends StatelessWidget {
               '$lots ${lots == 1 ? 'lot' : 'lots'} · ${food.defaultLocation.label}',
               style: const TextStyle(color: _muted, fontSize: 12),
             ),
+            if (activeLots.any((lot) => lot.productId != null))
+              Text(
+                activeLots
+                    .where((lot) => lot.productId != null)
+                    .map(
+                      (lot) =>
+                          store.productOrNull(lot.productId)?.name ??
+                          'Unknown product',
+                    )
+                    .toSet()
+                    .join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _faint, fontSize: 11),
+              ),
             if (food.nutrition != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -5112,6 +5166,7 @@ Future<void> _showManualGroceryEditor(
 
 Future<void> _showAddLot(BuildContext context, PantryStore store) async {
   var food = store.foods.first;
+  ProductDefinition? product;
   var unit = food.conversions.first.unit;
   var location = food.defaultLocation;
   final amountController = TextEditingController(text: '1');
@@ -5119,97 +5174,140 @@ Future<void> _showAddLot(BuildContext context, PantryStore store) async {
   final submitted = await showDialog<bool>(
     context: context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Put away groceries'),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<FoodDefinition>(
-                initialValue: food,
-                decoration: const InputDecoration(labelText: 'Food'),
-                items: store.foods
-                    .map(
-                      (item) => DropdownMenuItem(
-                        value: item,
-                        child: Text('${item.emoji}  ${item.name}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) => setDialogState(() {
-                  food = value!;
-                  unit = food.conversions.first.unit;
-                  location = food.defaultLocation;
-                }),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: amountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(labelText: 'Amount'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: unit,
-                      decoration: const InputDecoration(labelText: 'Unit'),
-                      items: food.conversions
-                          .map(
-                            (item) => DropdownMenuItem(
-                              value: item.unit,
-                              child: Text(item.symbol),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) => setDialogState(() => unit = value!),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<StorageLocation>(
-                initialValue: location,
-                decoration: const InputDecoration(labelText: 'Location'),
-                items: StorageLocation.values
-                    .map(
-                      (item) => DropdownMenuItem(
-                        value: item,
-                        child: Text(item.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) => setDialogState(() => location = value!),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: daysController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Best by (days from now)',
-                  hintText: 'Optional',
+      builder: (context, setDialogState) {
+        final conversionByUnit = <String, UnitConversion>{
+          for (final conversion in food.conversions)
+            conversion.unit: conversion,
+          for (final conversion in product?.conversions ?? const [])
+            conversion.unit: conversion,
+        };
+        return AlertDialog(
+          title: const Text('Put away groceries'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<FoodDefinition>(
+                  initialValue: food,
+                  decoration: const InputDecoration(labelText: 'Food'),
+                  items: store.foods
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: item,
+                          child: Text('${item.emoji}  ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() {
+                    food = value!;
+                    product = null;
+                    unit = food.conversions.first.unit;
+                    location = food.defaultLocation;
+                  }),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('product-${food.id}-${product?.id}'),
+                  initialValue: product?.id,
+                  decoration: const InputDecoration(
+                    labelText: 'Specific product (optional)',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      child: Text('Unspecified / generic'),
+                    ),
+                    ...store
+                        .productsFor(food.id)
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item.id,
+                            child: Text(
+                              item.brand.isEmpty
+                                  ? item.name
+                                  : '${item.brand} ${item.name}',
+                            ),
+                          ),
+                        ),
+                  ],
+                  onChanged: (value) => setDialogState(() {
+                    product = value == null ? null : store.product(value);
+                    if (product?.conversions.isNotEmpty ?? false) {
+                      unit = product!.conversions.first.unit;
+                    } else {
+                      unit = food.conversions.first.unit;
+                    }
+                  }),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: amountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(labelText: 'Amount'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: unit,
+                        decoration: const InputDecoration(labelText: 'Unit'),
+                        items: conversionByUnit.values
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: item.unit,
+                                child: Text(item.symbol),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setDialogState(() => unit = value!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<StorageLocation>(
+                  initialValue: location,
+                  decoration: const InputDecoration(labelText: 'Location'),
+                  items: StorageLocation.values
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: item,
+                          child: Text(item.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => location = value!),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: daysController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Best by (days from now)',
+                    hintText: 'Optional',
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Add lot'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Add lot'),
+            ),
+          ],
+        );
+      },
     ),
   );
   if (submitted == true) {
@@ -5218,6 +5316,7 @@ Future<void> _showAddLot(BuildContext context, PantryStore store) async {
     if (amount == null || amount <= 0) return;
     store.addLot(
       food: food,
+      product: product,
       amount: amount,
       unit: unit,
       location: location,

@@ -320,6 +320,33 @@ void main() {
     expect(store.groceryItems, isEmpty);
   });
 
+  test('product lots contribute to their canonical recipe ingredient', () {
+    final store = PantryStore.demo();
+    final rice = store.foods.firstWhere((food) => food.id == 'flour');
+    const product = ProductDefinition(
+      id: 'store-flour',
+      foodId: 'flour',
+      name: 'Store-brand all-purpose flour',
+      brand: 'Store Brand',
+      conversions: [
+        UnitConversion(unit: 'bag', symbol: 'bag', baseAmount: 2268),
+      ],
+    );
+    final before = store.totalFor(rice.id);
+
+    store.saveProduct(product);
+    store.addLot(
+      food: rice,
+      product: product,
+      amount: 1,
+      unit: 'bag',
+      location: StorageLocation.pantry,
+    );
+
+    expect(store.lots.last.productId, product.id);
+    expect(store.totalFor(rice.id), closeTo(before + 2268, 0.0001));
+  });
+
   test('preparing a recipe creates servings without logging them as eaten', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');

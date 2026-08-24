@@ -83,7 +83,51 @@ class _GroceryImportDialogState extends State<_GroceryImportDialog> {
                     ),
                     subtitle: line.error == null
                         ? null
-                        : Text('Line ${line.lineNumber}: ${line.error}'),
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Line ${line.lineNumber}: ${line.error}'),
+                              if (line.matchCandidates.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<String>(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Confirm canonical match',
+                                    isDense: true,
+                                  ),
+                                  items: line.matchCandidates.map((candidate) {
+                                    final product = candidate.product;
+                                    return DropdownMenuItem(
+                                      value:
+                                          '${candidate.food.id}:${product?.id ?? ''}',
+                                      child: Text(
+                                        product == null
+                                            ? candidate.food.name
+                                            : '${product.name} → ${candidate.food.name}',
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value == null) return;
+                                    final candidate = line.matchCandidates
+                                        .firstWhere(
+                                          (candidate) =>
+                                              '${candidate.food.id}:${candidate.product?.id ?? ''}' ==
+                                              value,
+                                        );
+                                    setState(() {
+                                      final index = preview.indexWhere(
+                                        (item) =>
+                                            item.lineNumber == line.lineNumber,
+                                      );
+                                      preview[index] = line.withMatch(
+                                        candidate,
+                                      );
+                                    });
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
                   ),
                 ),
               ],
@@ -106,13 +150,36 @@ class _GroceryImportDialogState extends State<_GroceryImportDialog> {
     );
   }
 
-  void _preview() =>
-      setState(() => preview = parser.parse(input.text, widget.store.foods));
+  void _preview() => setState(
+    () => preview = parser.parse(
+      input.text,
+      widget.store.foods,
+      products: widget.store.products,
+    ),
+  );
 
   void _apply() {
+    final createdProducts = <String, ProductDefinition>{};
     for (final line in preview) {
+      ProductDefinition? product = line.productId == null
+          ? null
+          : widget.store.product(line.productId!);
+      if (line.createProduct) {
+        final key = line.name.trim().toLowerCase();
+        product = createdProducts[key];
+        if (product == null) {
+          product = ProductDefinition(
+            id: widget.store.nextId(line.name),
+            foodId: line.foodId!,
+            name: line.name.trim(),
+          );
+          widget.store.saveProduct(product);
+          createdProducts[key] = product;
+        }
+      }
       widget.store.addLot(
         food: widget.store.food(line.foodId!),
+        product: product,
         amount: line.amount,
         unit: line.unit,
         location: line.location,

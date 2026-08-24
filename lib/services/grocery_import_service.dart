@@ -1,4 +1,5 @@
 import '../models/pantry_models.dart';
+import 'food_match_service.dart';
 
 class GroceryImportLine {
   const GroceryImportLine({
@@ -8,6 +9,10 @@ class GroceryImportLine {
     required this.unit,
     required this.location,
     this.foodId,
+    this.productId,
+    this.suggestions = const [],
+    this.matchCandidates = const [],
+    this.createProduct = false,
     this.bestBy,
     this.error,
   });
@@ -18,21 +23,55 @@ class GroceryImportLine {
   final String unit;
   final StorageLocation location;
   final String? foodId;
+  final String? productId;
+  final List<String> suggestions;
+  final List<FoodMatchCandidate> matchCandidates;
+  final bool createProduct;
   final DateTime? bestBy;
   final String? error;
 
   bool get isValid => error == null && foodId != null;
+
+  GroceryImportLine withMatch(FoodMatchCandidate candidate) {
+    String? selectedError;
+    if (candidate.product?.conversionFor(unit) == null) {
+      try {
+        candidate.food.conversionFor(unit);
+      } on ArgumentError {
+        selectedError =
+            'Unit "$unit" is not configured for ${candidate.food.name}';
+      }
+    }
+    return GroceryImportLine(
+      lineNumber: lineNumber,
+      name: name,
+      amount: amount,
+      unit: unit,
+      location: location,
+      foodId: candidate.food.id,
+      productId: candidate.product?.id,
+      bestBy: bestBy,
+      error: selectedError,
+      suggestions: suggestions,
+      matchCandidates: matchCandidates,
+      createProduct: candidate.product == null && !candidate.exact,
+    );
+  }
 }
 
 class GroceryImportService {
-  const GroceryImportService();
+  const GroceryImportService({this.matcher = const FoodMatchService()});
+
+  final FoodMatchService matcher;
 
   List<GroceryImportLine> parse(
     String text,
     Iterable<FoodDefinition> foods, {
+    Iterable<ProductDefinition> products = const [],
     DateTime? today,
   }) {
     final definitions = foods.toList();
+    final productDefinitions = products.toList();
     final lines = text.split(RegExp(r'\r?\n'));
     final result = <GroceryImportLine>[];
     for (var index = 0; index < lines.length; index++) {
@@ -45,7 +84,13 @@ class GroceryImportService {
         continue;
       }
       result.add(
-        _parseLine(index + 1, values, definitions, today ?? DateTime.now()),
+        _parseLine(
+          index + 1,
+          values,
+          definitions,
+          productDefinitions,
+          today ?? DateTime.now(),
+        ),
       );
     }
     return result;
@@ -55,6 +100,7 @@ class GroceryImportService {
     int lineNumber,
     List<String> values,
     List<FoodDefinition> foods,
+    List<ProductDefinition> products,
     DateTime today,
   ) {
     if (values.length < 3) {
@@ -70,7 +116,14 @@ class GroceryImportService {
     final name = values[0].trim();
     final amount = double.tryParse(values[1].trim());
     final unit = values[2].trim().toLowerCase();
-    final food = _matchFood(name, foods);
+    final match = matcher.match(name, foods, products);
+    final selected =
+        match.best?.exact == true ||
+            (match.canApplyAutomatically && match.best?.product != null)
+        ? match.best
+        : null;
+    final food = selected?.food;
+    final product = selected?.product;
     final location = values.length > 3 && values[3].trim().isNotEmpty
         ? _parseLocation(values[3])
         : food?.defaultLocation ?? StorageLocation.pantry;
@@ -80,12 +133,18 @@ class GroceryImportService {
     if (amount == null || amount <= 0) {
       error = 'Amount must be a positive number';
     } else if (food == null) {
-      error = 'Food is not defined yet';
+      final suggestion = match.best;
+      error = suggestion == null
+          ? 'Food is not defined yet'
+          : 'Review suggested match: ${suggestion.food.name}';
     } else {
-      try {
-        food.conversionFor(unit);
-      } on ArgumentError {
-        error = 'Unit "$unit" is not configured for ${food.name}';
+      final productConversion = product?.conversionFor(unit);
+      if (productConversion == null) {
+        try {
+          food.conversionFor(unit);
+        } on ArgumentError {
+          error = 'Unit "$unit" is not configured for ${food.name}';
+        }
       }
     }
     if (location == null) {
@@ -101,18 +160,14 @@ class GroceryImportService {
       unit: unit,
       location: location ?? StorageLocation.pantry,
       foodId: food?.id,
+      productId: product?.id,
+      suggestions: match.candidates
+          .map((candidate) => candidate.product?.name ?? candidate.food.name)
+          .toList(),
+      matchCandidates: match.candidates,
       bestBy: bestBy,
       error: error,
     );
-  }
-
-  FoodDefinition? _matchFood(String input, List<FoodDefinition> foods) {
-    final wanted = _normalize(input);
-    for (final food in foods) {
-      final name = _normalize(food.name);
-      if (name == wanted || _singular(name) == _singular(wanted)) return food;
-    }
-    return null;
   }
 
   List<String> _split(String line) {
@@ -145,9 +200,4 @@ class GroceryImportService {
     }
     return DateTime.tryParse(value);
   }
-
-  String _normalize(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-  String _singular(String value) =>
-      value.endsWith('s') ? value.substring(0, value.length - 1) : value;
 }

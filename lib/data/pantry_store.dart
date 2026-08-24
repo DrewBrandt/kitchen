@@ -15,6 +15,7 @@ class PantryStore extends ChangeNotifier {
       _cloud = null {
     final foods = SeedData.foods();
     _foods = {for (final food in foods) food.id: food};
+    _products = {};
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
     _mealTemplates = [];
@@ -33,6 +34,7 @@ class PantryStore extends ChangeNotifier {
   }) : _now = now,
        _cloud = cloud {
     _foods = {for (final food in data.foods) food.id: food};
+    _products = {for (final product in data.products) product.id: product};
     _lots = data.lots;
     _recipes = data.recipes;
     _mealTemplates = data.mealTemplates;
@@ -60,6 +62,7 @@ class PantryStore extends ChangeNotifier {
     await cloud.seed(
       CloudPantryData(
         foods: seeded.foods,
+        products: seeded.products,
         lots: seeded.lots,
         recipes: seeded.recipes,
         mealTemplates: seeded.mealTemplates,
@@ -82,6 +85,7 @@ class PantryStore extends ChangeNotifier {
   final UnitService units = const UnitService();
   FirestorePantry? _cloud;
   late final Map<String, FoodDefinition> _foods;
+  late final Map<String, ProductDefinition> _products;
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
   late List<MealTemplate> _mealTemplates;
@@ -99,6 +103,7 @@ class PantryStore extends ChangeNotifier {
   StreamSubscription<CloudPantryData>? _cloudSubscription;
 
   List<FoodDefinition> get foods => List.unmodifiable(_foods.values);
+  List<ProductDefinition> get products => List.unmodifiable(_products.values);
   List<InventoryLot> get lots => List.unmodifiable(_lots);
   List<Recipe> get recipes => List.unmodifiable(_recipes);
   List<MealTemplate> get mealTemplates => List.unmodifiable(_mealTemplates);
@@ -130,6 +135,11 @@ class PantryStore extends ChangeNotifier {
         _foods
           ..clear()
           ..addEntries(data.foods.map((food) => MapEntry(food.id, food)));
+        _products
+          ..clear()
+          ..addEntries(
+            data.products.map((product) => MapEntry(product.id, product)),
+          );
         _lots = data.lots;
         _recipes = data.recipes;
         _mealTemplates = data.mealTemplates;
@@ -161,6 +171,16 @@ class PantryStore extends ChangeNotifier {
   FoodDefinition food(String id) =>
       _foods[id] ?? (throw StateError('Unknown food $id'));
 
+  ProductDefinition product(String id) =>
+      _products[id] ?? (throw StateError('Unknown product $id'));
+
+  ProductDefinition? productOrNull(String? id) =>
+      id == null ? null : _products[id];
+
+  List<ProductDefinition> productsFor(String foodId) => _products.values
+      .where((product) => product.foodId == foodId)
+      .toList(growable: false);
+
   String nextId(String name) {
     final base = name
         .toLowerCase()
@@ -169,6 +189,7 @@ class PantryStore extends ChangeNotifier {
     var candidate = base.isEmpty ? 'item' : base;
     var suffix = 2;
     while (_foods.containsKey(candidate) ||
+        _products.containsKey(candidate) ||
         _recipes.any((item) => item.id == candidate) ||
         _mealTemplates.any((item) => item.id == candidate) ||
         _preparedBatches.any((item) => item.id == candidate) ||
@@ -679,12 +700,19 @@ class PantryStore extends ChangeNotifier {
 
   void addLot({
     required FoodDefinition food,
+    ProductDefinition? product,
     required double amount,
     required String unit,
     required StorageLocation location,
     DateTime? bestBy,
   }) {
-    final quantity = units.toBase(food, amount, unit);
+    if (product != null && product.foodId != food.id) {
+      throw ArgumentError('The product does not belong to ${food.name}');
+    }
+    final productConversion = product?.conversionFor(unit);
+    final quantity = productConversion == null
+        ? units.toBase(food, amount, unit)
+        : amount * productConversion.baseAmount;
     final lot = InventoryLot(
       id: 'lot-${DateTime.now().microsecondsSinceEpoch}',
       foodId: food.id,
@@ -692,6 +720,7 @@ class PantryStore extends ChangeNotifier {
       location: location,
       purchasedAt: DateTime.now(),
       bestBy: bestBy,
+      productId: product?.id,
     );
     _lots = [..._lots, lot];
     _queue(_cloud?.saveLot(lot));
@@ -716,7 +745,41 @@ class PantryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void saveProduct(ProductDefinition product) {
+    if (product.name.trim().isEmpty) {
+      throw ArgumentError('Product name is required');
+    }
+    if (!_foods.containsKey(product.foodId)) {
+      throw ArgumentError('Product references unknown food ${product.foodId}');
+    }
+    final barcode = product.barcode?.trim();
+    if (barcode != null &&
+        barcode.isNotEmpty &&
+        _products.values.any(
+          (item) => item.id != product.id && item.barcode == barcode,
+        )) {
+      throw ArgumentError('Barcode is already assigned to another product');
+    }
+    _products[product.id] = product;
+    _queue(_cloud?.saveProduct(product));
+    notifyListeners();
+  }
+
+  void deleteProduct(String productId) {
+    if (_lots.any(
+      (lot) => lot.productId == productId && lot.quantityBase > 0,
+    )) {
+      throw StateError('This product still has inventory');
+    }
+    _products.remove(productId);
+    _queue(_cloud?.deleteProduct(productId));
+    notifyListeners();
+  }
+
   void deleteFood(String foodId) {
+    if (_products.values.any((product) => product.foodId == foodId)) {
+      throw StateError('Delete this food’s products first');
+    }
     if (_lots.any((lot) => lot.foodId == foodId && lot.quantityBase > 0)) {
       throw StateError('Remove this food from inventory before deleting it');
     }

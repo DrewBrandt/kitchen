@@ -7,6 +7,7 @@ import '../models/pantry_models.dart';
 class CloudPantryData {
   const CloudPantryData({
     required this.foods,
+    required this.products,
     required this.lots,
     required this.recipes,
     required this.mealTemplates,
@@ -20,6 +21,7 @@ class CloudPantryData {
   });
 
   final List<FoodDefinition> foods;
+  final List<ProductDefinition> products;
   final List<InventoryLot> lots;
   final List<Recipe> recipes;
   final List<MealTemplate> mealTemplates;
@@ -33,6 +35,7 @@ class CloudPantryData {
 
   bool get isEmpty =>
       foods.isEmpty &&
+      products.isEmpty &&
       lots.isEmpty &&
       recipes.isEmpty &&
       mealTemplates.isEmpty &&
@@ -58,6 +61,7 @@ class FirestorePantry {
     final subscriptions = <StreamSubscription<dynamic>>[];
 
     QuerySnapshot<Map<String, dynamic>>? foods;
+    QuerySnapshot<Map<String, dynamic>>? products;
     QuerySnapshot<Map<String, dynamic>>? lots;
     QuerySnapshot<Map<String, dynamic>>? recipes;
     QuerySnapshot<Map<String, dynamic>>? history;
@@ -71,6 +75,7 @@ class FirestorePantry {
 
     void emitIfReady() {
       if (foods == null ||
+          products == null ||
           lots == null ||
           recipes == null ||
           history == null ||
@@ -86,6 +91,7 @@ class FirestorePantry {
       controller.add(
         CloudPantryData(
           foods: foods!.docs.map(_foodFromDoc).toList(),
+          products: products!.docs.map(_productFromDoc).toList(),
           lots: lots!.docs.map(_lotFromDoc).toList(),
           recipes: recipes!.docs.map(_recipeFromDoc).toList(),
           mealTemplates: mealTemplates!.docs.map(_mealTemplateFromDoc).toList(),
@@ -114,6 +120,10 @@ class FirestorePantry {
       subscriptions.addAll([
         db.collection('foods').snapshots().listen((value) {
           foods = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('products').snapshots().listen((value) {
+          products = value;
           emitIfReady();
         }, onError: reportError),
         db.collection('inventory_lots').snapshots().listen((value) {
@@ -187,6 +197,7 @@ class FirestorePantry {
       db.collection('grocery_list').get(),
       db.collection('meal_templates').get(),
       db.collection('prepared_batches').get(),
+      db.collection('products').get(),
     ]);
     final settings = await Future.wait([
       db.collection('settings').doc('nutrition').get(),
@@ -196,6 +207,7 @@ class FirestorePantry {
     final profile = settings[1];
     return CloudPantryData(
       foods: results[0].docs.map(_foodFromDoc).toList(),
+      products: results[9].docs.map(_productFromDoc).toList(),
       lots: results[1].docs.map(_lotFromDoc).toList(),
       recipes: results[2].docs.map(_recipeFromDoc).toList(),
       mealTemplates: results[7].docs.map(_mealTemplateFromDoc).toList(),
@@ -217,6 +229,12 @@ class FirestorePantry {
     final batch = db.batch();
     for (final food in data.foods) {
       batch.set(db.collection('foods').doc(food.id), _foodData(food));
+    }
+    for (final product in data.products) {
+      batch.set(
+        db.collection('products').doc(product.id),
+        _productData(product),
+      );
     }
     for (final lot in data.lots) {
       batch.set(db.collection('inventory_lots').doc(lot.id), _lotData(lot));
@@ -269,6 +287,12 @@ class FirestorePantry {
       db.collection('foods').doc(food.id).set(_foodData(food));
 
   Future<void> deleteFood(String id) => db.collection('foods').doc(id).delete();
+
+  Future<void> saveProduct(ProductDefinition product) =>
+      db.collection('products').doc(product.id).set(_productData(product));
+
+  Future<void> deleteProduct(String id) =>
+      db.collection('products').doc(id).delete();
 
   Future<void> saveLot(InventoryLot lot) =>
       db.collection('inventory_lots').doc(lot.id).set(_lotData(lot));
@@ -454,6 +478,7 @@ class FirestorePantry {
         )
         .toList(),
     'display_unit': food.displayUnit,
+    'aliases': food.aliases,
     'nutrition': food.nutrition == null
         ? null
         : {
@@ -471,8 +496,41 @@ class FirestorePantry {
     'updated_at': FieldValue.serverTimestamp(),
   };
 
+  Map<String, Object?> _productData(ProductDefinition product) => {
+    'food_id': product.foodId,
+    'name': product.name,
+    'brand': product.brand,
+    'aliases': product.aliases,
+    'barcode': product.barcode,
+    'conversions': product.conversions
+        .map(
+          (item) => {
+            'unit': item.unit,
+            'symbol': item.symbol,
+            'base_amount': item.baseAmount,
+          },
+        )
+        .toList(),
+    'nutrition': product.nutrition == null
+        ? null
+        : {
+            'basis_base_amount': product.nutrition!.basisBaseAmount,
+            'calories': product.nutrition!.totals.calories,
+            'protein_g': product.nutrition!.totals.proteinG,
+            'carbs_g': product.nutrition!.totals.carbsG,
+            'fat_g': product.nutrition!.totals.fatG,
+            'fiber_g': product.nutrition!.totals.fiberG,
+            'sugar_g': product.nutrition!.totals.sugarG,
+            'sodium_mg': product.nutrition!.totals.sodiumMg,
+            'source': product.nutrition!.source,
+            'estimated': product.nutrition!.estimated,
+          },
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
   Map<String, Object?> _lotData(InventoryLot lot) => {
     'food_id': lot.foodId,
+    'product_id': lot.productId,
     'quantity_base': lot.quantityBase,
     'location': lot.location.name,
     'best_by': lot.bestBy == null ? null : Timestamp.fromDate(lot.bestBy!),
@@ -772,6 +830,41 @@ class FirestorePantry {
               source: nutritionData['source'] as String? ?? '',
               estimated: nutritionData['estimated'] as bool? ?? false,
             ),
+      aliases: List<String>.from(data['aliases'] as List<dynamic>? ?? const []),
+    );
+  }
+
+  ProductDefinition _productFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final nutritionData = data['nutrition'] as Map<String, dynamic>?;
+    return ProductDefinition(
+      id: doc.id,
+      foodId: data['food_id'] as String,
+      name: data['name'] as String,
+      brand: data['brand'] as String? ?? '',
+      aliases: List<String>.from(data['aliases'] as List<dynamic>? ?? const []),
+      barcode: data['barcode'] as String?,
+      conversions: (data['conversions'] as List<dynamic>? ?? const []).map((
+        value,
+      ) {
+        final item = value as Map<String, dynamic>;
+        return UnitConversion(
+          unit: item['unit'] as String,
+          symbol: item['symbol'] as String,
+          baseAmount: (item['base_amount'] as num).toDouble(),
+        );
+      }).toList(),
+      nutrition: nutritionData == null
+          ? null
+          : NutritionFacts(
+              basisBaseAmount: (nutritionData['basis_base_amount'] as num)
+                  .toDouble(),
+              totals: _nutritionTotalsFromData(nutritionData),
+              source: nutritionData['source'] as String? ?? '',
+              estimated: nutritionData['estimated'] as bool? ?? false,
+            ),
     );
   }
 
@@ -784,6 +877,7 @@ class FirestorePantry {
       location: StorageLocation.values.byName(data['location'] as String),
       bestBy: (data['best_by'] as Timestamp?)?.toDate(),
       purchasedAt: (data['purchased_at'] as Timestamp?)?.toDate(),
+      productId: data['product_id'] as String?,
     );
   }
 

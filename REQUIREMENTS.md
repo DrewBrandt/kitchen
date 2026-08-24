@@ -10,7 +10,8 @@ A personal kitchen inventory that tracks pantry, fridge, and freezer stock; stor
 
 - **Counted food:** Stored as units and optionally consumed fractionally. Examples: `2 eggs`, `0.5 onion`, `1 yogurt`.
 - **Measured food:** Stored in a canonical weight or volume and displayed in convenient recipe units. Examples: `1/4 cup butter`, `240 mL milk`.
-- **Food definition:** The reusable identity and conversion rules for a food.
+- **Canonical food:** The brand-independent ingredient identity and recipe conversion rules.
+- **Product:** A purchasable branded item mapped to one canonical food, with optional barcode, aliases, package conversions, and label nutrition.
 - **Inventory lot:** A separately purchased quantity with its own location and best-by date.
 - **Consumption:** An atomic, reversible set of lot deductions caused by cooking or quick use.
 
@@ -51,13 +52,26 @@ Natural language is deliberately not accepted by the mutation endpoint. Interpre
 - `allowed_units[]`: `{unit, symbol, base_amount}`
 - `default_location`: `pantry | fridge | freezer`
 - `nutrition_per_base_amount` (future)
-- `barcode_aliases[]` (future)
+- `aliases[]`
+
+Recipes and grocery shortages reference canonical foods only.
+
+### `products`
+
+- `food_id`
+- `name`
+- `brand`
+- `aliases[]`
+- `barcode` (nullable)
+- `conversions[]`: product/package units expressed in the canonical food's base unit
+- `nutrition` (nullable label nutrition)
 
 Conversions are food-specific. One cup of butter and one cup of flour do not share a weight conversion.
 
 ### `inventory_lots`
 
 - `food_id`
+- `product_id` (nullable for legacy or genuinely generic stock)
 - `quantity_base`
 - `location`
 - `purchased_at`

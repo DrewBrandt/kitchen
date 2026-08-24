@@ -29,6 +29,9 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
   late final emoji = TextEditingController(
     text: widget.existing?.emoji ?? '🥫',
   );
+  late final aliases = TextEditingController(
+    text: widget.existing?.aliases.join('\n') ?? '',
+  );
   late final conversions = TextEditingController(
     text: _conversionText(widget.existing),
   );
@@ -74,6 +77,7 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
   void dispose() {
     name.dispose();
     emoji.dispose();
+    aliases.dispose();
     conversions.dispose();
     displayUnit.dispose();
     nutrition.dispose();
@@ -112,6 +116,18 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: aliases,
+              minLines: 2,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Ingredient aliases',
+                helperText:
+                    'One reviewed generic or former name per line. Product and brand names belong on products.',
+                alignLabelWithHint: true,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -314,6 +330,12 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
           emoji: emoji.text.trim().isEmpty ? '🥫' : emoji.text.trim(),
           defaultLocation: location,
           nutrition: parsedNutrition,
+          aliases: aliases.text
+              .split(RegExp(r'\r?\n'))
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty)
+              .toSet()
+              .toList(),
         ),
       );
     } on FormatException catch (exception) {

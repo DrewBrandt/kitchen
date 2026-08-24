@@ -54,9 +54,11 @@ food definitions. Treat it as especially consequential. Never include a food in
 
 For a plain-English grocery haul:
 
-1. Read inventory and food definitions.
-2. Match known foods by ID or exact meaning.
-3. For genuinely new foods, prepare a food definition first. Use counted mode
+1. Read inventory, canonical food definitions, and products.
+2. Match an exact product by product ID, barcode, name, or reviewed alias. Its
+   `foodId` determines which canonical ingredient it supplies.
+3. If the product is new but its canonical food exists, create only the product.
+   For a genuinely new ingredient, prepare a canonical food definition first. Use counted mode
    for discrete packages/items and measured mode for bulk contents.
 4. Prefer exact package-label nutrition. Otherwise use a reputable source and
    mark the values estimated. Preserve the source description.
@@ -71,7 +73,7 @@ dates may be omitted when unknown.
 
 - When importing an online recipe, retain `sourceUrl` and paraphrase copyrighted
   instructions instead of reproducing long text verbatim.
-- Match ingredients to live food definitions and supported units. Define truly
+- Match recipe ingredients to canonical food definitions, never branded products. Define truly
   new ingredients before saving the recipe.
 - Preserve the recipe's total yield in `servings`. Add useful named portions
   when known.

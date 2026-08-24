@@ -175,6 +175,7 @@ class FoodDefinition {
     this.emoji = '🥫',
     this.defaultLocation = StorageLocation.pantry,
     this.nutrition,
+    this.aliases = const [],
   });
 
   final String id;
@@ -186,6 +187,7 @@ class FoodDefinition {
   final String emoji;
   final StorageLocation defaultLocation;
   final NutritionFacts? nutrition;
+  final List<String> aliases;
 
   UnitConversion conversionFor(String unit) => conversions.firstWhere(
     (conversion) => conversion.unit.toLowerCase() == unit.toLowerCase(),
@@ -204,6 +206,7 @@ class FoodDefinition {
     StorageLocation? defaultLocation,
     NutritionFacts? nutrition,
     bool clearNutrition = false,
+    List<String>? aliases,
   }) => FoodDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -214,7 +217,44 @@ class FoodDefinition {
     emoji: emoji ?? this.emoji,
     defaultLocation: defaultLocation ?? this.defaultLocation,
     nutrition: clearNutrition ? null : nutrition ?? this.nutrition,
+    aliases: aliases ?? this.aliases,
   );
+}
+
+/// A purchasable branded or store-specific version of a canonical food.
+///
+/// Recipes always reference [foodId]. Inventory lots may additionally retain a
+/// [ProductDefinition.id], allowing a new brand to satisfy the same recipe
+/// without losing the product name, barcode, package conversions, or label
+/// nutrition.
+class ProductDefinition {
+  const ProductDefinition({
+    required this.id,
+    required this.foodId,
+    required this.name,
+    this.brand = '',
+    this.aliases = const [],
+    this.barcode,
+    this.conversions = const [],
+    this.nutrition,
+  });
+
+  final String id;
+  final String foodId;
+  final String name;
+  final String brand;
+  final List<String> aliases;
+  final String? barcode;
+  final List<UnitConversion> conversions;
+  final NutritionFacts? nutrition;
+
+  UnitConversion? conversionFor(String unit) {
+    final normalized = unit.toLowerCase();
+    for (final conversion in conversions) {
+      if (conversion.unit.toLowerCase() == normalized) return conversion;
+    }
+    return null;
+  }
 }
 
 class InventoryLot {
@@ -225,6 +265,7 @@ class InventoryLot {
     required this.location,
     this.bestBy,
     this.purchasedAt,
+    this.productId,
   });
 
   final String id;
@@ -233,6 +274,7 @@ class InventoryLot {
   final StorageLocation location;
   final DateTime? bestBy;
   final DateTime? purchasedAt;
+  final String? productId;
 
   InventoryLot copyWith({double? quantityBase}) => InventoryLot(
     id: id,
@@ -241,6 +283,7 @@ class InventoryLot {
     location: location,
     bestBy: bestBy,
     purchasedAt: purchasedAt,
+    productId: productId,
   );
 }
 

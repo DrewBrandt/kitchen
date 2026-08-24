@@ -354,6 +354,12 @@ Content-Type: application/json
 
 ## Add a grocery haul
 
+Foods are canonical recipe ingredients. Branded items are stored separately in
+`products` and map back to a canonical `foodId`. Create or update a product with
+`POST /v1/products`; grocery items may then identify it with `productId`, an
+exact product name or alias, or a barcode. Product package conversions take
+precedence over generic food conversions.
+
 The entire request is validated before any lots are created.
 
 ```http
@@ -370,6 +376,19 @@ Content-Type: application/json
 ```
 
 Unknown foods and unsupported units return `422` without a partial write. Codex should define a new food first or ask the user for the missing package amount.
+
+## Migrate existing branded foods
+
+`POST /v1/migrations/canonical-products` converts existing branded food
+definitions into canonical foods plus products. It defaults to `dryRun: true`
+and reports affected lots, recipes, and history. With `dryRun: false`, it
+validates every target recipe unit before changing anything, then rewrites
+inventory, recipes, prepared batches, history deductions, and grocery
+references in one Firestore batch. Batches are capped at 450 writes.
+
+The reviewed mapping for the current pantry is
+`tools/canonical_product_migration.json`. Keep it in dry-run mode until the new
+Cloud Function has been deployed and its impact report has been reviewed.
 
 ## Save a recipe
 

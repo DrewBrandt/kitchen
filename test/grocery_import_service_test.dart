@@ -37,4 +37,35 @@ void main() {
     expect(line.isValid, isTrue);
     expect(line.location, StorageLocation.fridge);
   });
+
+  test('maps a known product to its canonical food and package conversion', () {
+    const rice = FoodDefinition(
+      id: 'rice',
+      name: 'Long-grain white rice',
+      mode: QuantityMode.measured,
+      baseUnit: 'gram',
+      conversions: [UnitConversion(unit: 'gram', symbol: 'g', baseAmount: 1)],
+    );
+    const product = ProductDefinition(
+      id: 'store-rice',
+      foodId: 'rice',
+      name: 'Enriched long grain rice',
+      brand: 'Store Brand',
+      conversions: [
+        UnitConversion(unit: 'bag', symbol: 'bag', baseAmount: 907),
+      ],
+    );
+
+    final line = parser
+        .parse(
+          'Store Brand Enriched Long Grain Rice, 1, bag',
+          [rice],
+          products: [product],
+        )
+        .single;
+
+    expect(line.isValid, isTrue);
+    expect(line.foodId, rice.id);
+    expect(line.productId, product.id);
+  });
 }

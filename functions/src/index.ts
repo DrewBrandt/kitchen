@@ -25,6 +25,17 @@ type FoodRecord = {
   conversions: Conversion[];
   displayUnit?: string;
   nutrition?: JsonObject;
+  aliases: string[];
+};
+type ProductRecord = {
+  id: string;
+  foodId: string;
+  name: string;
+  brand: string;
+  aliases: string[];
+  barcode?: string;
+  conversions: Conversion[];
+  nutrition?: JsonObject;
 };
 
 export const pantryApi = onRequest(
@@ -78,6 +89,14 @@ export const pantryApi = onRequest(
       }
       if (request.method === "POST" && path === "/v1/foods") {
         await createFood(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/products") {
+        await createProduct(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/migrations/canonical-products") {
+        await migrateCanonicalProducts(asObject(request.body), response);
         return;
       }
       if (request.method === "POST" && path === "/v1/groceries") {
@@ -152,8 +171,9 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates] = await Promise.all([
+  const [foods, products, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates] = await Promise.all([
     db.collection("foods").get(),
+    db.collection("products").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
     db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
@@ -167,6 +187,7 @@ async function exportInventory(response: ApiResponse): Promise<void> {
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    products: products.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     lots: lots.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
@@ -446,7 +467,7 @@ async function exportHistory(rawDays: unknown, response: ApiResponse): Promise<v
 }
 
 async function reconcileInventory(body: JsonObject, response: ApiResponse): Promise<void> {
-  const foods = await loadFoods();
+  const [foods, products] = await Promise.all([loadFoods(), loadProducts()]);
   const replacements = asArray(body.replacements, "replacements").map((value, index) => {
     const replacement = asObject(value);
     const foodId = requiredString(replacement.foodId, `replacements[${index}].foodId`);
@@ -454,15 +475,27 @@ async function reconcileInventory(body: JsonObject, response: ApiResponse): Prom
     if (!food) throw new ValidationError(`replacements[${index}] references an unknown food`);
     const lots = asArray(replacement.lots, `replacements[${index}].lots`).map((lotValue, lotIndex) => {
       const lot = asObject(lotValue);
+      const productId = optionalString(lot.productId);
+      const product = productId == null
+        ? undefined
+        : products.find((entry) => entry.id === productId);
+      if (productId != null && product == null) {
+        throw new ValidationError(`replacements[${index}].lots[${lotIndex}] references an unknown product`);
+      }
+      if (product != null && product.foodId !== foodId) {
+        throw new ValidationError(`replacements[${index}].lots[${lotIndex}] product belongs to another food`);
+      }
       const amount = positiveNumber(lot.amount, `replacements[${index}].lots[${lotIndex}].amount`);
       const unit = requiredString(lot.unit, `replacements[${index}].lots[${lotIndex}].unit`).toLowerCase();
-      const conversion = food.conversions.find((entry) => entry.unit === unit);
+      const conversion = product?.conversions.find((entry) => entry.unit === unit) ??
+        food.conversions.find((entry) => entry.unit === unit);
       if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
       const location = optionalString(lot.location)?.toLowerCase() ?? food.defaultLocation;
       if (!isLocation(location)) throw new ValidationError(`Unknown location "${location}"`);
       const bestBy = optionalString(lot.bestBy);
       return {
         food_id: foodId,
+        product_id: product?.id ?? null,
         quantity_base: amount * conversion.baseAmount,
         original_amount: amount,
         original_unit: unit,
@@ -659,9 +692,265 @@ async function createFood(body: JsonObject, response: ApiResponse): Promise<void
     })),
     ...(food.displayUnit == null ? {} : { display_unit: food.displayUnit }),
     ...(nutrition == null ? {} : { nutrition }),
+    aliases: food.aliases,
     updated_at: FieldValue.serverTimestamp(),
   }, { merge: true });
   response.status(200).json({ id: reference.id, status: "saved" });
+}
+
+async function createProduct(body: JsonObject, response: ApiResponse): Promise<void> {
+  const foods = await loadFoods();
+  const foodId = requiredString(body.foodId, "foodId");
+  if (!foods.some((food) => food.id === foodId)) {
+    throw new ValidationError(`Unknown canonical food "${foodId}"`);
+  }
+  const name = requiredString(body.name, "name");
+  const id = optionalString(body.id) ?? slug([optionalString(body.brand), name].filter(Boolean).join(" "));
+  const conversions = body.conversions == null
+    ? []
+    : asArray(body.conversions, "conversions").map((value, index) => {
+      const conversion = asObject(value);
+      return {
+        unit: requiredString(conversion.unit, `conversions[${index}].unit`).toLowerCase(),
+        symbol: requiredString(conversion.symbol, `conversions[${index}].symbol`),
+        base_amount: positiveNumber(conversion.baseAmount, `conversions[${index}].baseAmount`),
+      };
+    });
+  const barcode = optionalString(body.barcode);
+  if (barcode != null) {
+    const duplicate = await db.collection("products").where("barcode", "==", barcode).get();
+    if (duplicate.docs.some((document) => document.id !== id)) {
+      throw new ValidationError("Barcode is already assigned to another product");
+    }
+  }
+  const nutrition = body.nutrition == null ? null : parseFoodNutrition(asObject(body.nutrition));
+  await db.collection("products").doc(id).set({
+    food_id: foodId,
+    name,
+    brand: optionalString(body.brand) ?? "",
+    aliases: body.aliases == null ? [] : stringList(body.aliases, "aliases"),
+    barcode: barcode ?? null,
+    conversions,
+    nutrition,
+    updated_at: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  response.status(200).json({ id, foodId, status: "saved" });
+}
+
+async function migrateCanonicalProducts(body: JsonObject, response: ApiResponse): Promise<void> {
+  const mappings = asArray(body.mappings, "mappings").map((raw, index) => {
+    const mapping = asObject(raw);
+    const product = asObject(mapping.product);
+    return {
+      sourceFoodId: requiredString(mapping.sourceFoodId, `mappings[${index}].sourceFoodId`),
+      targetFoodId: optionalString(mapping.targetFoodId) ??
+        requiredString(mapping.sourceFoodId, `mappings[${index}].sourceFoodId`),
+      canonicalName: optionalString(mapping.canonicalName),
+      canonicalAliases: mapping.canonicalAliases == null
+        ? []
+        : stringList(mapping.canonicalAliases, `mappings[${index}].canonicalAliases`),
+      canonicalConversions: mapping.canonicalConversions == null
+        ? undefined
+        : asArray(mapping.canonicalConversions, `mappings[${index}].canonicalConversions`).map((value, conversionIndex) => {
+          const conversion = asObject(value);
+          return {
+            unit: requiredString(conversion.unit, `mappings[${index}].canonicalConversions[${conversionIndex}].unit`).toLowerCase(),
+            symbol: requiredString(conversion.symbol, `mappings[${index}].canonicalConversions[${conversionIndex}].symbol`),
+            base_amount: positiveNumber(
+              conversion.baseAmount,
+              `mappings[${index}].canonicalConversions[${conversionIndex}].baseAmount`,
+            ),
+          };
+        }),
+      product: {
+        id: optionalString(product.id) ?? slug([
+          optionalString(product.brand),
+          requiredString(product.name, `mappings[${index}].product.name`),
+        ].filter(Boolean).join(" ")),
+        name: requiredString(product.name, `mappings[${index}].product.name`),
+        brand: optionalString(product.brand) ?? "",
+        aliases: product.aliases == null
+          ? []
+          : stringList(product.aliases, `mappings[${index}].product.aliases`),
+        barcode: optionalString(product.barcode),
+        conversions: product.conversions == null
+          ? []
+          : asArray(product.conversions, `mappings[${index}].product.conversions`).map((value, conversionIndex) => {
+            const conversion = asObject(value);
+            return {
+              unit: requiredString(conversion.unit, `mappings[${index}].product.conversions[${conversionIndex}].unit`).toLowerCase(),
+              symbol: requiredString(conversion.symbol, `mappings[${index}].product.conversions[${conversionIndex}].symbol`),
+              base_amount: positiveNumber(
+                conversion.baseAmount,
+                `mappings[${index}].product.conversions[${conversionIndex}].baseAmount`,
+              ),
+            };
+          }),
+      },
+    };
+  });
+  if (mappings.length === 0) throw new ValidationError("mappings cannot be empty");
+  if (new Set(mappings.map((mapping) => mapping.sourceFoodId)).size !== mappings.length) {
+    throw new ValidationError("sourceFoodId may only appear once");
+  }
+  if (new Set(mappings.map((mapping) => mapping.product.id)).size !== mappings.length) {
+    throw new ValidationError("Every migrated product needs a unique ID");
+  }
+
+  const [foodSnapshot, lotSnapshot, recipeSnapshot, preparedSnapshot, historySnapshot, grocerySnapshot] =
+    await Promise.all([
+      db.collection("foods").get(),
+      db.collection("inventory_lots").get(),
+      db.collection("recipes").get(),
+      db.collection("prepared_batches").get(),
+      db.collection("consumption_history").get(),
+      db.collection("grocery_list").get(),
+    ]);
+  const foods = new Map(foodSnapshot.docs.map((document) => [document.id, document]));
+  for (const mapping of mappings) {
+    if (!foods.has(mapping.sourceFoodId)) {
+      throw new ValidationError(`Unknown source food "${mapping.sourceFoodId}"`);
+    }
+    if (!foods.has(mapping.targetFoodId)) {
+      throw new ValidationError(`Unknown target food "${mapping.targetFoodId}"`);
+    }
+    const target = foods.get(mapping.targetFoodId)!.data();
+    const supportedUnits = new Set(
+      (mapping.canonicalConversions ?? asArray(target.conversions, `foods.${mapping.targetFoodId}.conversions`))
+        .map((raw) => String(asObject(raw).unit).toLowerCase()),
+    );
+    for (const recipe of recipeSnapshot.docs) {
+      for (const rawIngredient of asArray(recipe.data().ingredients, `recipes.${recipe.id}.ingredients`)) {
+        const ingredient = asObject(rawIngredient);
+        if (ingredient.food_id === mapping.sourceFoodId &&
+            !supportedUnits.has(String(ingredient.unit).toLowerCase())) {
+          throw new ValidationError(
+            `Recipe "${recipe.id}" unit "${String(ingredient.unit)}" is not supported by target "${mapping.targetFoodId}"`,
+          );
+        }
+      }
+    }
+  }
+
+  const impact = {
+    mappings: mappings.length,
+    lots: lotSnapshot.docs.filter((document) =>
+      mappings.some((mapping) => mapping.sourceFoodId === document.data().food_id)).length,
+    recipes: recipeSnapshot.docs.filter((document) => mappings.some((mapping) =>
+      asArray(document.data().ingredients, `recipes.${document.id}.ingredients`)
+        .some((raw) => asObject(raw).food_id === mapping.sourceFoodId && mapping.sourceFoodId !== mapping.targetFoodId),
+    )).length,
+    historyEntries: historySnapshot.docs.filter((document) => mappings.some((mapping) =>
+      mapping.sourceFoodId !== mapping.targetFoodId &&
+      (Array.isArray(document.data().deductions) ? document.data().deductions : [])
+        .some((raw: unknown) => asObject(raw).food_id === mapping.sourceFoodId),
+    )).length,
+  };
+  if (body.dryRun !== false) {
+    response.status(200).json({ status: "dry-run", impact });
+    return;
+  }
+
+  const mappingBySource = new Map(mappings.map((mapping) => [mapping.sourceFoodId, mapping]));
+  const rewriteReferences = (values: unknown): unknown[] =>
+    (Array.isArray(values) ? values : []).map((raw) => {
+      const value = asObject(raw);
+      const mapping = mappingBySource.get(String(value.food_id));
+      return mapping == null ? value : { ...value, food_id: mapping.targetFoodId };
+    });
+  const batch = db.batch();
+  let writes = 0;
+  const countWrite = (): void => {
+    writes += 1;
+    if (writes > 450) {
+      throw new ValidationError("Migration exceeds 450 writes; split the mapping into smaller batches");
+    }
+  };
+  for (const mapping of mappings) {
+    const source = foods.get(mapping.sourceFoodId)!.data();
+    const targetReference = db.collection("foods").doc(mapping.targetFoodId);
+    const existingAliases = Array.isArray(foods.get(mapping.targetFoodId)!.data().aliases)
+      ? foods.get(mapping.targetFoodId)!.data().aliases.map(String)
+      : [];
+    batch.set(targetReference, {
+      ...(mapping.canonicalName == null ? {} : { name: mapping.canonicalName }),
+      ...(mapping.canonicalConversions == null ? {} : { conversions: mapping.canonicalConversions }),
+      aliases: [...new Set([...existingAliases, String(source.name), ...mapping.canonicalAliases])],
+      updated_at: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    countWrite();
+    batch.set(db.collection("products").doc(mapping.product.id), {
+      food_id: mapping.targetFoodId,
+      name: mapping.product.name,
+      brand: mapping.product.brand,
+      aliases: mapping.product.aliases,
+      barcode: mapping.product.barcode ?? null,
+      conversions: mapping.product.conversions,
+      nutrition: source.nutrition ?? null,
+      updated_at: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    countWrite();
+    if (mapping.sourceFoodId !== mapping.targetFoodId) {
+      batch.delete(db.collection("foods").doc(mapping.sourceFoodId));
+      countWrite();
+    }
+  }
+  for (const document of lotSnapshot.docs) {
+    const mapping = mappingBySource.get(String(document.data().food_id));
+    if (mapping == null) continue;
+    batch.update(document.ref, {
+      food_id: mapping.targetFoodId,
+      product_id: mapping.product.id,
+      updated_at: FieldValue.serverTimestamp(),
+    });
+    countWrite();
+  }
+  for (const document of recipeSnapshot.docs) {
+    const before = asArray(document.data().ingredients, `recipes.${document.id}.ingredients`);
+    if (!before.some((raw) => {
+      const mapping = mappingBySource.get(String(asObject(raw).food_id));
+      return mapping != null && mapping.sourceFoodId !== mapping.targetFoodId;
+    })) continue;
+    batch.update(document.ref, {
+      ingredients: rewriteReferences(before),
+      updated_at: FieldValue.serverTimestamp(),
+    });
+    countWrite();
+  }
+  for (const document of preparedSnapshot.docs) {
+    const deductions = document.data().ingredient_deductions;
+    if (!Array.isArray(deductions) || !deductions.some((raw) => {
+      const mapping = mappingBySource.get(String(asObject(raw).food_id));
+      return mapping != null && mapping.sourceFoodId !== mapping.targetFoodId;
+    })) continue;
+    batch.update(document.ref, { ingredient_deductions: rewriteReferences(deductions) });
+    countWrite();
+  }
+  for (const document of historySnapshot.docs) {
+    const deductions = document.data().deductions;
+    if (!Array.isArray(deductions) || !deductions.some((raw) => {
+      const mapping = mappingBySource.get(String(asObject(raw).food_id));
+      return mapping != null && mapping.sourceFoodId !== mapping.targetFoodId;
+    })) continue;
+    batch.update(document.ref, { deductions: rewriteReferences(deductions) });
+    countWrite();
+  }
+  for (const document of grocerySnapshot.docs) {
+    const mapping = mappingBySource.get(String(document.data().food_id));
+    if (mapping == null) continue;
+    if (mapping.sourceFoodId !== mapping.targetFoodId && document.data().from_plan === true) {
+      batch.delete(document.ref);
+    } else {
+      batch.update(document.ref, {
+        food_id: mapping.targetFoodId,
+        name: mapping.canonicalName ?? foods.get(mapping.targetFoodId)!.data().name,
+        updated_at: FieldValue.serverTimestamp(),
+      });
+    }
+    countWrite();
+  }
+  await batch.commit();
+  response.status(200).json({ status: "migrated", impact, writes });
 }
 
 function parseFoodNutrition(value: JsonObject): JsonObject {
@@ -682,19 +971,22 @@ function parseFoodNutrition(value: JsonObject): JsonObject {
 async function addGroceries(body: JsonObject, response: ApiResponse): Promise<void> {
   const items = asArray(body.items, "items");
   if (items.length === 0) throw new ValidationError("items cannot be empty");
-  const foods = await loadFoods();
+  const [foods, products] = await Promise.all([loadFoods(), loadProducts()]);
   const prepared = items.map((value, index) => {
     const item = asObject(value);
-    const food = resolveFood(item, foods, `items[${index}]`);
+    const selection = resolveFoodSelection(item, foods, products, `items[${index}]`);
+    const { food, product } = selection;
     const amount = positiveNumber(item.amount, `items[${index}].amount`);
     const unit = requiredString(item.unit, `items[${index}].unit`).toLowerCase();
-    const conversion = food.conversions.find((entry) => entry.unit === unit);
+    const conversion = product?.conversions.find((entry) => entry.unit === unit) ??
+      food.conversions.find((entry) => entry.unit === unit);
     if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
     const location = optionalString(item.location)?.toLowerCase() ?? food.defaultLocation;
     if (!isLocation(location)) throw new ValidationError(`Unknown location "${location}"`);
     const bestBy = optionalString(item.bestBy);
     return {
       food_id: food.id,
+      product_id: product?.id ?? null,
       quantity_base: amount * conversion.baseAmount,
       original_amount: amount,
       original_unit: unit,
@@ -716,11 +1008,11 @@ async function addGroceries(body: JsonObject, response: ApiResponse): Promise<vo
 }
 
 async function createRecipe(body: JsonObject, response: ApiResponse): Promise<void> {
-  const foods = await loadFoods();
+  const [foods, products] = await Promise.all([loadFoods(), loadProducts()]);
   const name = requiredString(body.name, "name");
   const ingredients = asArray(body.ingredients, "ingredients").map((value, index) => {
     const ingredient = asObject(value);
-    const food = resolveFood(ingredient, foods, `ingredients[${index}]`);
+    const food = resolveFood(ingredient, foods, `ingredients[${index}]`, products);
     const unit = requiredString(ingredient.unit, `ingredients[${index}].unit`).toLowerCase();
     if (!food.conversions.some((item) => item.unit === unit)) {
       throw new ValidationError(`${food.name} does not support unit "${unit}"`);
@@ -1114,11 +1406,13 @@ async function consumeRecipe(body: JsonObject, response: ApiResponse): Promise<v
 }
 
 async function consumeInventory(body: JsonObject, response: ApiResponse): Promise<void> {
-  const foods = await loadFoods();
-  const food = resolveFood(body, foods, "food");
+  const [foods, products] = await Promise.all([loadFoods(), loadProducts()]);
+  const selection = resolveFoodSelection(body, foods, products, "food");
+  const { food, product } = selection;
   const amount = positiveNumber(body.amount, "amount");
   const unit = requiredString(body.unit, "unit").toLowerCase();
-  const conversion = food.conversions.find((item) => item.unit === unit);
+  const conversion = product?.conversions.find((item) => item.unit === unit) ??
+    food.conversions.find((item) => item.unit === unit);
   if (conversion == null) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
   const requirement = amount * conversion.baseAmount;
   const eventId = db.collection("consumption_history").doc().id;
@@ -1281,18 +1575,91 @@ async function loadFoods(): Promise<FoodRecord[]> {
       })),
       displayUnit: optionalString(data.display_unit),
       nutrition: data.nutrition == null ? undefined : asObject(data.nutrition),
+      aliases: Array.isArray(data.aliases) ? data.aliases.map(String) : [],
     };
   });
 }
 
-function resolveFood(item: JsonObject, foods: FoodRecord[], path: string): FoodRecord {
+async function loadProducts(): Promise<ProductRecord[]> {
+  const snapshot = await db.collection("products").get();
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      foodId: String(data.food_id),
+      name: String(data.name),
+      brand: String(data.brand ?? ""),
+      aliases: Array.isArray(data.aliases) ? data.aliases.map(String) : [],
+      barcode: optionalString(data.barcode),
+      conversions: (Array.isArray(data.conversions) ? data.conversions : []).map((raw) => {
+        const item = asObject(raw);
+        return {
+          unit: String(item.unit).toLowerCase(),
+          symbol: String(item.symbol),
+          baseAmount: Number(item.base_amount),
+        };
+      }),
+      nutrition: data.nutrition == null ? undefined : asObject(data.nutrition),
+    };
+  });
+}
+
+type FoodSelection = { food: FoodRecord; product?: ProductRecord };
+
+function resolveFoodSelection(
+  item: JsonObject,
+  foods: FoodRecord[],
+  products: ProductRecord[],
+  path: string,
+): FoodSelection {
   const id = optionalString(item.foodId);
-  const name = optionalString(item.food);
-  const food = id != null
-    ? foods.find((entry) => entry.id === id)
-    : foods.find((entry) => singular(normalize(entry.name)) === singular(normalize(name ?? "")));
-  if (!food) throw new ValidationError(`${path} references an unknown food`);
-  return food;
+  const productId = optionalString(item.productId);
+  const barcode = optionalString(item.barcode);
+  const name = optionalString(item.product) ?? optionalString(item.food);
+  let product = productId == null ? undefined : products.find((entry) => entry.id === productId);
+  if (productId != null && product == null) {
+    throw new ValidationError(`${path} references unknown product "${productId}"`);
+  }
+  if (product == null && barcode != null) {
+    product = products.find((entry) => entry.barcode === barcode);
+  }
+  if (product == null && id == null && name != null) {
+    const wanted = singular(normalize(name));
+    const productMatches = products.filter((entry) =>
+      [entry.name, `${entry.brand} ${entry.name}`, ...entry.aliases]
+        .some((candidate) => singular(normalize(candidate)) === wanted),
+    );
+    if (productMatches.length > 1) {
+      throw new ValidationError(`${path} matches more than one product; send productId or barcode`);
+    }
+    product = productMatches[0];
+  }
+  const resolvedFoodId = id ?? product?.foodId;
+  let food = resolvedFoodId == null ? undefined : foods.find((entry) => entry.id === resolvedFoodId);
+  if (food == null && id == null && name != null) {
+    const wanted = singular(normalize(name));
+    const foodMatches = foods.filter((entry) =>
+      [entry.name, ...entry.aliases].some((candidate) => singular(normalize(candidate)) === wanted),
+    );
+    if (foodMatches.length > 1) {
+      throw new ValidationError(`${path} matches more than one canonical food; send foodId`);
+    }
+    food = foodMatches[0];
+  }
+  if (!food) throw new ValidationError(`${path} references an unknown canonical food or product`);
+  if (product != null && product.foodId !== food.id) {
+    throw new ValidationError(`${path} product does not belong to canonical food "${food.id}"`);
+  }
+  return { food, product };
+}
+
+function resolveFood(
+  item: JsonObject,
+  foods: FoodRecord[],
+  path: string,
+  products: ProductRecord[] = [],
+): FoodRecord {
+  return resolveFoodSelection(item, foods, products, path).food;
 }
 
 function parseFood(body: JsonObject): FoodRecord {
@@ -1326,6 +1693,7 @@ function parseFood(body: JsonObject): FoodRecord {
     emoji: optionalString(body.emoji) ?? "🥫",
     conversions,
     displayUnit,
+    aliases: body.aliases == null ? [] : stringList(body.aliases, "aliases"),
   };
 }
 
