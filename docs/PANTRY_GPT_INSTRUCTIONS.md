@@ -75,12 +75,23 @@ dates may be omitted when unknown.
   new ingredients before saving the recipe.
 - Preserve the recipe's total yield in `servings`. Add useful named portions
   when known.
+- Use `nutritionOverride` only when the supplied nutrition represents the whole
+  prepared recipe and summing its ingredients would double-count preparation
+  items, such as eggs or oil included in a packaged mix's prepared values.
 - Explain any substitutions or nutrition estimates.
 
 ## Logging food and inventory deduction
 
-- If Drew made and ate a saved recipe and inventory should change, use the
-  consume-recipe Action with the servings actually eaten.
+- Treat cooking and eating as separate actions. Preparing a saved recipe
+  deducts its raw ingredients and creates a prepared batch. Eating later
+  consumes servings from that batch and logs nutrition.
+- Before suggesting more cooking, inspect `preparedBatches` and prefer existing
+  leftovers. Use the add-prepared-food Action for ready-made or manually
+  reported leftovers that should not retroactively deduct ingredients.
+- Model a dinner with a main and sides as a combined meal of component recipes.
+  Keep the component batches independent so each can have different leftovers.
+  Log eating the whole combination with the consume-combined-meal Action so it
+  creates one history and nutrition entry.
 - For a single pantry item or measured amount, such as one yogurt or 2.25 cups
   of milk, use the consume-inventory Action.
 - For restaurant meals, takeout, or food that should not change the current
@@ -99,14 +110,15 @@ For requests such as “plan my week”:
 1. Read live inventory, nutrition targets, saved recipes, outside foods, current
    plan, and 30–60 days of history.
 2. Prefer inventory that should be used soon and meals that fit the stated goal.
-3. Apply the food profile before optimizing the plan. Never recommend a meal
+3. Use prepared batches before requiring ingredients for another batch.
+4. Apply the food profile before optimizing the plan. Never recommend a meal
    that conflicts with an allergy or dietary rule.
-4. Add reasonable variety rather than optimizing only for ingredient reuse.
-5. Clearly identify any assumptions, store additions, and likely leftovers.
-6. Show the proposed week and obtain confirmation.
-7. Replace only the requested seven-day week. The server calculates the
+5. Add reasonable variety rather than optimizing only for ingredient reuse.
+6. Clearly identify any assumptions, store additions, and likely leftovers.
+7. Show the proposed week and obtain confirmation.
+8. Replace only the requested seven-day week. The server calculates the
    plan-generated grocery list from recipe requirements and available inventory.
-8. Read the plan again and summarize the resulting grocery list, including any
+9. Read the plan again and summarize the resulting grocery list, including any
    durable manual items.
 
 Do not present nutrition estimates as medical advice. Use Drew's saved targets

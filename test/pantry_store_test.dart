@@ -149,6 +149,43 @@ void main() {
     expect(total.fatG, closeTo(5.5, 0.001));
   });
 
+  test(
+    'recipe nutrition override replaces ingredient nutrition and scales',
+    () {
+      final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+      final baseRecipe = store.recipes.firstWhere(
+        (item) => item.id == 'scrambled-eggs',
+      );
+      final recipe = baseRecipe.copyWith(
+        nutritionOverride: const NutritionTotals(
+          calories: 600,
+          proteinG: 20,
+          carbsG: 75,
+          fatG: 25,
+        ),
+      );
+
+      final total = store.nutritionForRecipe(
+        recipe,
+        servings: recipe.servings / 2,
+      )!;
+
+      expect(total.calories, closeTo(300, 0.001));
+      expect(total.proteinG, closeTo(10, 0.001));
+      expect(total.carbsG, closeTo(37.5, 0.001));
+      expect(total.fatG, closeTo(12.5, 0.001));
+    },
+  );
+
+  test('recipe nutrition override must contain valid prepared totals', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.first.copyWith(
+      nutritionOverride: const NutritionTotals(calories: -1),
+    );
+
+    expect(() => store.saveRecipe(recipe), throwsArgumentError);
+  });
+
   test('outside meals add daily nutrition without changing inventory', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final eggsBefore = store.totalFor('egg');
@@ -281,5 +318,72 @@ void main() {
 
     store.deleteGroceryItem(item.id);
     expect(store.groceryItems, isEmpty);
+  });
+
+  test('preparing a recipe creates servings without logging them as eaten', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    final flourBefore = store.totalFor('flour');
+
+    final batch = store.prepareRecipe(recipe);
+
+    expect(store.history, isEmpty);
+    expect(store.activePreparedBatches.single.id, batch.id);
+    expect(batch.remainingServings, recipe.servings);
+    expect(store.totalFor('flour'), lessThan(flourBefore));
+
+    final event = store.consumePreparedBatch(batch, 1);
+    expect(event.preparedDeductions.single.batchId, batch.id);
+    expect(
+      store.activePreparedBatches.single.remainingServings,
+      recipe.servings - 1,
+    );
+
+    store.undo(event.id);
+    expect(
+      store.activePreparedBatches.single.remainingServings,
+      recipe.servings,
+    );
+  });
+
+  test('combined meals consume independent prepared recipe components', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final pancakes = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    final eggs = store.recipes.firstWhere(
+      (item) => item.id == 'scrambled-eggs',
+    );
+    store.addPreparedBatch(
+      name: pancakes.name,
+      servings: 4,
+      source: PreparedSource.recipe,
+      sourceId: pancakes.id,
+      nutritionPerServing: const NutritionTotals(calories: 100),
+    );
+    store.addPreparedBatch(
+      name: eggs.name,
+      servings: 2,
+      source: PreparedSource.recipe,
+      sourceId: eggs.id,
+      nutritionPerServing: const NutritionTotals(calories: 150),
+    );
+    final meal = MealTemplate(
+      id: 'breakfast-plate',
+      name: 'Breakfast plate',
+      servings: 1,
+      components: [
+        MealComponent(recipeId: pancakes.id, servings: 2),
+        MealComponent(recipeId: eggs.id, servings: 1),
+      ],
+    );
+    store.saveMealTemplate(meal);
+
+    final event = store.consumeMealTemplate(meal);
+
+    expect(event.preparedDeductions, hasLength(2));
+    expect(event.nutrition!.calories, 350);
+    expect(
+      store.activePreparedBatches.map((batch) => batch.remainingServings),
+      containsAll([2, 1]),
+    );
   });
 }

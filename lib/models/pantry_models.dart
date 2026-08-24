@@ -6,7 +6,9 @@ enum ConsumptionKind { recipe, inventory, external }
 
 enum MealSlot { breakfast, lunch, dinner, snack }
 
-enum PlannedMealSource { recipe, external, custom }
+enum PlannedMealSource { recipe, meal, external, custom }
+
+enum PreparedSource { recipe, external, manual }
 
 class NutritionTotals {
   const NutritionTotals({
@@ -270,6 +272,7 @@ class Recipe {
     required this.instructions,
     this.portions = const [],
     this.emoji = '🍽️',
+    this.nutritionOverride,
   });
 
   final String id;
@@ -279,6 +282,7 @@ class Recipe {
   final List<String> instructions;
   final List<RecipePortion> portions;
   final String emoji;
+  final NutritionTotals? nutritionOverride;
 
   Recipe copyWith({
     String? id,
@@ -288,6 +292,8 @@ class Recipe {
     List<String>? instructions,
     List<RecipePortion>? portions,
     String? emoji,
+    NutritionTotals? nutritionOverride,
+    bool clearNutritionOverride = false,
   }) => Recipe(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -296,6 +302,99 @@ class Recipe {
     instructions: instructions ?? this.instructions,
     portions: portions ?? this.portions,
     emoji: emoji ?? this.emoji,
+    nutritionOverride: clearNutritionOverride
+        ? null
+        : nutritionOverride ?? this.nutritionOverride,
+  );
+}
+
+class MealComponent {
+  const MealComponent({required this.recipeId, required this.servings});
+
+  final String recipeId;
+  final double servings;
+}
+
+class MealTemplate {
+  const MealTemplate({
+    required this.id,
+    required this.name,
+    required this.servings,
+    required this.components,
+    this.emoji = '🍽️',
+    this.notes = '',
+  });
+
+  final String id;
+  final String name;
+  final double servings;
+  final List<MealComponent> components;
+  final String emoji;
+  final String notes;
+}
+
+class PreparedBatch {
+  const PreparedBatch({
+    required this.id,
+    required this.name,
+    required this.emoji,
+    required this.source,
+    required this.totalServings,
+    required this.remainingServings,
+    required this.madeAt,
+    required this.location,
+    this.sourceId,
+    this.bestBy,
+    this.nutritionPerServing,
+    this.portions = const [],
+    this.ingredientDeductions = const [],
+    this.note = '',
+    this.discardedAt,
+  });
+
+  final String id;
+  final String name;
+  final String emoji;
+  final PreparedSource source;
+  final String? sourceId;
+  final double totalServings;
+  final double remainingServings;
+  final DateTime madeAt;
+  final StorageLocation location;
+  final DateTime? bestBy;
+  final NutritionTotals? nutritionPerServing;
+  final List<RecipePortion> portions;
+  final List<LotDeduction> ingredientDeductions;
+  final String note;
+  final DateTime? discardedAt;
+
+  double get consumedServings => totalServings - remainingServings;
+  bool get isActive => remainingServings > 0.000001 && discardedAt == null;
+
+  PreparedBatch copyWith({
+    double? remainingServings,
+    StorageLocation? location,
+    DateTime? bestBy,
+    bool clearBestBy = false,
+    String? note,
+    DateTime? discardedAt,
+    bool clearDiscardedAt = false,
+  }) => PreparedBatch(
+    id: id,
+    name: name,
+    emoji: emoji,
+    source: source,
+    sourceId: sourceId,
+    totalServings: totalServings,
+    remainingServings: remainingServings ?? this.remainingServings,
+    madeAt: madeAt,
+    location: location ?? this.location,
+    bestBy: clearBestBy ? null : bestBy ?? this.bestBy,
+    nutritionPerServing: nutritionPerServing,
+    portions: portions,
+    ingredientDeductions: ingredientDeductions,
+    note: note ?? this.note,
+    discardedAt: clearDiscardedAt ? null : discardedAt ?? this.discardedAt,
   );
 }
 
@@ -403,6 +502,13 @@ class LotDeduction {
   final double quantityBase;
 }
 
+class PreparedDeduction {
+  const PreparedDeduction({required this.batchId, required this.servings});
+
+  final String batchId;
+  final double servings;
+}
+
 class ConsumptionEvent {
   const ConsumptionEvent({
     required this.id,
@@ -415,6 +521,7 @@ class ConsumptionEvent {
     this.nutrition,
     this.nutritionEstimated = false,
     this.note = '',
+    this.preparedDeductions = const [],
   });
 
   final String id;
@@ -427,6 +534,7 @@ class ConsumptionEvent {
   final NutritionTotals? nutrition;
   final bool nutritionEstimated;
   final String note;
+  final List<PreparedDeduction> preparedDeductions;
 
   ConsumptionEvent markUndone(DateTime at) => ConsumptionEvent(
     id: id,
@@ -439,6 +547,7 @@ class ConsumptionEvent {
     nutrition: nutrition,
     nutritionEstimated: nutritionEstimated,
     note: note,
+    preparedDeductions: preparedDeductions,
   );
 }
 

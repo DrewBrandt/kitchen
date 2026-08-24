@@ -385,6 +385,15 @@ Content-Type: application/json
     {"name": "Large plate", "servings": 1.5}
   ],
   "sourceUrl": "https://example.com/original-recipe",
+  "nutritionOverride": {
+    "calories": 600,
+    "proteinG": 8,
+    "carbsG": 90,
+    "fatG": 24,
+    "fiberG": 3,
+    "sugarG": 55,
+    "sodiumMg": 800
+  },
   "ingredients": [
     {"food": "Eggs", "amount": 2, "unit": "each"},
     {"food": "Butter", "amount": 0.5, "unit": "tablespoon"}
@@ -393,4 +402,22 @@ Content-Type: application/json
 }
 ```
 
+`nutritionOverride` is optional and represents the totals for the recipe's
+entire prepared yield. When present, recipe consumption scales these totals by
+the requested servings instead of adding ingredient nutrition. Inventory
+deduction still uses every ingredient. This is useful for packaged mixes whose
+label already includes the eggs, oil, or other preparation ingredients.
+
 When importing an online recipe, retain its source URL and paraphrase instructions unless the source explicitly permits redistribution.
+
+## Prepared food and combined meals
+
+Cooking is a two-stage workflow. `POST /v1/prepare/recipe` deducts ingredients
+and creates a prepared batch. `POST /v1/consume/prepared` logs nutrition and
+reduces that batch's remaining servings. Use `POST /v1/prepared-batches` for a
+manual leftover or ready-made item that should not retroactively deduct raw
+inventory.
+
+`POST /v1/meal-templates` stores a dinner as two or more component recipes, such
+as pork tenderloin, fried potatoes, and roasted carrots. Components remain
+separate prepared batches even when they are planned and eaten as one meal.

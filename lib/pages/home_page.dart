@@ -649,6 +649,8 @@ class _Dashboard extends StatelessWidget {
             },
           ),
           const SizedBox(height: 18),
+          _PreparedFoodSection(store: store),
+          const SizedBox(height: 18),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -758,6 +760,176 @@ class _Dashboard extends StatelessWidget {
   }
 }
 
+class _PreparedFoodSection extends StatelessWidget {
+  const _PreparedFoodSection({required this.store});
+
+  final PantryStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final batches = store.activePreparedBatches;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ready to eat',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        'Leftovers and prepared food are separate from raw inventory.',
+                        style: TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showAddPreparedFood(context, store),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add leftover'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (batches.isEmpty)
+              const _EmptyCard(
+                icon: Icons.ramen_dining_outlined,
+                text: 'Make a recipe or add a ready-made leftover.',
+              )
+            else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth >= 760
+                      ? (constraints.maxWidth - 12) / 2
+                      : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: batches
+                        .map(
+                          (batch) => SizedBox(
+                            width: width,
+                            child: _PreparedFoodCard(
+                              store: store,
+                              batch: batch,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreparedFoodCard extends StatelessWidget {
+  const _PreparedFoodCard({required this.store, required this.batch});
+
+  final PantryStore store;
+  final PreparedBatch batch;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _raised,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(batch.emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    batch.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${store.units.formatAmount(batch.remainingServings)} of ${store.units.formatAmount(batch.totalServings)} servings · ${batch.location.label}',
+                    style: const TextStyle(color: _muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'move') {
+                  store.updatePreparedBatch(
+                    batch,
+                    location: batch.location == StorageLocation.fridge
+                        ? StorageLocation.freezer
+                        : StorageLocation.fridge,
+                  );
+                } else if (value == 'adjust') {
+                  _showAdjustPreparedFood(context, store, batch);
+                } else if (value == 'discard') {
+                  store.updatePreparedBatch(batch, discard: true);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'move',
+                  child: Text(
+                    batch.location == StorageLocation.fridge
+                        ? 'Move to freezer'
+                        : 'Move to fridge',
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'adjust',
+                  child: Text('Adjust servings'),
+                ),
+                const PopupMenuItem(
+                  value: 'discard',
+                  child: Text('Discard remainder'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (batch.bestBy != null)
+              Expanded(
+                child: Text(
+                  'Best by ${_monthDay(batch.bestBy!)}',
+                  style: const TextStyle(color: _muted, fontSize: 12),
+                ),
+              )
+            else
+              const Spacer(),
+            FilledButton(
+              onPressed: () => _showEatPreparedFood(context, store, batch),
+              child: const Text('Eat'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 class _UpcomingPlanCard extends StatelessWidget {
   const _UpcomingPlanCard({
     required this.store,
@@ -849,8 +1021,9 @@ class _UpcomingPlanCard extends StatelessWidget {
                       minimumSize: const Size(0, 34),
                     ),
                     child: Text(
-                      meal!.source == PlannedMealSource.recipe
-                          ? 'Cook'
+                      meal!.source == PlannedMealSource.recipe ||
+                              meal!.source == PlannedMealSource.meal
+                          ? 'Eat'
                           : 'Done',
                     ),
                   ),
@@ -1162,14 +1335,27 @@ class _RecipesPage extends StatelessWidget {
       eyebrow: '${store.recipes.length} recipes · ${ready.length} cookable now',
       title: 'Recipes',
       subtitle: 'Start with what is ready, or see exactly what to pick up.',
-      action: FilledButton.icon(
-        onPressed: () => showRecipeEditor(context, store),
-        icon: const Icon(Icons.add),
-        label: const Text('New recipe'),
+      action: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => _showMealTemplateEditor(context, store),
+            icon: const Icon(Icons.dinner_dining_outlined),
+            label: const Text('New combined meal'),
+          ),
+          FilledButton.icon(
+            onPressed: () => showRecipeEditor(context, store),
+            icon: const Icon(Icons.add),
+            label: const Text('New recipe'),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _MealTemplateSection(store: store),
+          const SizedBox(height: 28),
           _RecipeSection(
             title: 'Ready to cook',
             subtitle: 'Every tracked ingredient is in stock.',
@@ -1199,6 +1385,118 @@ class _RecipesPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MealTemplateSection extends StatelessWidget {
+  const _MealTemplateSection({required this.store});
+
+  final PantryStore store;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        'Combined meals',
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        'A dinner can combine independently prepared mains and sides.',
+        style: TextStyle(color: _muted),
+      ),
+      const SizedBox(height: 12),
+      if (store.mealTemplates.isEmpty)
+        const _EmptyCard(
+          icon: Icons.dinner_dining_outlined,
+          text: 'Create a combined meal from two or more component recipes.',
+        )
+      else
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: store.mealTemplates.map((meal) {
+            final labels = meal.components
+                .map((component) {
+                  final recipe = store.recipes.firstWhere(
+                    (item) => item.id == component.recipeId,
+                  );
+                  return '${recipe.name} (${store.units.formatAmount(component.servings)})';
+                })
+                .join(' + ');
+            return SizedBox(
+              width: 430,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            meal.emoji,
+                            style: const TextStyle(fontSize: 30),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              meal.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Edit combined meal',
+                            onPressed: () => _showMealTemplateEditor(
+                              context,
+                              store,
+                              existing: meal,
+                            ),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(labels, style: const TextStyle(color: _muted)),
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            try {
+                              store.consumeMealTemplate(meal);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '${meal.name} logged from prepared portions.',
+                                  ),
+                                ),
+                              );
+                            } on StateError catch (error) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(error.message.toString()),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.restaurant_outlined),
+                          label: const Text('Eat prepared meal'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+    ],
+  );
 }
 
 class _RecipeSection extends StatelessWidget {
@@ -1418,7 +1716,7 @@ class _RecipeCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: () => _showCookRecipe(context, store, recipe),
                 icon: const Icon(Icons.soup_kitchen),
-                label: const Text('Make / log'),
+                label: const Text('Make batch'),
               ),
             ),
           ],
@@ -2000,16 +2298,18 @@ class _PlannedMealTile extends StatelessWidget {
             ),
             icon: Icon(
               meal.completedAt == null
-                  ? meal.source == PlannedMealSource.recipe
-                        ? Icons.soup_kitchen_outlined
+                  ? meal.source == PlannedMealSource.recipe ||
+                            meal.source == PlannedMealSource.meal
+                        ? Icons.restaurant_outlined
                         : Icons.check_circle_outline
                   : Icons.undo,
               size: 14,
             ),
             label: Text(
               meal.completedAt == null
-                  ? meal.source == PlannedMealSource.recipe
-                        ? 'Cook'
+                  ? meal.source == PlannedMealSource.recipe ||
+                            meal.source == PlannedMealSource.meal
+                        ? 'Eat prepared'
                         : 'Complete'
                   : 'Reopen',
               style: const TextStyle(fontSize: 10),
@@ -4466,7 +4766,33 @@ void _completePlannedMeal(
       );
       return;
     }
-    if (!_cook(context, store, store.recipes[index], servings: meal.servings)) {
+    try {
+      store.consumePreparedRecipe(store.recipes[index], meal.servings);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+      return;
+    }
+  } else if (meal.source == PlannedMealSource.meal) {
+    final index = store.mealTemplates.indexWhere(
+      (template) => template.id == meal.sourceId,
+    );
+    if (index < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That combined meal no longer exists.')),
+      );
+      return;
+    }
+    try {
+      store.consumeMealTemplate(
+        store.mealTemplates[index],
+        servings: meal.servings,
+      );
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
       return;
     }
   }
@@ -4485,6 +4811,9 @@ Future<void> _showPlannedMealEditor(
       : PlannedMealSource.custom;
   var slot = MealSlot.dinner;
   Recipe? recipe = store.recipes.isEmpty ? null : store.recipes.first;
+  MealTemplate? mealTemplate = store.mealTemplates.isEmpty
+      ? null
+      : store.mealTemplates.first;
   ExternalFood? external = store.externalFoods.isEmpty
       ? null
       : store.externalFoods.first;
@@ -4535,6 +4864,10 @@ Future<void> _showPlannedMealEditor(
                             child: Text('Recipe'),
                           ),
                           DropdownMenuItem(
+                            value: PlannedMealSource.meal,
+                            child: Text('Combined meal'),
+                          ),
+                          DropdownMenuItem(
                             value: PlannedMealSource.external,
                             child: Text('Eating out'),
                           ),
@@ -4564,6 +4897,27 @@ Future<void> _showPlannedMealEditor(
                         .toList(),
                     onChanged: (value) => setDialogState(() {
                       recipe = value;
+                      if (value != null) {
+                        servings.text = _compactNumber(value.servings);
+                      }
+                    }),
+                  )
+                else if (source == PlannedMealSource.meal)
+                  DropdownButtonFormField<MealTemplate>(
+                    initialValue: mealTemplate,
+                    decoration: const InputDecoration(
+                      labelText: 'Combined meal',
+                    ),
+                    items: store.mealTemplates
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('${value.emoji}  ${value.name}'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setDialogState(() {
+                      mealTemplate = value;
                       if (value != null) {
                         servings.text = _compactNumber(value.servings);
                       }
@@ -4648,6 +5002,7 @@ Future<void> _showPlannedMealEditor(
               final servingCount = double.tryParse(servings.text);
               final invalidSource =
                   (source == PlannedMealSource.recipe && recipe == null) ||
+                  (source == PlannedMealSource.meal && mealTemplate == null) ||
                   (source == PlannedMealSource.external && external == null) ||
                   (source == PlannedMealSource.custom &&
                       name.text.trim().isEmpty);
@@ -4669,17 +5024,20 @@ Future<void> _showPlannedMealEditor(
     final servingCount = double.parse(servings.text);
     final plannedName = switch (source) {
       PlannedMealSource.recipe => recipe!.name,
+      PlannedMealSource.meal => mealTemplate!.name,
       PlannedMealSource.external => external!.name,
       PlannedMealSource.custom => name.text.trim(),
     };
     final plannedEmoji = switch (source) {
       PlannedMealSource.recipe => recipe!.emoji,
+      PlannedMealSource.meal => mealTemplate!.emoji,
       PlannedMealSource.external => external!.emoji,
       PlannedMealSource.custom =>
         emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
     };
     final sourceId = switch (source) {
       PlannedMealSource.recipe => recipe!.id,
+      PlannedMealSource.meal => mealTemplate!.id,
       PlannedMealSource.external => external!.id,
       PlannedMealSource.custom => null,
     };
@@ -4951,6 +5309,431 @@ Future<void> _showConsume(
   }
 }
 
+Future<void> _showAddPreparedFood(
+  BuildContext context,
+  PantryStore store,
+) async {
+  final name = TextEditingController();
+  final servings = TextEditingController(text: '1');
+  var location = StorageLocation.fridge;
+  ExternalFood? savedFood;
+  var useSavedFood = false;
+  String? error;
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Add prepared food'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (store.externalFoods.isNotEmpty)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Use a saved outside food'),
+                  subtitle: const Text('Copies its serving nutrition.'),
+                  value: useSavedFood,
+                  onChanged: (value) => setDialogState(() {
+                    useSavedFood = value;
+                    savedFood ??= store.externalFoods.first;
+                  }),
+                ),
+              if (useSavedFood)
+                DropdownButtonFormField<ExternalFood>(
+                  initialValue: savedFood,
+                  decoration: const InputDecoration(labelText: 'Saved food'),
+                  items: store.externalFoods
+                      .map(
+                        (food) => DropdownMenuItem(
+                          value: food,
+                          child: Text('${food.brand} · ${food.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => savedFood = value),
+                )
+              else
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'Orange chicken',
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: servings,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Servings remaining',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<StorageLocation>(
+                      initialValue: location,
+                      decoration: const InputDecoration(labelText: 'Stored in'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: StorageLocation.fridge,
+                          child: Text('Fridge'),
+                        ),
+                        DropdownMenuItem(
+                          value: StorageLocation.freezer,
+                          child: Text('Freezer'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => location = value!),
+                    ),
+                  ),
+                ],
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final count = double.tryParse(servings.text.trim());
+              if (count == null ||
+                  count <= 0 ||
+                  (useSavedFood
+                      ? savedFood == null
+                      : name.text.trim().isEmpty)) {
+                setDialogState(
+                  () => error = 'Enter a food and positive serving count.',
+                );
+                return;
+              }
+              Navigator.pop(context, true);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (submitted == true) {
+    final food = useSavedFood ? savedFood : null;
+    store.addPreparedBatch(
+      name: food?.name ?? name.text.trim(),
+      servings: double.parse(servings.text.trim()),
+      emoji: food?.emoji ?? '🍽️',
+      source: food == null ? PreparedSource.manual : PreparedSource.external,
+      sourceId: food?.id,
+      location: location,
+      nutritionPerServing: food?.nutrition,
+      note: food == null
+          ? 'Manually added leftover'
+          : '${food.brand} · ${food.servingLabel}',
+    );
+  }
+  name.dispose();
+  servings.dispose();
+}
+
+Future<void> _showEatPreparedFood(
+  BuildContext context,
+  PantryStore store,
+  PreparedBatch batch,
+) async {
+  final servings = TextEditingController(text: '1');
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Eat ${batch.name}'),
+      content: SizedBox(
+        width: 380,
+        child: TextField(
+          controller: servings,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Servings',
+            helperText:
+                '${store.units.formatAmount(batch.remainingServings)} remaining',
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Log and subtract'),
+        ),
+      ],
+    ),
+  );
+  if (submitted == true && context.mounted) {
+    final amount = double.tryParse(servings.text.trim());
+    try {
+      if (amount == null) throw ArgumentError('Enter a number');
+      final event = store.consumePreparedBatch(batch, amount);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${batch.name} logged. ${store.units.formatAmount(batch.remainingServings - amount)} servings remain.',
+          ),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => store.undo(event.id),
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+  servings.dispose();
+}
+
+Future<void> _showAdjustPreparedFood(
+  BuildContext context,
+  PantryStore store,
+  PreparedBatch batch,
+) async {
+  final servings = TextEditingController(
+    text: store.units.formatAmount(batch.remainingServings),
+  );
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Adjust ${batch.name}'),
+      content: TextField(
+        controller: servings,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: 'Servings remaining',
+          helperText:
+              'Maximum ${store.units.formatAmount(batch.totalServings)}',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (submitted == true) {
+    final amount = double.tryParse(servings.text.trim());
+    if (amount != null) {
+      store.updatePreparedBatch(batch, remainingServings: amount);
+    }
+  }
+  servings.dispose();
+}
+
+Future<void> _showMealTemplateEditor(
+  BuildContext context,
+  PantryStore store, {
+  MealTemplate? existing,
+}) async {
+  final name = TextEditingController(text: existing?.name ?? '');
+  final emoji = TextEditingController(text: existing?.emoji ?? '🍽️');
+  final servings = TextEditingController(
+    text: _compactNumber(existing?.servings ?? 1),
+  );
+  final selected = <String, TextEditingController>{
+    for (final component in existing?.components ?? const <MealComponent>[])
+      component.recipeId: TextEditingController(
+        text: _compactNumber(component.servings),
+      ),
+  };
+  String? error;
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text(
+          existing == null ? 'New combined meal' : 'Edit combined meal',
+        ),
+        content: SizedBox(
+          width: 540,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: TextField(
+                        controller: emoji,
+                        decoration: const InputDecoration(labelText: 'Emoji'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: name,
+                        decoration: const InputDecoration(
+                          labelText: 'Meal name',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: servings,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Meal servings',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Component recipes and servings',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...store.recipes.map((recipe) {
+                  final checked = selected.containsKey(recipe.id);
+                  return CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${recipe.emoji}  ${recipe.name}'),
+                    value: checked,
+                    onChanged: (value) => setDialogState(() {
+                      if (value == true) {
+                        selected[recipe.id] = TextEditingController(text: '1');
+                      } else {
+                        selected.remove(recipe.id)?.dispose();
+                      }
+                    }),
+                    secondary: checked
+                        ? SizedBox(
+                            width: 90,
+                            child: TextField(
+                              controller: selected[recipe.id],
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: const InputDecoration(
+                                labelText: 'Servings',
+                              ),
+                            ),
+                          )
+                        : null,
+                  );
+                }),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (existing != null)
+            TextButton(
+              onPressed: () {
+                store.deleteMealTemplate(existing.id);
+                Navigator.pop(context, false);
+              },
+              child: const Text('Delete'),
+            ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final yieldCount = double.tryParse(servings.text.trim());
+              final validComponents = selected.entries.every(
+                (entry) => (double.tryParse(entry.value.text.trim()) ?? 0) > 0,
+              );
+              if (name.text.trim().isEmpty ||
+                  yieldCount == null ||
+                  yieldCount <= 0 ||
+                  selected.length < 2 ||
+                  !validComponents) {
+                setDialogState(
+                  () => error =
+                      'Enter a name and choose at least two components with positive servings.',
+                );
+                return;
+              }
+              Navigator.pop(context, true);
+            },
+            child: const Text('Save meal'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (submitted == true) {
+    store.saveMealTemplate(
+      MealTemplate(
+        id: existing?.id ?? store.nextId(name.text.trim()),
+        name: name.text.trim(),
+        servings: double.parse(servings.text.trim()),
+        components: selected.entries
+            .map(
+              (entry) => MealComponent(
+                recipeId: entry.key,
+                servings: double.parse(entry.value.text.trim()),
+              ),
+            )
+            .toList(),
+        emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
+      ),
+    );
+  }
+  name.dispose();
+  emoji.dispose();
+  servings.dispose();
+  for (final controller in selected.values) {
+    controller.dispose();
+  }
+}
+
 Future<void> _showCookRecipe(
   BuildContext context,
   PantryStore store,
@@ -4959,61 +5742,19 @@ Future<void> _showCookRecipe(
   final request = await showRecipePortionDialog(context, store, recipe);
   if (request == null || !context.mounted) return;
   try {
-    final events = store.cookPortions(
+    final batch = store.prepareRecipe(
       recipe,
-      servingsPerPortion: request.servingsPerPortion,
-      count: request.count,
-      portionName: request.portionName,
+      servings: request.servingsPerPortion * request.count,
     );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${events.length} ${events.length == 1 ? 'entry' : 'separate entries'} logged from the recipe and deducted from inventory.',
+          '${store.units.formatAmount(batch.totalServings)} servings of ${recipe.name} are ready in the fridge.',
         ),
-        action: events.length == 1
-            ? SnackBarAction(
-                label: 'Undo',
-                onPressed: () => store.undo(events.single.id),
-              )
-            : null,
       ),
     );
   } on InsufficientInventoryException catch (exception) {
     _showMissingInventory(context, store, exception.missing);
-  }
-}
-
-bool _cook(
-  BuildContext context,
-  PantryStore store,
-  Recipe recipe, {
-  double? servings,
-}) {
-  // Revalidate at tap time. The button may still be visible for a frame after
-  // another cook has changed inventory (for example, during a double-click).
-  final missing = store.missingFor(recipe, servings: servings);
-  if (missing.isNotEmpty) {
-    _showMissingInventory(context, store, missing);
-    return false;
-  }
-
-  try {
-    final event = store.cook(recipe, servings: servings);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${recipe.name} deducted from inventory.'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => store.undo(event.id),
-        ),
-      ),
-    );
-    return true;
-  } on InsufficientInventoryException catch (exception) {
-    // The store remains the final authority if inventory changes between the
-    // preflight check and its atomic deduction plan.
-    _showMissingInventory(context, store, exception.missing);
-    return false;
   }
 }
 

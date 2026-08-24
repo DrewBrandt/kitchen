@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/pantry_models.dart';
@@ -7,6 +9,8 @@ class CloudPantryData {
     required this.foods,
     required this.lots,
     required this.recipes,
+    required this.mealTemplates,
+    required this.preparedBatches,
     required this.history,
     required this.nutritionTargets,
     required this.foodPreferences,
@@ -18,6 +22,8 @@ class CloudPantryData {
   final List<FoodDefinition> foods;
   final List<InventoryLot> lots;
   final List<Recipe> recipes;
+  final List<MealTemplate> mealTemplates;
+  final List<PreparedBatch> preparedBatches;
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
   final FoodPreferences foodPreferences;
@@ -29,6 +35,8 @@ class CloudPantryData {
       foods.isEmpty &&
       lots.isEmpty &&
       recipes.isEmpty &&
+      mealTemplates.isEmpty &&
+      preparedBatches.isEmpty &&
       externalFoods.isEmpty &&
       plannedMeals.isEmpty;
 }
@@ -37,6 +45,136 @@ class FirestorePantry {
   FirestorePantry(this.db);
 
   final FirebaseFirestore db;
+
+  /// Watches every collection that contributes to the in-memory pantry.
+  ///
+  /// The UI used to call [load] once at sign-in, which meant writes made by
+  /// Cloud Functions or the Pantry API were invisible until the app was
+  /// manually reloaded. Keeping the snapshots together here gives the store a
+  /// single source of truth while still allowing each Firestore collection to
+  /// update independently.
+  Stream<CloudPantryData> watch() {
+    late final StreamController<CloudPantryData> controller;
+    final subscriptions = <StreamSubscription<dynamic>>[];
+
+    QuerySnapshot<Map<String, dynamic>>? foods;
+    QuerySnapshot<Map<String, dynamic>>? lots;
+    QuerySnapshot<Map<String, dynamic>>? recipes;
+    QuerySnapshot<Map<String, dynamic>>? history;
+    QuerySnapshot<Map<String, dynamic>>? externalFoods;
+    QuerySnapshot<Map<String, dynamic>>? plannedMeals;
+    QuerySnapshot<Map<String, dynamic>>? groceryItems;
+    QuerySnapshot<Map<String, dynamic>>? mealTemplates;
+    QuerySnapshot<Map<String, dynamic>>? preparedBatches;
+    DocumentSnapshot<Map<String, dynamic>>? targets;
+    DocumentSnapshot<Map<String, dynamic>>? profile;
+
+    void emitIfReady() {
+      if (foods == null ||
+          lots == null ||
+          recipes == null ||
+          history == null ||
+          externalFoods == null ||
+          plannedMeals == null ||
+          groceryItems == null ||
+          mealTemplates == null ||
+          preparedBatches == null ||
+          targets == null ||
+          profile == null) {
+        return;
+      }
+      controller.add(
+        CloudPantryData(
+          foods: foods!.docs.map(_foodFromDoc).toList(),
+          lots: lots!.docs.map(_lotFromDoc).toList(),
+          recipes: recipes!.docs.map(_recipeFromDoc).toList(),
+          mealTemplates: mealTemplates!.docs.map(_mealTemplateFromDoc).toList(),
+          preparedBatches: preparedBatches!.docs
+              .map(_preparedBatchFromDoc)
+              .toList(),
+          history: history!.docs.map(_eventFromDoc).toList(),
+          nutritionTargets: targets!.exists
+              ? _nutritionTargetsFromData(targets!.data()!)
+              : NutritionTargets.defaults,
+          foodPreferences: profile!.exists
+              ? _foodPreferencesFromData(profile!.data()!)
+              : FoodPreferences.empty,
+          externalFoods: externalFoods!.docs.map(_externalFoodFromDoc).toList(),
+          plannedMeals: plannedMeals!.docs.map(_plannedMealFromDoc).toList(),
+          groceryItems: groceryItems!.docs.map(_groceryItemFromDoc).toList(),
+        ),
+      );
+    }
+
+    void reportError(Object error, StackTrace stackTrace) {
+      controller.addError(error, stackTrace);
+    }
+
+    void start() {
+      subscriptions.addAll([
+        db.collection('foods').snapshots().listen((value) {
+          foods = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('inventory_lots').snapshots().listen((value) {
+          lots = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('recipes').snapshots().listen((value) {
+          recipes = value;
+          emitIfReady();
+        }, onError: reportError),
+        db
+            .collection('consumption_history')
+            .orderBy('timestamp')
+            .snapshots()
+            .listen((value) {
+              history = value;
+              emitIfReady();
+            }, onError: reportError),
+        db.collection('external_foods').snapshots().listen((value) {
+          externalFoods = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('meal_plan').snapshots().listen((value) {
+          plannedMeals = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('grocery_list').snapshots().listen((value) {
+          groceryItems = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('meal_templates').snapshots().listen((value) {
+          mealTemplates = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('prepared_batches').snapshots().listen((value) {
+          preparedBatches = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('settings').doc('nutrition').snapshots().listen((value) {
+          targets = value;
+          emitIfReady();
+        }, onError: reportError),
+        db.collection('settings').doc('food_profile').snapshots().listen((
+          value,
+        ) {
+          profile = value;
+          emitIfReady();
+        }, onError: reportError),
+      ]);
+    }
+
+    controller = StreamController<CloudPantryData>(
+      onListen: start,
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
 
   Future<CloudPantryData> load() async {
     final results = await Future.wait([
@@ -47,6 +185,8 @@ class FirestorePantry {
       db.collection('external_foods').get(),
       db.collection('meal_plan').get(),
       db.collection('grocery_list').get(),
+      db.collection('meal_templates').get(),
+      db.collection('prepared_batches').get(),
     ]);
     final settings = await Future.wait([
       db.collection('settings').doc('nutrition').get(),
@@ -58,6 +198,8 @@ class FirestorePantry {
       foods: results[0].docs.map(_foodFromDoc).toList(),
       lots: results[1].docs.map(_lotFromDoc).toList(),
       recipes: results[2].docs.map(_recipeFromDoc).toList(),
+      mealTemplates: results[7].docs.map(_mealTemplateFromDoc).toList(),
+      preparedBatches: results[8].docs.map(_preparedBatchFromDoc).toList(),
       history: results[3].docs.map(_eventFromDoc).toList(),
       nutritionTargets: targets.exists
           ? _nutritionTargetsFromData(targets.data()!)
@@ -81,6 +223,18 @@ class FirestorePantry {
     }
     for (final recipe in data.recipes) {
       batch.set(db.collection('recipes').doc(recipe.id), _recipeData(recipe));
+    }
+    for (final meal in data.mealTemplates) {
+      batch.set(
+        db.collection('meal_templates').doc(meal.id),
+        _mealTemplateData(meal),
+      );
+    }
+    for (final prepared in data.preparedBatches) {
+      batch.set(
+        db.collection('prepared_batches').doc(prepared.id),
+        _preparedBatchData(prepared),
+      );
     }
     for (final food in data.externalFoods) {
       batch.set(
@@ -124,6 +278,70 @@ class FirestorePantry {
 
   Future<void> deleteRecipe(String id) =>
       db.collection('recipes').doc(id).delete();
+
+  Future<void> saveMealTemplate(MealTemplate meal) =>
+      db.collection('meal_templates').doc(meal.id).set(_mealTemplateData(meal));
+
+  Future<void> deleteMealTemplate(String id) =>
+      db.collection('meal_templates').doc(id).delete();
+
+  Future<void> savePreparedBatch(PreparedBatch prepared) => db
+      .collection('prepared_batches')
+      .doc(prepared.id)
+      .set(_preparedBatchData(prepared));
+
+  Future<void> savePreparation(
+    PreparedBatch prepared,
+    Iterable<InventoryLot> updatedLots,
+  ) async {
+    final batch = db.batch();
+    for (final lot in updatedLots) {
+      batch.update(db.collection('inventory_lots').doc(lot.id), {
+        'quantity_base': lot.quantityBase,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+    }
+    batch.set(
+      db.collection('prepared_batches').doc(prepared.id),
+      _preparedBatchData(prepared),
+    );
+    await batch.commit();
+  }
+
+  Future<void> savePreparedConsumption(
+    ConsumptionEvent event,
+    Iterable<PreparedBatch> updatedBatches,
+  ) async {
+    final batch = db.batch();
+    for (final prepared in updatedBatches) {
+      batch.set(
+        db.collection('prepared_batches').doc(prepared.id),
+        _preparedBatchData(prepared),
+      );
+    }
+    batch.set(
+      db.collection('consumption_history').doc(event.id),
+      _eventData(event),
+    );
+    await batch.commit();
+  }
+
+  Future<void> savePreparedUndo(
+    ConsumptionEvent event,
+    Iterable<PreparedBatch> restoredBatches,
+  ) async {
+    final batch = db.batch();
+    for (final prepared in restoredBatches) {
+      batch.set(
+        db.collection('prepared_batches').doc(prepared.id),
+        _preparedBatchData(prepared),
+      );
+    }
+    batch.update(db.collection('consumption_history').doc(event.id), {
+      'undone_at': Timestamp.fromDate(event.undoneAt!),
+    });
+    await batch.commit();
+  }
 
   Future<void> saveNutritionTargets(NutritionTargets targets) => db
       .collection('settings')
@@ -278,9 +496,62 @@ class FirestorePantry {
         )
         .toList(),
     'instructions': recipe.instructions,
+    'nutrition_override': recipe.nutritionOverride == null
+        ? null
+        : _nutritionTotalsData(recipe.nutritionOverride!),
     'portions': recipe.portions
         .map((portion) => {'name': portion.name, 'servings': portion.servings})
         .toList(),
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  Map<String, Object?> _mealTemplateData(MealTemplate meal) => {
+    'name': meal.name,
+    'emoji': meal.emoji,
+    'servings': meal.servings,
+    'components': meal.components
+        .map(
+          (component) => {
+            'recipe_id': component.recipeId,
+            'servings': component.servings,
+          },
+        )
+        .toList(),
+    'notes': meal.notes,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  Map<String, Object?> _preparedBatchData(PreparedBatch prepared) => {
+    'name': prepared.name,
+    'emoji': prepared.emoji,
+    'source': prepared.source.name,
+    'source_id': prepared.sourceId,
+    'total_servings': prepared.totalServings,
+    'remaining_servings': prepared.remainingServings,
+    'made_at': Timestamp.fromDate(prepared.madeAt),
+    'location': prepared.location.name,
+    'best_by': prepared.bestBy == null
+        ? null
+        : Timestamp.fromDate(prepared.bestBy!),
+    'nutrition_per_serving': prepared.nutritionPerServing == null
+        ? null
+        : _nutritionTotalsData(prepared.nutritionPerServing!),
+    'portions': prepared.portions
+        .map((portion) => {'name': portion.name, 'servings': portion.servings})
+        .toList(),
+    'ingredient_deductions': prepared.ingredientDeductions
+        .map(
+          (item) => {
+            'lot_id': item.lotId,
+            'food_id': item.foodId,
+            'quantity_base': item.quantityBase,
+          },
+        )
+        .toList(),
+    'note': prepared.note,
+    'discarded_at': prepared.discardedAt == null
+        ? null
+        : Timestamp.fromDate(prepared.discardedAt!),
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -297,6 +568,9 @@ class FirestorePantry {
             'quantity_base': item.quantityBase,
           },
         )
+        .toList(),
+    'prepared_deductions': event.preparedDeductions
+        .map((item) => {'batch_id': item.batchId, 'servings': item.servings})
         .toList(),
     'undone_at': event.undoneAt == null
         ? null
@@ -515,6 +789,8 @@ class FirestorePantry {
 
   Recipe _recipeFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
+    final nutritionOverrideData =
+        data['nutrition_override'] as Map<String, dynamic>?;
     return Recipe(
       id: doc.id,
       name: data['name'] as String,
@@ -531,6 +807,9 @@ class FirestorePantry {
       instructions: List<String>.from(
         data['instructions'] as List<dynamic>? ?? const [],
       ),
+      nutritionOverride: nutritionOverrideData == null
+          ? null
+          : _nutritionTotalsFromData(nutritionOverrideData),
       portions: (data['portions'] as List<dynamic>? ?? const []).map((value) {
         final portion = value as Map<String, dynamic>;
         return RecipePortion(
@@ -541,12 +820,82 @@ class FirestorePantry {
     );
   }
 
+  MealTemplate _mealTemplateFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return MealTemplate(
+      id: doc.id,
+      name: data['name'] as String,
+      emoji: data['emoji'] as String? ?? '🍽️',
+      servings: (data['servings'] as num? ?? 1).toDouble(),
+      components: (data['components'] as List<dynamic>? ?? const []).map((
+        value,
+      ) {
+        final component = value as Map<String, dynamic>;
+        return MealComponent(
+          recipeId: component['recipe_id'] as String,
+          servings: (component['servings'] as num).toDouble(),
+        );
+      }).toList(),
+      notes: data['notes'] as String? ?? '',
+    );
+  }
+
+  PreparedBatch _preparedBatchFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final nutrition = data['nutrition_per_serving'] as Map<String, dynamic>?;
+    return PreparedBatch(
+      id: doc.id,
+      name: data['name'] as String,
+      emoji: data['emoji'] as String? ?? '🍽️',
+      source: PreparedSource.values.byName(
+        data['source'] as String? ?? PreparedSource.manual.name,
+      ),
+      sourceId: data['source_id'] as String?,
+      totalServings: (data['total_servings'] as num? ?? 1).toDouble(),
+      remainingServings: (data['remaining_servings'] as num? ?? 0).toDouble(),
+      madeAt: (data['made_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      location: StorageLocation.values.byName(
+        data['location'] as String? ?? StorageLocation.fridge.name,
+      ),
+      bestBy: (data['best_by'] as Timestamp?)?.toDate(),
+      nutritionPerServing: nutrition == null
+          ? null
+          : _nutritionTotalsFromData(nutrition),
+      portions: (data['portions'] as List<dynamic>? ?? const []).map((value) {
+        final portion = value as Map<String, dynamic>;
+        return RecipePortion(
+          name: portion['name'] as String,
+          servings: (portion['servings'] as num).toDouble(),
+        );
+      }).toList(),
+      ingredientDeductions:
+          (data['ingredient_deductions'] as List<dynamic>? ?? const []).map((
+            value,
+          ) {
+            final item = value as Map<String, dynamic>;
+            return LotDeduction(
+              lotId: item['lot_id'] as String,
+              foodId: item['food_id'] as String,
+              quantityBase: (item['quantity_base'] as num).toDouble(),
+            );
+          }).toList(),
+      note: data['note'] as String? ?? '',
+      discardedAt: (data['discarded_at'] as Timestamp?)?.toDate(),
+    );
+  }
+
   ConsumptionEvent _eventFromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final data = doc.data();
     final nutritionData = data['nutrition'] as Map<String, dynamic>?;
-    final deductions = (data['deductions'] as List<dynamic>).map((value) {
+    final deductions = (data['deductions'] as List<dynamic>? ?? const []).map((
+      value,
+    ) {
       final item = value as Map<String, dynamic>;
       return LotDeduction(
         lotId: item['lot_id'] as String,
@@ -554,6 +903,16 @@ class FirestorePantry {
         quantityBase: (item['quantity_base'] as num).toDouble(),
       );
     }).toList();
+    final preparedDeductions =
+        (data['prepared_deductions'] as List<dynamic>? ?? const []).map((
+          value,
+        ) {
+          final item = value as Map<String, dynamic>;
+          return PreparedDeduction(
+            batchId: item['batch_id'] as String,
+            servings: (item['servings'] as num).toDouble(),
+          );
+        }).toList();
     final recipeId = data['recipe_id'] as String?;
     final kindName = data['kind'] as String?;
     return ConsumptionEvent(
@@ -573,6 +932,7 @@ class FirestorePantry {
           : _nutritionTotalsFromData(nutritionData),
       nutritionEstimated: data['nutrition_estimated'] as bool? ?? false,
       note: data['note'] as String? ?? '',
+      preparedDeductions: preparedDeductions,
     );
   }
 }

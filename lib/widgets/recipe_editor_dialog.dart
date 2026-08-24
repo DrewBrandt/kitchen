@@ -39,6 +39,8 @@ class _RecipeEditorDialog extends StatefulWidget {
 }
 
 class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
+  String _nutritionValue(double value) => value == 0 ? '' : value.toString();
+
   late final name = TextEditingController(text: widget.existing?.name ?? '');
   late final emoji = TextEditingController(
     text: widget.existing?.emoji ?? '🍽️',
@@ -53,6 +55,28 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     text: widget.existing?.portions
         .map((portion) => '${portion.name} = ${portion.servings}')
         .join('\n'),
+  );
+  late bool overrideNutrition = widget.existing?.nutritionOverride != null;
+  late final calories = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.calories ?? 0),
+  );
+  late final protein = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.proteinG ?? 0),
+  );
+  late final carbs = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.carbsG ?? 0),
+  );
+  late final fat = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.fatG ?? 0),
+  );
+  late final fiber = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.fiberG ?? 0),
+  );
+  late final sugar = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.sugarG ?? 0),
+  );
+  late final sodium = TextEditingController(
+    text: _nutritionValue(widget.existing?.nutritionOverride?.sodiumMg ?? 0),
   );
   late final List<_IngredientDraft> ingredients = widget.existing == null
       ? [_newIngredient()]
@@ -83,6 +107,17 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     servings.dispose();
     instructions.dispose();
     portions.dispose();
+    for (final controller in [
+      calories,
+      protein,
+      carbs,
+      fat,
+      fiber,
+      sugar,
+      sodium,
+    ]) {
+      controller.dispose();
+    }
     for (final ingredient in ingredients) {
       ingredient.dispose();
     }
@@ -148,6 +183,37 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
                 label: const Text('Add ingredient'),
               ),
             ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Override calculated nutrition'),
+              subtitle: const Text(
+                'Use prepared-recipe totals instead of adding ingredient nutrition.',
+              ),
+              value: overrideNutrition,
+              onChanged: (value) => setState(() => overrideNutrition = value),
+            ),
+            if (overrideNutrition) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Totals for the whole recipe',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _nutritionField('Calories', calories, 'cal'),
+                  _nutritionField('Protein', protein, 'g'),
+                  _nutritionField('Carbs', carbs, 'g'),
+                  _nutritionField('Fat', fat, 'g'),
+                  _nutritionField('Fiber', fiber, 'g'),
+                  _nutritionField('Sugar', sugar, 'g'),
+                  _nutritionField('Sodium', sodium, 'mg'),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             TextField(
               controller: portions,
@@ -256,8 +322,51 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     );
   }
 
+  Widget _nutritionField(
+    String label,
+    TextEditingController controller,
+    String suffix,
+  ) => SizedBox(
+    width: 150,
+    child: TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(labelText: label, suffixText: suffix),
+    ),
+  );
+
   void _save() {
     final servingCount = double.tryParse(servings.text);
+    NutritionTotals? nutritionOverride;
+    if (overrideNutrition) {
+      final values = [calories, protein, carbs, fat, fiber, sugar, sodium].map((
+        controller,
+      ) {
+        final text = controller.text.trim();
+        return text.isEmpty ? 0.0 : double.tryParse(text);
+      }).toList();
+      if (values.any(
+        (value) => value == null || !value.isFinite || value < 0,
+      )) {
+        setState(
+          () => error = 'Nutrition values must be non-negative numbers.',
+        );
+        return;
+      }
+      if (values.every((value) => value == 0)) {
+        setState(() => error = 'Enter at least one prepared nutrition value.');
+        return;
+      }
+      nutritionOverride = NutritionTotals(
+        calories: values[0]!,
+        proteinG: values[1]!,
+        carbsG: values[2]!,
+        fatG: values[3]!,
+        fiberG: values[4]!,
+        sugarG: values[5]!,
+        sodiumMg: values[6]!,
+      );
+    }
     final parsedIngredients = <RecipeIngredient>[];
     final parsedPortions = <RecipePortion>[];
     for (final line in portions.text.split(RegExp(r'\r?\n'))) {
@@ -313,6 +422,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
             .toList(),
         portions: parsedPortions,
         emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
+        nutritionOverride: nutritionOverride,
       ),
     );
   }

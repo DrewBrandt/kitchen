@@ -17,6 +17,8 @@ class PantryStore extends ChangeNotifier {
     _foods = {for (final food in foods) food.id: food};
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
+    _mealTemplates = [];
+    _preparedBatches = [];
     _nutritionTargets = NutritionTargets.defaults;
     _foodPreferences = FoodPreferences.empty;
     _externalFoods = [];
@@ -33,12 +35,15 @@ class PantryStore extends ChangeNotifier {
     _foods = {for (final food in data.foods) food.id: food};
     _lots = data.lots;
     _recipes = data.recipes;
+    _mealTemplates = data.mealTemplates;
+    _preparedBatches = data.preparedBatches;
     _nutritionTargets = data.nutritionTargets;
     _foodPreferences = data.foodPreferences;
     _externalFoods = data.externalFoods;
     _plannedMeals = data.plannedMeals;
     _groceryItems = data.groceryItems;
     _history.addAll(data.history);
+    _startCloudSync();
   }
 
   static Future<PantryStore> loadCloud({
@@ -57,6 +62,8 @@ class PantryStore extends ChangeNotifier {
         foods: seeded.foods,
         lots: seeded.lots,
         recipes: seeded.recipes,
+        mealTemplates: seeded.mealTemplates,
+        preparedBatches: seeded.preparedBatches,
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
         foodPreferences: seeded.foodPreferences,
@@ -66,6 +73,7 @@ class PantryStore extends ChangeNotifier {
       ),
     );
     seeded._cloud = cloud;
+    seeded._startCloudSync();
     return seeded;
   }
 
@@ -76,6 +84,8 @@ class PantryStore extends ChangeNotifier {
   late final Map<String, FoodDefinition> _foods;
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
+  late List<MealTemplate> _mealTemplates;
+  late List<PreparedBatch> _preparedBatches;
   late NutritionTargets _nutritionTargets;
   late FoodPreferences _foodPreferences;
   late List<ExternalFood> _externalFoods;
@@ -85,10 +95,18 @@ class PantryStore extends ChangeNotifier {
   Future<void> _planningWrite = Future.value();
   int _pendingWrites = 0;
   Object? _syncError;
+  Object? _cloudWatchError;
+  StreamSubscription<CloudPantryData>? _cloudSubscription;
 
   List<FoodDefinition> get foods => List.unmodifiable(_foods.values);
   List<InventoryLot> get lots => List.unmodifiable(_lots);
   List<Recipe> get recipes => List.unmodifiable(_recipes);
+  List<MealTemplate> get mealTemplates => List.unmodifiable(_mealTemplates);
+  List<PreparedBatch> get preparedBatches => List.unmodifiable(
+    [..._preparedBatches]..sort((a, b) => b.madeAt.compareTo(a.madeAt)),
+  );
+  List<PreparedBatch> get activePreparedBatches =>
+      preparedBatches.where((batch) => batch.isActive).toList();
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
   FoodPreferences get foodPreferences => _foodPreferences;
@@ -102,7 +120,43 @@ class PantryStore extends ChangeNotifier {
   List<GroceryListItem> get groceryItems => List.unmodifiable(_groceryItems);
   DateTime get now => _now;
   bool get isSyncing => _pendingWrites > 0;
-  Object? get syncError => _syncError;
+  Object? get syncError => _syncError ?? _cloudWatchError;
+
+  void _startCloudSync() {
+    final cloud = _cloud;
+    if (cloud == null || _cloudSubscription != null) return;
+    _cloudSubscription = cloud.watch().listen(
+      (data) {
+        _foods
+          ..clear()
+          ..addEntries(data.foods.map((food) => MapEntry(food.id, food)));
+        _lots = data.lots;
+        _recipes = data.recipes;
+        _mealTemplates = data.mealTemplates;
+        _preparedBatches = data.preparedBatches;
+        _history
+          ..clear()
+          ..addAll(data.history);
+        _nutritionTargets = data.nutritionTargets;
+        _foodPreferences = data.foodPreferences;
+        _externalFoods = data.externalFoods;
+        _plannedMeals = data.plannedMeals;
+        _groceryItems = data.groceryItems;
+        _cloudWatchError = null;
+        notifyListeners();
+      },
+      onError: (Object error) {
+        _cloudWatchError = error;
+        notifyListeners();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_cloudSubscription?.cancel());
+    super.dispose();
+  }
 
   FoodDefinition food(String id) =>
       _foods[id] ?? (throw StateError('Unknown food $id'));
@@ -116,6 +170,8 @@ class PantryStore extends ChangeNotifier {
     var suffix = 2;
     while (_foods.containsKey(candidate) ||
         _recipes.any((item) => item.id == candidate) ||
+        _mealTemplates.any((item) => item.id == candidate) ||
+        _preparedBatches.any((item) => item.id == candidate) ||
         _externalFoods.any((item) => item.id == candidate)) {
       candidate = '$base-${suffix++}';
     }
@@ -137,6 +193,10 @@ class PantryStore extends ChangeNotifier {
 
   NutritionTotals? nutritionForRecipe(Recipe recipe, {double? servings}) {
     final servingCount = servings ?? recipe.servings;
+    final override = recipe.nutritionOverride;
+    if (override != null) {
+      return override.scale(servingCount / recipe.servings);
+    }
     var found = false;
     var total = const NutritionTotals();
     for (final ingredient in recipe.ingredients) {
@@ -248,6 +308,278 @@ class PantryStore extends ChangeNotifier {
     _refreshPlannedGroceries();
     notifyListeners();
     return events;
+  }
+
+  PreparedBatch prepareRecipe(
+    Recipe recipe, {
+    double? servings,
+    StorageLocation location = StorageLocation.fridge,
+    DateTime? bestBy,
+    String note = '',
+  }) {
+    final servingCount = servings ?? recipe.servings;
+    if (!servingCount.isFinite || servingCount <= 0) {
+      throw ArgumentError('Prepared servings must be positive');
+    }
+    final deductions = inventory.planDeductions(
+      inventory.requirementsFor(recipe, servingCount, _foods),
+      _lots,
+    );
+    _applyDeductions(deductions);
+    final now = DateTime.now();
+    final batch = PreparedBatch(
+      id: 'prepared-${now.microsecondsSinceEpoch}',
+      name: recipe.name,
+      emoji: recipe.emoji,
+      source: PreparedSource.recipe,
+      sourceId: recipe.id,
+      totalServings: servingCount,
+      remainingServings: servingCount,
+      madeAt: now,
+      location: location,
+      bestBy: bestBy,
+      nutritionPerServing: nutritionForRecipe(recipe, servings: 1),
+      portions: recipe.portions,
+      ingredientDeductions: deductions,
+      note: note.trim(),
+    );
+    _preparedBatches = [..._preparedBatches, batch];
+    final affectedIds = deductions.map((item) => item.lotId).toSet();
+    _queue(
+      _cloud?.savePreparation(
+        batch,
+        _lots.where((lot) => affectedIds.contains(lot.id)),
+      ),
+    );
+    _refreshPlannedGroceries();
+    notifyListeners();
+    return batch;
+  }
+
+  PreparedBatch addPreparedBatch({
+    required String name,
+    required double servings,
+    String emoji = '🍽️',
+    PreparedSource source = PreparedSource.manual,
+    String? sourceId,
+    StorageLocation location = StorageLocation.fridge,
+    DateTime? madeAt,
+    DateTime? bestBy,
+    NutritionTotals? nutritionPerServing,
+    String note = '',
+  }) {
+    if (name.trim().isEmpty || !servings.isFinite || servings <= 0) {
+      throw ArgumentError('A name and positive serving count are required');
+    }
+    final created = madeAt ?? DateTime.now();
+    final batch = PreparedBatch(
+      id: 'prepared-${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim(),
+      emoji: emoji.trim().isEmpty ? '🍽️' : emoji.trim(),
+      source: source,
+      sourceId: sourceId,
+      totalServings: servings,
+      remainingServings: servings,
+      madeAt: created,
+      location: location,
+      bestBy: bestBy,
+      nutritionPerServing: nutritionPerServing,
+      note: note.trim(),
+    );
+    _preparedBatches = [..._preparedBatches, batch];
+    _queue(_cloud?.savePreparedBatch(batch));
+    notifyListeners();
+    return batch;
+  }
+
+  ConsumptionEvent consumePreparedBatch(
+    PreparedBatch batch,
+    double servings, {
+    String? portionName,
+  }) {
+    if (!servings.isFinite || servings <= 0) {
+      throw ArgumentError('Servings must be positive');
+    }
+    if (servings > batch.remainingServings + 0.000001) {
+      throw StateError(
+        'Only ${units.formatAmount(batch.remainingServings)} servings remain',
+      );
+    }
+    final index = _preparedBatches.indexWhere((item) => item.id == batch.id);
+    if (index < 0 || !_preparedBatches[index].isActive) {
+      throw StateError('This prepared food is no longer available');
+    }
+    final updated = _preparedBatches[index].copyWith(
+      remainingServings: (_preparedBatches[index].remainingServings - servings)
+          .clamp(0, double.infinity),
+    );
+    _preparedBatches[index] = updated;
+    final amount = portionName?.trim().isNotEmpty == true
+        ? portionName!.trim()
+        : '${units.formatAmount(servings)} ${servings == 1 ? 'serving' : 'servings'}';
+    final event = ConsumptionEvent(
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      label: '$amount of ${batch.name}',
+      timestamp: DateTime.now(),
+      kind: batch.source == PreparedSource.external
+          ? ConsumptionKind.external
+          : ConsumptionKind.recipe,
+      recipeId: batch.source == PreparedSource.recipe ? batch.sourceId : null,
+      deductions: const [],
+      preparedDeductions: [
+        PreparedDeduction(batchId: batch.id, servings: servings),
+      ],
+      nutrition: batch.nutritionPerServing?.scale(servings),
+      nutritionEstimated: batch.source == PreparedSource.manual,
+      note: 'From prepared food stored in ${batch.location.name}',
+    );
+    _history.add(event);
+    _queue(_cloud?.savePreparedConsumption(event, [updated]));
+    notifyListeners();
+    return event;
+  }
+
+  ConsumptionEvent consumeMealTemplate(MealTemplate meal, {double? servings}) {
+    final mealServings = servings ?? meal.servings;
+    if (!mealServings.isFinite || mealServings <= 0) {
+      throw ArgumentError('Meal servings must be positive');
+    }
+    final working = [..._preparedBatches];
+    final deductions = <PreparedDeduction>[];
+    var nutrition = const NutritionTotals();
+    var foundNutrition = false;
+    for (final component in meal.components) {
+      var needed = component.servings * mealServings / meal.servings;
+      final candidates =
+          working
+              .where(
+                (batch) =>
+                    batch.isActive &&
+                    batch.source == PreparedSource.recipe &&
+                    batch.sourceId == component.recipeId,
+              )
+              .toList()
+            ..sort((a, b) => a.madeAt.compareTo(b.madeAt));
+      for (final candidate in candidates) {
+        if (needed <= 0.000001) break;
+        final take = needed < candidate.remainingServings
+            ? needed
+            : candidate.remainingServings;
+        final index = working.indexWhere((item) => item.id == candidate.id);
+        working[index] = candidate.copyWith(
+          remainingServings: candidate.remainingServings - take,
+        );
+        deductions.add(
+          PreparedDeduction(batchId: candidate.id, servings: take),
+        );
+        final componentNutrition = candidate.nutritionPerServing?.scale(take);
+        if (componentNutrition != null) {
+          foundNutrition = true;
+          nutrition = nutrition + componentNutrition;
+        }
+        needed -= take;
+      }
+      if (needed > 0.000001) {
+        final recipe = _recipes.firstWhere(
+          (item) => item.id == component.recipeId,
+          orElse: () => throw StateError('A component recipe is missing'),
+        );
+        throw StateError(
+          'Prepare ${units.formatAmount(needed)} more servings of ${recipe.name}',
+        );
+      }
+    }
+    _preparedBatches = working;
+    final changedIds = deductions.map((item) => item.batchId).toSet();
+    final changed = working
+        .where((item) => changedIds.contains(item.id))
+        .toList();
+    final event = ConsumptionEvent(
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      label:
+          '${units.formatAmount(mealServings)} ${mealServings == 1 ? 'serving' : 'servings'} of ${meal.name}',
+      timestamp: DateTime.now(),
+      kind: ConsumptionKind.recipe,
+      deductions: const [],
+      preparedDeductions: deductions,
+      nutrition: foundNutrition ? nutrition : null,
+      note: 'Compound meal: ${meal.components.length} components',
+    );
+    _history.add(event);
+    _queue(_cloud?.savePreparedConsumption(event, changed));
+    notifyListeners();
+    return event;
+  }
+
+  ConsumptionEvent consumePreparedRecipe(Recipe recipe, double servings) {
+    return consumeMealTemplate(
+      MealTemplate(
+        id: 'prepared-${recipe.id}',
+        name: recipe.name,
+        servings: servings,
+        components: [MealComponent(recipeId: recipe.id, servings: servings)],
+        emoji: recipe.emoji,
+      ),
+      servings: servings,
+    );
+  }
+
+  void updatePreparedBatch(
+    PreparedBatch batch, {
+    double? remainingServings,
+    StorageLocation? location,
+    DateTime? bestBy,
+    bool clearBestBy = false,
+    bool discard = false,
+  }) {
+    final index = _preparedBatches.indexWhere((item) => item.id == batch.id);
+    if (index < 0) throw StateError('Unknown prepared food ${batch.id}');
+    final remaining = remainingServings ?? batch.remainingServings;
+    if (!remaining.isFinite ||
+        remaining < 0 ||
+        remaining > batch.totalServings) {
+      throw ArgumentError('Remaining servings must be within the batch total');
+    }
+    final updated = batch.copyWith(
+      remainingServings: remaining,
+      location: location,
+      bestBy: bestBy,
+      clearBestBy: clearBestBy,
+      discardedAt: discard ? DateTime.now() : null,
+    );
+    _preparedBatches[index] = updated;
+    _queue(_cloud?.savePreparedBatch(updated));
+    notifyListeners();
+  }
+
+  void saveMealTemplate(MealTemplate meal) {
+    if (meal.name.trim().isEmpty ||
+        meal.servings <= 0 ||
+        meal.components.isEmpty ||
+        meal.components.any(
+          (component) =>
+              component.servings <= 0 ||
+              !_recipes.any((recipe) => recipe.id == component.recipeId),
+        )) {
+      throw ArgumentError(
+        'Meals need a name, servings, and valid recipe components',
+      );
+    }
+    final index = _mealTemplates.indexWhere((item) => item.id == meal.id);
+    if (index < 0) {
+      _mealTemplates = [..._mealTemplates, meal];
+    } else {
+      _mealTemplates[index] = meal;
+    }
+    _queue(_cloud?.saveMealTemplate(meal));
+    _refreshPlannedGroceries();
+    notifyListeners();
+  }
+
+  void deleteMealTemplate(String id) {
+    _mealTemplates = _mealTemplates.where((item) => item.id != id).toList();
+    _queue(_cloud?.deleteMealTemplate(id));
+    notifyListeners();
   }
 
   ConsumptionEvent consume(
@@ -406,6 +738,22 @@ class PantryStore extends ChangeNotifier {
         'Recipe name, servings, and ingredients are required',
       );
     }
+    final nutritionOverride = recipe.nutritionOverride;
+    if (nutritionOverride != null) {
+      final values = [
+        nutritionOverride.calories,
+        nutritionOverride.proteinG,
+        nutritionOverride.carbsG,
+        nutritionOverride.fatG,
+        nutritionOverride.fiberG,
+        nutritionOverride.sugarG,
+        nutritionOverride.sodiumMg,
+      ];
+      if (values.any((value) => !value.isFinite || value < 0) ||
+          !values.any((value) => value > 0)) {
+        throw ArgumentError('Enter at least one prepared nutrition value');
+      }
+    }
     for (final ingredient in recipe.ingredients) {
       final definition = food(ingredient.foodId);
       definition.conversionFor(ingredient.unit);
@@ -499,27 +847,57 @@ class PantryStore extends ChangeNotifier {
 
   Map<String, double> get plannedRequirementsBase {
     final requirements = <String, double>{};
+    final availablePrepared = <String, double>{};
+    for (final batch in _preparedBatches.where(
+      (item) =>
+          item.isActive &&
+          item.source == PreparedSource.recipe &&
+          item.sourceId != null,
+    )) {
+      availablePrepared[batch.sourceId!] =
+          (availablePrepared[batch.sourceId!] ?? 0) + batch.remainingServings;
+    }
     for (final meal in _plannedMeals.where(
       (item) => item.completedAt == null,
     )) {
-      if (meal.source != PlannedMealSource.recipe || meal.sourceId == null) {
+      final recipeNeeds = <String, double>{};
+      if (meal.source == PlannedMealSource.recipe && meal.sourceId != null) {
+        recipeNeeds[meal.sourceId!] = meal.servings;
+      } else if (meal.source == PlannedMealSource.meal &&
+          meal.sourceId != null) {
+        final templateIndex = _mealTemplates.indexWhere(
+          (item) => item.id == meal.sourceId,
+        );
+        if (templateIndex < 0) continue;
+        final template = _mealTemplates[templateIndex];
+        for (final component in template.components) {
+          recipeNeeds[component.recipeId] =
+              (recipeNeeds[component.recipeId] ?? 0) +
+              component.servings * meal.servings / template.servings;
+        }
+      } else {
         continue;
       }
-      final recipeIndex = _recipes.indexWhere(
-        (item) => item.id == meal.sourceId,
-      );
-      if (recipeIndex < 0) continue;
-      final recipe = _recipes[recipeIndex];
-      final scale = meal.servings / recipe.servings;
-      for (final ingredient in recipe.ingredients) {
-        final definition = food(ingredient.foodId);
-        final amountBase = units.toBase(
-          definition,
-          ingredient.amount * scale,
-          ingredient.unit,
-        );
-        requirements[ingredient.foodId] =
-            (requirements[ingredient.foodId] ?? 0) + amountBase;
+      for (final need in recipeNeeds.entries) {
+        final onHand = availablePrepared[need.key] ?? 0;
+        final preparedUsed = need.value < onHand ? need.value : onHand;
+        availablePrepared[need.key] = onHand - preparedUsed;
+        final toPrepare = need.value - preparedUsed;
+        if (toPrepare <= 0.000001) continue;
+        final recipeIndex = _recipes.indexWhere((item) => item.id == need.key);
+        if (recipeIndex < 0) continue;
+        final recipe = _recipes[recipeIndex];
+        final scale = toPrepare / recipe.servings;
+        for (final ingredient in recipe.ingredients) {
+          final definition = food(ingredient.foodId);
+          final amountBase = units.toBase(
+            definition,
+            ingredient.amount * scale,
+            ingredient.unit,
+          );
+          requirements[ingredient.foodId] =
+              (requirements[ingredient.foodId] ?? 0) + amountBase;
+        }
       }
     }
     return requirements;
@@ -532,6 +910,10 @@ class PantryStore extends ChangeNotifier {
     if (meal.source == PlannedMealSource.recipe &&
         !_recipes.any((recipe) => recipe.id == meal.sourceId)) {
       throw ArgumentError('Planned recipe does not exist');
+    }
+    if (meal.source == PlannedMealSource.meal &&
+        !_mealTemplates.any((template) => template.id == meal.sourceId)) {
+      throw ArgumentError('Planned compound meal does not exist');
     }
     final index = _plannedMeals.indexWhere((item) => item.id == meal.id);
     if (index < 0) {
@@ -634,7 +1016,9 @@ class PantryStore extends ChangeNotifier {
   void _refreshPlannedGroceries() {
     if (!_plannedMeals.any(
       (meal) =>
-          meal.completedAt == null && meal.source == PlannedMealSource.recipe,
+          meal.completedAt == null &&
+          (meal.source == PlannedMealSource.recipe ||
+              meal.source == PlannedMealSource.meal),
     )) {
       return;
     }
@@ -678,15 +1062,45 @@ class PantryStore extends ChangeNotifier {
         quantityBase: _lots[lotIndex].quantityBase + deduction.quantityBase,
       );
     }
+    for (final deduction in event.preparedDeductions) {
+      final batchIndex = _preparedBatches.indexWhere(
+        (batch) => batch.id == deduction.batchId,
+      );
+      if (batchIndex < 0) {
+        throw StateError(
+          'Cannot restore missing prepared batch ${deduction.batchId}',
+        );
+      }
+      final batch = _preparedBatches[batchIndex];
+      final restored = batch.remainingServings + deduction.servings;
+      if (restored > batch.totalServings + 0.000001) {
+        throw StateError('Restoring this event would overfill ${batch.name}');
+      }
+      _preparedBatches[batchIndex] = batch.copyWith(
+        remainingServings: restored.clamp(0, batch.totalServings),
+      );
+    }
     final undone = event.markUndone(DateTime.now());
     _history[index] = undone;
     final affectedIds = event.deductions.map((item) => item.lotId).toSet();
-    _queue(
-      _cloud?.saveUndo(
-        undone,
-        _lots.where((lot) => affectedIds.contains(lot.id)),
-      ),
-    );
+    if (event.preparedDeductions.isNotEmpty) {
+      final preparedIds = event.preparedDeductions
+          .map((item) => item.batchId)
+          .toSet();
+      _queue(
+        _cloud?.savePreparedUndo(
+          undone,
+          _preparedBatches.where((batch) => preparedIds.contains(batch.id)),
+        ),
+      );
+    } else {
+      _queue(
+        _cloud?.saveUndo(
+          undone,
+          _lots.where((lot) => affectedIds.contains(lot.id)),
+        ),
+      );
+    }
     _refreshPlannedGroceries();
     notifyListeners();
   }

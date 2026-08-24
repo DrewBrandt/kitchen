@@ -149,9 +149,9 @@ Future<RecipeCookRequest?> showRecipePortionDialog(
                     onChanged: (_) => setDialogState(() {}),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Number of separate entries',
+                      labelText: 'Number of batches this size',
                       helperText:
-                          'Each portion is logged and undoable separately.',
+                          'The total becomes one prepared batch to eat later.',
                     ),
                   ),
                   if (ingredients.isNotEmpty) ...[
@@ -215,7 +215,7 @@ Future<RecipeCookRequest?> showRecipePortionDialog(
                         ),
                       );
                     },
-              child: const Text('Deduct and log'),
+              child: const Text('Make batch'),
             ),
           ],
         );

@@ -108,7 +108,19 @@ class UnitService {
   }
 
   String _inflect(String symbol, double amount) {
-    const invariant = {'g', 'kg', 'mg', 'mL', 'L', 'oz', 'lb', 'tsp', 'tbsp', 'fl oz', 'each'};
+    const invariant = {
+      'g',
+      'kg',
+      'mg',
+      'mL',
+      'L',
+      'oz',
+      'lb',
+      'tsp',
+      'tbsp',
+      'fl oz',
+      'each',
+    };
     if (invariant.contains(symbol)) return symbol;
 
     const singularToPlural = <String, String>{

@@ -96,6 +96,26 @@ export const pantryApi = onRequest(
         await consumeRecipe(asObject(request.body), response);
         return;
       }
+      if (request.method === "POST" && path === "/v1/prepare/recipe") {
+        await prepareRecipe(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/prepared-batches") {
+        await addPreparedBatch(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/consume/prepared") {
+        await consumePreparedBatch(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/consume/meal-template") {
+        await consumeMealTemplate(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/meal-templates") {
+        await saveMealTemplate(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/consume/inventory") {
         await consumeInventory(asObject(request.body), response);
         return;
@@ -132,7 +152,7 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems] = await Promise.all([
+  const [foods, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
@@ -142,6 +162,8 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     db.collection("external_foods").get(),
     db.collection("meal_plan").get(),
     db.collection("grocery_list").get(),
+    db.collection("prepared_batches").where("remaining_servings", ">", 0).get(),
+    db.collection("meal_templates").get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
@@ -153,6 +175,8 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     plannedMeals: plannedMeals.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     groceryItems: groceryItems.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    preparedBatches: preparedBatches.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    mealTemplates: mealTemplates.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     exportedAt: new Date().toISOString(),
   });
 }
@@ -173,7 +197,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
   const weekStart = dateOnly(requiredString(body.weekStart, "weekStart"), "weekStart");
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
-  const [foods, recipeSnapshot, externalSnapshot, lotSnapshot, mealSnapshot, grocerySnapshot] =
+  const [foods, recipeSnapshot, externalSnapshot, lotSnapshot, mealSnapshot, grocerySnapshot, mealTemplateSnapshot, preparedSnapshot] =
     await Promise.all([
       loadFoods(),
       db.collection("recipes").get(),
@@ -181,10 +205,43 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
       db.collection("meal_plan").get(),
       db.collection("grocery_list").get(),
+      db.collection("meal_templates").get(),
+      db.collection("prepared_batches").where("remaining_servings", ">", 0).get(),
     ]);
   const recipes = new Map(recipeSnapshot.docs.map((doc) => [doc.id, doc.data()]));
   const externalFoods = new Map(externalSnapshot.docs.map((doc) => [doc.id, doc.data()]));
+  const mealTemplates = new Map(mealTemplateSnapshot.docs.map((doc) => [doc.id, doc.data()]));
   const requirements = new Map<string, number>();
+  const availablePrepared = new Map<string, number>();
+  for (const document of preparedSnapshot.docs) {
+    const data = document.data();
+    if (data.source !== "recipe" || typeof data.source_id !== "string") continue;
+    availablePrepared.set(
+      data.source_id,
+      (availablePrepared.get(data.source_id) ?? 0) + Number(data.remaining_servings),
+    );
+  }
+  const addRecipeRequirements = (recipeId: string, wantedServings: number): void => {
+    const recipe = recipes.get(recipeId);
+    if (recipe == null) throw new ValidationError(`Unknown recipe "${recipeId}"`);
+    const onHand = availablePrepared.get(recipeId) ?? 0;
+    const preparedUsed = Math.min(onHand, wantedServings);
+    availablePrepared.set(recipeId, onHand - preparedUsed);
+    const servingsToPrepare = wantedServings - preparedUsed;
+    if (servingsToPrepare <= 0.000001) return;
+    const recipeServings = positiveNumber(recipe.servings, `recipe ${recipeId}.servings`);
+    for (const ingredientValue of asArray(recipe.ingredients, `recipe ${recipeId}.ingredients`)) {
+      const ingredient = asObject(ingredientValue);
+      const foodId = String(ingredient.food_id);
+      const food = foods.find((candidate) => candidate.id === foodId);
+      if (!food) throw new ValidationError(`Recipe ${recipeId} references an unknown food`);
+      const unit = String(ingredient.unit).toLowerCase();
+      const conversion = food.conversions.find((candidate) => candidate.unit === unit);
+      if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
+      const amountBase = Number(ingredient.amount) * conversion.baseAmount * servingsToPrepare / recipeServings;
+      requirements.set(foodId, (requirements.get(foodId) ?? 0) + amountBase);
+    }
+  };
   const entries = asArray(body.entries, "entries").map((value, index) => {
     const item = asObject(value);
     const date = dateOnly(requiredString(item.date, `entries[${index}].date`), `entries[${index}].date`);
@@ -196,7 +253,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       throw new ValidationError(`entries[${index}].slot is invalid`);
     }
     const source = requiredString(item.source, `entries[${index}].source`).toLowerCase();
-    if (!["recipe", "external", "custom"].includes(source)) {
+    if (!["recipe", "meal", "external", "custom"].includes(source)) {
       throw new ValidationError(`entries[${index}].source is invalid`);
     }
     const sourceId = optionalString(item.sourceId);
@@ -210,17 +267,20 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       const recipe = recipes.get(sourceId) ?? {};
       name = optionalString(item.name) ?? String(recipe.name);
       emoji = optionalString(item.emoji) ?? String(recipe.emoji ?? "🍽️");
-      const recipeServings = Number(recipe.servings);
-      for (const ingredientValue of recipe.ingredients as JsonObject[]) {
-        const ingredient = asObject(ingredientValue);
-        const foodId = String(ingredient.food_id);
-        const food = foods.find((candidate) => candidate.id === foodId);
-        if (!food) throw new ValidationError(`Recipe ${sourceId} references an unknown food`);
-        const unit = String(ingredient.unit).toLowerCase();
-        const conversion = food.conversions.find((candidate) => candidate.unit === unit);
-        if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
-        const amountBase = Number(ingredient.amount) * conversion.baseAmount * servings / recipeServings;
-        requirements.set(foodId, (requirements.get(foodId) ?? 0) + amountBase);
+      addRecipeRequirements(sourceId, servings);
+    } else if (source === "meal") {
+      if (sourceId == null || !mealTemplates.has(sourceId)) {
+        throw new ValidationError(`entries[${index}] references an unknown combined meal`);
+      }
+      const template = mealTemplates.get(sourceId) ?? {};
+      name = optionalString(item.name) ?? String(template.name);
+      emoji = optionalString(item.emoji) ?? String(template.emoji ?? "🍽️");
+      const templateServings = positiveNumber(template.servings, `meal template ${sourceId}.servings`);
+      for (const [componentIndex, rawComponent] of asArray(template.components, `meal template ${sourceId}.components`).entries()) {
+        const component = asObject(rawComponent);
+        const recipeId = requiredString(component.recipe_id, `components[${componentIndex}].recipe_id`);
+        const componentServings = positiveNumber(component.servings, `components[${componentIndex}].servings`);
+        addRecipeRequirements(recipeId, componentServings * servings / templateServings);
       }
     } else if (source === "external") {
       if (sourceId == null || !externalFoods.has(sourceId)) {
@@ -683,12 +743,16 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
       };
     });
   const id = optionalString(body.id) ?? slug(name);
+  const nutritionOverride = body.nutritionOverride == null
+    ? null
+    : nutritionFromBody(asObject(body.nutritionOverride));
   await db.collection("recipes").doc(id).set({
     name,
     emoji: optionalString(body.emoji) ?? "🍽️",
     servings: positiveNumber(body.servings, "servings"),
     ingredients,
     instructions: asOptionalStringArray(body.instructions),
+    nutrition_override: nutritionOverride,
     portions,
     source_url: optionalString(body.sourceUrl) ?? null,
     source_note: optionalString(body.sourceNote) ?? null,
@@ -748,6 +812,246 @@ async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise
   response.status(201).json({ id: reference.id, status: "logged" });
 }
 
+async function addPreparedBatch(body: JsonObject, response: ApiResponse): Promise<void> {
+  const name = requiredString(body.name, "name");
+  const servings = positiveNumber(body.servings, "servings");
+  const externalFoodId = optionalString(body.externalFoodId);
+  let nutrition: JsonObject | null = body.nutrition == null ? null : nutritionFromBody(asObject(body.nutrition));
+  let source = "manual";
+  let sourceId: string | null = null;
+  let emoji = optionalString(body.emoji) ?? "🍽️";
+  if (externalFoodId != null) {
+    const external = await db.collection("external_foods").doc(externalFoodId).get();
+    if (!external.exists) throw new ValidationError(`Unknown external food "${externalFoodId}"`);
+    const data = external.data() ?? {};
+    nutrition = asObject(data.nutrition);
+    source = "external";
+    sourceId = externalFoodId;
+    emoji = optionalString(body.emoji) ?? String(data.emoji ?? "🍽️");
+  }
+  const location = (optionalString(body.location) ?? "fridge").toLowerCase();
+  if (!["fridge", "freezer", "pantry"].includes(location)) {
+    throw new ValidationError("location must be fridge, freezer, or pantry");
+  }
+  const reference = db.collection("prepared_batches").doc();
+  await reference.set({
+    name,
+    emoji,
+    source,
+    source_id: sourceId,
+    total_servings: servings,
+    remaining_servings: servings,
+    made_at: body.madeAt == null ? FieldValue.serverTimestamp() : parseTimestamp(requiredString(body.madeAt, "madeAt"), "madeAt"),
+    location,
+    best_by: body.bestBy == null ? null : parseTimestamp(requiredString(body.bestBy, "bestBy"), "bestBy"),
+    nutrition_per_serving: nutrition,
+    portions: [],
+    ingredient_deductions: [],
+    note: optionalString(body.note) ?? "Added through Pantry GPT",
+    discarded_at: null,
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  response.status(201).json({ id: reference.id, status: "prepared food added" });
+}
+
+async function prepareRecipe(body: JsonObject, response: ApiResponse): Promise<void> {
+  const recipeId = requiredString(body.recipeId, "recipeId");
+  const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
+  const foods = await loadFoods();
+  const foodById = new Map(foods.map((food) => [food.id, food]));
+  const preparedId = db.collection("prepared_batches").doc().id;
+  const deductions = await db.runTransaction(async (transaction) => {
+    const recipeReference = db.collection("recipes").doc(recipeId);
+    const recipeSnapshot = await transaction.get(recipeReference);
+    if (!recipeSnapshot.exists) throw new ValidationError(`Unknown recipe "${recipeId}"`);
+    const recipe = recipeSnapshot.data() ?? {};
+    const recipeServings = positiveNumber(recipe.servings, "recipe.servings");
+    const requirements = new Map<string, number>();
+    for (const [index, rawIngredient] of asArray(recipe.ingredients, "recipe.ingredients").entries()) {
+      const ingredient = asObject(rawIngredient);
+      const foodId = requiredString(ingredient.food_id, `recipe.ingredients[${index}].food_id`);
+      const food = foodById.get(foodId);
+      if (food == null) throw new ValidationError(`Recipe references unknown food "${foodId}"`);
+      const unit = requiredString(ingredient.unit, `recipe.ingredients[${index}].unit`).toLowerCase();
+      const conversion = food.conversions.find((item) => item.unit === unit);
+      if (conversion == null) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
+      const quantity = positiveNumber(ingredient.amount, `recipe.ingredients[${index}].amount`) *
+        conversion.baseAmount * servings / recipeServings;
+      requirements.set(foodId, (requirements.get(foodId) ?? 0) + quantity);
+    }
+    const lotSnapshot = await transaction.get(db.collection("inventory_lots").where("quantity_base", ">", 0));
+    const planned = planDeductions(requirements, lotSnapshot.docs);
+    for (const deduction of planned) {
+      transaction.update(db.collection("inventory_lots").doc(deduction.lot_id), {
+        quantity_base: deduction.remaining_base,
+        updated_at: FieldValue.serverTimestamp(),
+      });
+    }
+    const override = recipe.nutrition_override == null
+      ? null
+      : scaleNutrition(asObject(recipe.nutrition_override), 1 / recipeServings);
+    const ingredientNutrition = override == null ? nutritionForRequirements(requirements, foodById) : null;
+    transaction.set(db.collection("prepared_batches").doc(preparedId), {
+      name: String(recipe.name),
+      emoji: String(recipe.emoji ?? "🍽️"),
+      source: "recipe",
+      source_id: recipeId,
+      total_servings: servings,
+      remaining_servings: servings,
+      made_at: FieldValue.serverTimestamp(),
+      location: optionalString(body.location) ?? "fridge",
+      best_by: body.bestBy == null ? null : parseTimestamp(requiredString(body.bestBy, "bestBy"), "bestBy"),
+      nutrition_per_serving: override ?? (ingredientNutrition == null ? null : scaleNutrition(ingredientNutrition.totals, 1 / servings)),
+      portions: recipe.portions ?? [],
+      ingredient_deductions: planned.map(({ lot_id, food_id, quantity_base }) => ({ lot_id, food_id, quantity_base })),
+      note: optionalString(body.note) ?? "Prepared through Pantry GPT",
+      discarded_at: null,
+      updated_at: FieldValue.serverTimestamp(),
+    });
+    return planned;
+  });
+  response.status(201).json({ id: preparedId, status: "prepared", deductions: deductions.length });
+}
+
+async function consumePreparedBatch(body: JsonObject, response: ApiResponse): Promise<void> {
+  const batchId = requiredString(body.batchId, "batchId");
+  const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
+  const eventId = db.collection("consumption_history").doc().id;
+  await db.runTransaction(async (transaction) => {
+    const reference = db.collection("prepared_batches").doc(batchId);
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists) throw new ValidationError(`Unknown prepared batch "${batchId}"`);
+    const prepared = snapshot.data() ?? {};
+    const remaining = nonNegativeNumber(prepared.remaining_servings, "remaining_servings");
+    if (servings > remaining + 0.000001) {
+      throw new ValidationError(`Only ${formatAmount(remaining)} servings remain`);
+    }
+    transaction.update(reference, {
+      remaining_servings: Math.max(0, remaining - servings),
+      updated_at: FieldValue.serverTimestamp(),
+    });
+    const perServing = prepared.nutrition_per_serving == null ? null : asObject(prepared.nutrition_per_serving);
+    transaction.set(db.collection("consumption_history").doc(eventId), {
+      label: optionalString(body.label) ?? `${formatAmount(servings)} ${servings === 1 ? "serving" : "servings"} of ${String(prepared.name)}`,
+      kind: prepared.source === "external" ? "external" : "recipe",
+      recipe_id: prepared.source === "recipe" ? prepared.source_id ?? null : null,
+      timestamp: body.timestamp == null ? FieldValue.serverTimestamp() : parseTimestamp(requiredString(body.timestamp, "timestamp"), "timestamp"),
+      deductions: [],
+      prepared_deductions: [{ batch_id: batchId, servings }],
+      undone_at: null,
+      nutrition: perServing == null ? null : scaleNutrition(perServing, servings),
+      nutrition_estimated: prepared.source === "manual",
+      note: optionalString(body.note) ?? "Consumed from prepared food through Pantry GPT",
+    });
+  });
+  response.status(201).json({ id: eventId, status: "consumed prepared food" });
+}
+
+async function saveMealTemplate(body: JsonObject, response: ApiResponse): Promise<void> {
+  const name = requiredString(body.name, "name");
+  const servings = positiveNumber(body.servings, "servings");
+  const components = asArray(body.components, "components").map((raw, index) => {
+    const component = asObject(raw);
+    return {
+      recipe_id: requiredString(component.recipeId, `components[${index}].recipeId`),
+      servings: positiveNumber(component.servings, `components[${index}].servings`),
+    };
+  });
+  if (components.length < 2) throw new ValidationError("A combined meal needs at least two recipe components");
+  const recipes = await Promise.all(components.map((component) => db.collection("recipes").doc(component.recipe_id).get()));
+  if (recipes.some((recipe) => !recipe.exists)) throw new ValidationError("A component recipe does not exist");
+  const id = optionalString(body.id) ?? slug(name);
+  await db.collection("meal_templates").doc(id).set({
+    name,
+    emoji: optionalString(body.emoji) ?? "🍽️",
+    servings,
+    components,
+    notes: optionalString(body.notes) ?? "",
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  response.status(201).json({ id, status: "combined meal saved" });
+}
+
+async function consumeMealTemplate(body: JsonObject, response: ApiResponse): Promise<void> {
+  const mealId = requiredString(body.mealId, "mealId");
+  const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
+  const eventId = db.collection("consumption_history").doc().id;
+  const deductionCount = await db.runTransaction(async (transaction) => {
+    const mealReference = db.collection("meal_templates").doc(mealId);
+    const mealSnapshot = await transaction.get(mealReference);
+    if (!mealSnapshot.exists) throw new ValidationError(`Unknown combined meal "${mealId}"`);
+    const meal = mealSnapshot.data() ?? {};
+    const mealServings = positiveNumber(meal.servings, "meal.servings");
+    const preparedSnapshot = await transaction.get(
+      db.collection("prepared_batches").where("remaining_servings", ">", 0),
+    );
+    const updates = new Map<string, { remaining: number; servings: number }>();
+    const totals = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sodium_mg: 0 };
+    let hasNutrition = false;
+    for (const [componentIndex, rawComponent] of asArray(meal.components, "meal.components").entries()) {
+      const component = asObject(rawComponent);
+      const recipeId = requiredString(component.recipe_id, `components[${componentIndex}].recipe_id`);
+      let needed = positiveNumber(component.servings, `components[${componentIndex}].servings`) * servings / mealServings;
+      const candidates = preparedSnapshot.docs
+        .filter((document) => {
+          const data = document.data();
+          return data.source === "recipe" && data.source_id === recipeId && data.discarded_at == null;
+        })
+        .sort((left, right) => {
+          const leftDate = left.data().made_at instanceof Timestamp ? left.data().made_at.toMillis() : 0;
+          const rightDate = right.data().made_at instanceof Timestamp ? right.data().made_at.toMillis() : 0;
+          return leftDate - rightDate;
+        });
+      for (const candidate of candidates) {
+        if (needed <= 0.000001) break;
+        const data = candidate.data();
+        const priorUpdate = updates.get(candidate.id);
+        const remaining = priorUpdate?.remaining ?? Number(data.remaining_servings);
+        const take = Math.min(remaining, needed);
+        if (take <= 0) continue;
+        updates.set(candidate.id, {
+          remaining: remaining - take,
+          servings: (priorUpdate?.servings ?? 0) + take,
+        });
+        if (data.nutrition_per_serving != null) {
+          hasNutrition = true;
+          const scaled = scaleNutrition(asObject(data.nutrition_per_serving), take);
+          for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+            totals[key] += Number(scaled[key] ?? 0);
+          }
+        }
+        needed -= take;
+      }
+      if (needed > 0.000001) {
+        const recipe = await transaction.get(db.collection("recipes").doc(recipeId));
+        throw new ValidationError(
+          `Prepare ${formatAmount(needed)} more servings of ${String(recipe.data()?.name ?? recipeId)}`,
+        );
+      }
+    }
+    for (const [batchId, update] of updates) {
+      transaction.update(db.collection("prepared_batches").doc(batchId), {
+        remaining_servings: Math.max(0, update.remaining),
+        updated_at: FieldValue.serverTimestamp(),
+      });
+    }
+    transaction.set(db.collection("consumption_history").doc(eventId), {
+      label: optionalString(body.label) ?? `${formatAmount(servings)} ${servings === 1 ? "serving" : "servings"} of ${String(meal.name)}`,
+      kind: "recipe",
+      recipe_id: null,
+      timestamp: body.timestamp == null ? FieldValue.serverTimestamp() : parseTimestamp(requiredString(body.timestamp, "timestamp"), "timestamp"),
+      deductions: [],
+      prepared_deductions: [...updates].map(([batchId, update]) => ({ batch_id: batchId, servings: update.servings })),
+      undone_at: null,
+      nutrition: hasNutrition ? totals : null,
+      nutrition_estimated: false,
+      note: optionalString(body.note) ?? `Combined meal ${mealId} consumed through Pantry GPT`,
+    });
+    return updates.size;
+  });
+  response.status(201).json({ id: eventId, status: "combined meal consumed", preparedBatches: deductionCount });
+}
+
 async function consumeRecipe(body: JsonObject, response: ApiResponse): Promise<void> {
   const recipeId = requiredString(body.recipeId, "recipeId");
   const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
@@ -783,7 +1087,12 @@ async function consumeRecipe(body: JsonObject, response: ApiResponse): Promise<v
         updated_at: FieldValue.serverTimestamp(),
       });
     }
-    const nutrition = nutritionForRequirements(requirements, foodById);
+    const nutritionOverride = recipe.nutrition_override == null
+      ? null
+      : scaleNutrition(asObject(recipe.nutrition_override), servings / recipeServings);
+    const ingredientNutrition = nutritionOverride == null
+      ? nutritionForRequirements(requirements, foodById)
+      : null;
     transaction.set(db.collection("consumption_history").doc(eventId), {
       label: optionalString(body.label) ?? `${formatAmount(servings)} ${servings === 1 ? "serving" : "servings"} of ${String(recipe.name)}`,
       kind: "recipe",
@@ -793,8 +1102,10 @@ async function consumeRecipe(body: JsonObject, response: ApiResponse): Promise<v
         : parseTimestamp(requiredString(body.timestamp, "timestamp"), "timestamp"),
       deductions: deductions.map(({ lot_id, food_id, quantity_base }) => ({ lot_id, food_id, quantity_base })),
       undone_at: null,
-      nutrition: nutrition?.totals ?? null,
-      nutrition_estimated: nutrition?.estimated ?? true,
+      nutrition: nutritionOverride ?? ingredientNutrition?.totals ?? null,
+      nutrition_estimated: nutritionOverride == null
+        ? ingredientNutrition?.estimated ?? true
+        : false,
       note: optionalString(body.note) ?? "Logged through Pantry GPT",
     });
     return deductions;

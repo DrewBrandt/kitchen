@@ -272,6 +272,148 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/prepare/recipe:
+    post:
+      operationId: prepareSavedRecipe
+      summary: Make a recipe and add its prepared servings
+      description: Deducts raw ingredients once and creates a prepared batch to consume later.
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [recipeId, servings]
+              properties:
+                recipeId: {type: string}
+                servings: {type: number, minimum: 0.000001}
+                location: {type: string, enum: [fridge, freezer]}
+                bestBy: {type: string, format: date-time}
+                note: {type: string}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /v1/prepared-batches:
+    post:
+      operationId: addPreparedFood
+      summary: Add a manual or ready-made leftover
+      description: Adds servings without deducting raw inventory. An externalFoodId copies saved nutrition.
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, servings]
+              properties:
+                name: {type: string}
+                servings: {type: number, minimum: 0.000001}
+                emoji: {type: string}
+                externalFoodId: {type: string}
+                location: {type: string, enum: [fridge, freezer, pantry]}
+                madeAt: {type: string, format: date-time}
+                bestBy: {type: string, format: date-time}
+                note: {type: string}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /v1/consume/prepared:
+    post:
+      operationId: consumePreparedFood
+      summary: Eat servings from a prepared batch
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [batchId, servings]
+              properties:
+                batchId: {type: string}
+                servings: {type: number, minimum: 0.000001}
+                label: {type: string}
+                note: {type: string}
+                timestamp: {type: string, format: date-time}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /v1/consume/meal-template:
+    post:
+      operationId: consumeCombinedMeal
+      summary: Eat a combined meal from its prepared component batches
+      description: Atomically consumes the required prepared servings from every component and creates one nutrition log entry.
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mealId, servings]
+              properties:
+                mealId: {type: string}
+                servings: {type: number, minimum: 0.000001}
+                label: {type: string}
+                note: {type: string}
+                timestamp: {type: string, format: date-time}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /v1/meal-templates:
+    post:
+      operationId: saveCombinedMeal
+      summary: Save a meal made from multiple component recipes
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, servings, components]
+              properties:
+                id: {type: string}
+                name: {type: string}
+                emoji: {type: string}
+                servings: {type: number, minimum: 0.000001}
+                notes: {type: string}
+                components:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [recipeId, servings]
+                    properties:
+                      recipeId: {type: string}
+                      servings: {type: number, minimum: 0.000001}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
   /v1/consume/inventory:
     post:
       operationId: consumePantryItem
@@ -436,6 +578,19 @@ components:
           type: string
         estimated:
           type: boolean
+    RecipeNutrition:
+      type: object
+      additionalProperties: false
+      required: [calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+      description: Totals for the entire prepared recipe yield.
+      properties:
+        calories: { type: number, minimum: 0 }
+        proteinG: { type: number, minimum: 0 }
+        carbsG: { type: number, minimum: 0 }
+        fatG: { type: number, minimum: 0 }
+        fiberG: { type: number, minimum: 0 }
+        sugarG: { type: number, minimum: 0 }
+        sodiumMg: { type: number, minimum: 0 }
     FoodPreferences:
       type: object
       additionalProperties: false
@@ -610,6 +765,8 @@ components:
           format: uri
         sourceNote:
           type: string
+        nutritionOverride:
+          $ref: '#/components/schemas/RecipeNutrition'
         ingredients:
           type: array
           minItems: 1
@@ -638,7 +795,7 @@ components:
           enum: [breakfast, lunch, dinner, snack]
         source:
           type: string
-          enum: [recipe, external, custom]
+          enum: [recipe, meal, external, custom]
         sourceId:
           type: string
         name:
