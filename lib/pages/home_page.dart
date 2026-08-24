@@ -2262,25 +2262,29 @@ class _WeekCalendar extends StatelessWidget {
   final DateTime weekStart;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: const Color(0xFF131715),
-      border: Border.all(color: const Color(0xFF232926)),
-      borderRadius: BorderRadius.circular(22),
-    ),
-    child: Column(
-      children: List.generate(7, (index) {
-        final day = weekStart.add(Duration(days: index));
-        return _PlanDayCard(
-          store: store,
-          day: day,
-          meals: store.plannedForDay(day),
-          compact: MediaQuery.sizeOf(context).width < 620,
-          last: index == 6,
-        );
-      }),
-    ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 760 ? 2 : 1;
+      final spacing = columns == 2 ? 16.0 : 12.0;
+      final cardWidth = columns == 2
+          ? (constraints.maxWidth - spacing) / 2
+          : constraints.maxWidth;
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: List.generate(7, (index) {
+          final day = weekStart.add(Duration(days: index));
+          return SizedBox(
+            width: cardWidth,
+            child: _PlanDayCard(
+              store: store,
+              day: day,
+              meals: store.plannedForDay(day),
+            ),
+          );
+        }),
+      );
+    },
   );
 }
 
@@ -2289,14 +2293,10 @@ class _PlanDayCard extends StatelessWidget {
     required this.store,
     required this.day,
     required this.meals,
-    required this.compact,
-    required this.last,
   });
   final PantryStore store;
   final DateTime day;
   final List<PlannedMeal> meals;
-  final bool compact;
-  final bool last;
 
   @override
   Widget build(BuildContext context) {
@@ -2305,63 +2305,89 @@ class _PlanDayCard extends StatelessWidget {
     for (final meal in meals) {
       grouped.putIfAbsent(meal.groupId ?? meal.id, () => []).add(meal);
     }
-    final dateLabel = '${day.month}/${day.day}';
-    final content = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final group in grouped.values)
-          _PlannedMealGroupChip(store: store, meals: group),
-        InkWell(
-          onTap: () => _showPlannedMealEditor(context, store, day),
-          borderRadius: BorderRadius.circular(13),
-          child: Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF333B36)),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Text(
-              meals.isEmpty ? '+ Add a meal' : '+',
-              style: const TextStyle(color: _faint, fontSize: 12),
-            ),
-          ),
-        ),
-      ],
-    );
+    final dateLabel = _monthDay(day);
     return Container(
-      padding: EdgeInsets.fromLTRB(14, compact ? 14 : 12, 14, 12),
+      constraints: const BoxConstraints(minHeight: 178),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: today ? const Color(0xFF171C18) : Colors.transparent,
-        border: last ? null : const Border(bottom: BorderSide(color: _border)),
+        color: today ? const Color(0xFF20271F) : const Color(0xFF171B19),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
-      child: compact
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _PlanDayLabel(day: day, today: today, dateLabel: dateLabel),
-                const SizedBox(height: 10),
-                content,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 92,
-                  child: _PlanDayLabel(
-                    day: day,
-                    today: today,
-                    dateLabel: dateLabel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _PlanDayLabel(
+                  day: day,
+                  today: today,
+                  dateLabel: dateLabel,
+                ),
+              ),
+              if (today)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _amber,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'TODAY',
+                    style: TextStyle(
+                      color: Color(0xFF251A08),
+                      fontSize: 10,
+                      letterSpacing: .8,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(child: content),
-              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (grouped.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Nothing planned yet',
+                style: TextStyle(
+                  color: _muted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            )
+          else
+            ...grouped.values.map(
+              (group) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _PlannedMealGroupChip(store: store, meals: group),
+              ),
             ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => _showPlannedMealEditor(context, store, day),
+              style: TextButton.styleFrom(
+                foregroundColor: _amber,
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              child: const Text('+ Add a meal'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2377,24 +2403,25 @@ class _PlanDayLabel extends StatelessWidget {
   final String dateLabel;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.baseline,
+    textBaseline: TextBaseline.alphabetic,
     children: [
       Text(
         _weekdayLabel(day),
         style: TextStyle(
-          color: today ? _amber : _muted,
-          fontWeight: FontWeight.w600,
-          fontSize: 13,
+          color: today ? _amber : _ink,
+          fontWeight: FontWeight.w800,
+          fontSize: 18,
         ),
       ),
-      const SizedBox(height: 4),
+      const SizedBox(width: 8),
       Text(
         dateLabel,
         style: const TextStyle(
-          color: _faint,
-          fontFamily: 'monospace',
-          fontSize: 11,
+          color: _muted,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
         ),
       ),
     ],
@@ -2414,25 +2441,32 @@ class _PlannedMealGroupChip extends StatelessWidget {
     final leftover = meals.every(
       (meal) => meal.intent == PlannedMealIntent.leftover,
     );
+    final recipeCount = _recipesForPlannedMeals(store, meals).length;
     return Material(
-      color: Colors.transparent,
+      color: const Color(0xFF272D29),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () => _openPlannedMealGroup(context, store, meals),
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 440, minHeight: 42),
-          padding: const EdgeInsets.fromLTRB(11, 7, 7, 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1B201D),
-            border: Border.all(color: const Color(0xFF262D29)),
-            borderRadius: BorderRadius.circular(13),
-          ),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(meals.length == 1 ? first.emoji : '🍽️'),
-              const SizedBox(width: 9),
-              Flexible(
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF343C36),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  meals.length == 1 ? first.emoji : '🍽️',
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2441,29 +2475,44 @@ class _PlannedMealGroupChip extends StatelessWidget {
                       '${first.slot.label}${leftover ? ' · leftovers' : ''}'
                           .toUpperCase(),
                       style: const TextStyle(
-                        color: _faint,
-                        fontSize: 9,
-                        letterSpacing: 1,
+                        color: _amber,
+                        fontSize: 10,
+                        letterSpacing: .8,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: first.completedAt == null ? _ink : _faint,
-                        fontSize: 12.5,
-                        height: 1.25,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
                         decoration: first.completedAt == null
                             ? null
                             : TextDecoration.lineThrough,
                       ),
                     ),
+                    if (recipeCount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        recipeCount == 1
+                            ? 'View recipe and ingredients'
+                            : 'View $recipeCount recipes and ingredients',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 5),
+              const Icon(Icons.chevron_right, color: _muted, size: 20),
               IconButton(
                 tooltip: 'Remove from plan',
                 onPressed: () => groupId == null
@@ -2472,10 +2521,10 @@ class _PlannedMealGroupChip extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(
-                  width: 28,
-                  height: 28,
+                  width: 34,
+                  height: 34,
                 ),
-                icon: const Icon(Icons.close, size: 15, color: _faint),
+                icon: const Icon(Icons.close, size: 17, color: _muted),
               ),
             ],
           ),
@@ -2490,16 +2539,7 @@ Future<void> _openPlannedMealGroup(
   PantryStore store,
   List<PlannedMeal> meals,
 ) async {
-  final recipes = meals
-      .where(
-        (meal) =>
-            meal.source == PlannedMealSource.recipe && meal.sourceId != null,
-      )
-      .map(
-        (meal) => store.recipes.where((recipe) => recipe.id == meal.sourceId),
-      )
-      .expand((matches) => matches)
-      .toList();
+  final recipes = _recipesForPlannedMeals(store, meals);
   if (recipes.length == 1) {
     final recipe = recipes.single;
     await showRecipeDetails(
@@ -2519,19 +2559,51 @@ Future<void> _openPlannedMealGroup(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const ListTile(
-              title: Text('Recipes in this meal'),
-              subtitle: Text('Choose a component to view its full recipe.'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${meals.first.emoji} ${meals.map((meal) => meal.name).join(' + ')}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Recipes in this meal',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: _amber,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Choose a recipe to see its ingredients and method.',
+                    style: TextStyle(color: _muted, fontSize: 14),
+                  ),
+                ],
+              ),
             ),
             for (final recipe in recipes)
               ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 7,
+                ),
                 leading: Text(
                   recipe.emoji,
                   style: const TextStyle(fontSize: 24),
                 ),
-                title: Text(recipe.name),
-                subtitle: Text('${_compactNumber(recipe.servings)} servings'),
-                trailing: const Icon(Icons.chevron_right),
+                title: Text(
+                  recipe.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  '${recipe.ingredients.length} ingredients · ${_compactNumber(recipe.servings)} servings',
+                ),
+                trailing: const Icon(Icons.arrow_forward_rounded),
                 onTap: () => Navigator.pop(context, recipe),
               ),
           ],
@@ -2567,6 +2639,34 @@ Future<void> _openPlannedMealGroup(
       ],
     ),
   );
+}
+
+List<Recipe> _recipesForPlannedMeals(
+  PantryStore store,
+  List<PlannedMeal> meals,
+) {
+  final recipeIds = <String>[];
+  for (final meal in meals) {
+    if (meal.source == PlannedMealSource.recipe && meal.sourceId != null) {
+      recipeIds.add(meal.sourceId!);
+    } else if (meal.source == PlannedMealSource.meal && meal.sourceId != null) {
+      final templates = store.mealTemplates.where(
+        (template) => template.id == meal.sourceId,
+      );
+      if (templates.isNotEmpty) {
+        recipeIds.addAll(
+          templates.first.components.map((component) => component.recipeId),
+        );
+      }
+    }
+  }
+  final seen = <String>{};
+  return recipeIds
+      .where(seen.add)
+      .map((id) => store.recipes.where((recipe) => recipe.id == id))
+      .where((matches) => matches.isNotEmpty)
+      .map((matches) => matches.first)
+      .toList();
 }
 
 // Retained for legacy single-entry plans while grouped plans use the compact chip.

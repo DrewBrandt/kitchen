@@ -53,10 +53,11 @@ Set-Clipboard -Value ''
 In Preview, ask:
 
 1. `Read my pantry and tell me how many eggs I have.`
-2. `Show my current meal plan and grocery list.`
-3. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
+2. `Search my saved outside foods for Chick-fil-A. Do not create anything.`
+3. `Show my current meal plan and grocery list.`
+4. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
 
-The first two should call read Actions. The third should stop before the write.
+The first three should call read Actions. The fourth should stop before the write.
 Then explicitly confirm the test write, verify it appears in the app, and remove
 it from the app if it was only a test.
 
@@ -70,3 +71,15 @@ A normal ChatGPT conversation that is not opened with this custom GPT will not
 inherit its private Action. It can use an uploaded copy of the instructions as a
 guide, but it cannot read or write live pantry data securely. Open a new chat
 with **Drew's Pantry** whenever live access is needed.
+
+## Applying later API or instruction updates
+
+Repository edits do not update the deployed function or private GPT
+automatically. After changing the API or GPT behavior:
+
+1. Deploy the function with `firebase deploy --only functions`.
+2. Replace the GPT Instructions with the complete current contents of
+   `docs/PANTRY_GPT_INSTRUCTIONS.md`.
+3. Replace the Action schema with the complete current contents of
+   `docs/pantry-gpt-openapi.yaml` and save the GPT.
+4. Repeat the read-only Preview tests above.

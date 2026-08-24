@@ -14,6 +14,10 @@ param(
   [ValidateRange(1, 365)]
   [int]$Days = 30,
 
+  [string]$Query,
+
+  [string]$Brand,
+
   [string]$BaseUrl = 'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/pantryApi'
 )
 
@@ -39,7 +43,22 @@ $token = $null
 
 try {
   $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
-  $requestPath = if ($Path -eq '/v1/history') { "$Path`?days=$Days" } else { $Path }
+  if ($Path -eq '/v1/history') {
+    $requestPath = "$Path`?days=$Days"
+  }
+  elseif ($Method -eq 'GET' -and $Path -eq '/v1/external-foods') {
+    $queryParts = @()
+    if (-not [string]::IsNullOrWhiteSpace($Query)) {
+      $queryParts += "q=$([uri]::EscapeDataString($Query))"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Brand)) {
+      $queryParts += "brand=$([uri]::EscapeDataString($Brand))"
+    }
+    $requestPath = if ($queryParts.Count -eq 0) { $Path } else { "$Path`?$($queryParts -join '&')" }
+  }
+  else {
+    $requestPath = $Path
+  }
   $request = @{
     Method = $Method
     Uri = "$BaseUrl$requestPath"

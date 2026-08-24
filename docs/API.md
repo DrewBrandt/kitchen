@@ -72,6 +72,17 @@ Only `label` and at least one positive nutrition value are required. If
 Restaurant orders and packaged snacks live in `external_foods`, entirely
 separate from pantry definitions and inventory lots:
 
+Search before saving so an existing definition can be reused without loading
+the complete pantry snapshot:
+
+```http
+GET /v1/external-foods?q=chicken%20sandwich&brand=Chick-fil-A
+```
+
+Omit both query parameters to list all saved outside foods. `q` partially
+matches the ID, name, brand, or serving label; `brand` is an exact normalized
+match.
+
 ```http
 POST /v1/external-foods
 Content-Type: application/json
@@ -108,6 +119,10 @@ Content-Type: application/json
 ```
 
 Neither request reads or changes inventory lots.
+
+Each call to `POST /v1/meals` creates one history event and retains the
+`externalFoodId` reference. Log repeated physical items with separate calls and
+`servings: 1` unless the user explicitly wants a grouped entry.
 
 ## Consume a saved recipe
 

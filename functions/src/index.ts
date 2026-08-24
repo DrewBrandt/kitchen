@@ -107,6 +107,10 @@ export const pantryApi = onRequest(
         await createRecipe(asObject(request.body), response);
         return;
       }
+      if (request.method === "GET" && path === "/v1/external-foods") {
+        await searchExternalFoods(request.query.q, request.query.brand, response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/meals") {
         await logExternalMeal(asObject(request.body), response);
         return;
@@ -1130,6 +1134,7 @@ async function grantAccess(body: JsonObject, response: ApiResponse): Promise<voi
 
 async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise<void> {
   const externalFoodId = optionalString(body.externalFoodId);
+  let servings = 1;
   let nutrition: Record<string, number>;
   let label: string;
   let note: string;
@@ -1138,7 +1143,7 @@ async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise
     const saved = await db.collection("external_foods").doc(externalFoodId).get();
     if (!saved.exists) throw new ValidationError("Unknown external food");
     const data = saved.data() ?? {};
-    const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
+    servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
     nutrition = scaleNutrition(asObject(data.nutrition), servings);
     label = optionalString(body.label) ?? (servings === 1
       ? String(data.name)
@@ -1156,6 +1161,8 @@ async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise
   await reference.set({
     label,
     kind: "external",
+    external_food_id: externalFoodId ?? null,
+    servings,
     recipe_id: null,
     timestamp: timestamp == null ? FieldValue.serverTimestamp() : parseTimestamp(timestamp, "timestamp"),
     deductions: [],
@@ -1165,6 +1172,38 @@ async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise
     note,
   });
   response.status(201).json({ id: reference.id, status: "logged" });
+}
+
+async function searchExternalFoods(
+  queryValue: unknown,
+  brandValue: unknown,
+  response: ApiResponse,
+): Promise<void> {
+  const query = optionalString(queryValue);
+  const brand = optionalString(brandValue);
+  const normalizedQuery = query == null ? null : normalize(query);
+  const normalizedBrand = brand == null ? null : normalize(brand);
+  const snapshot = await db.collection("external_foods").get();
+  const outsideFoods = snapshot.docs
+    .map((doc): JsonObject => ({ id: doc.id, ...doc.data() }))
+    .filter((food) => {
+      const foodBrand = String(food.brand ?? "");
+      if (normalizedBrand != null && normalize(foodBrand) !== normalizedBrand) return false;
+      if (normalizedQuery == null) return true;
+      return [food.id, food.name, foodBrand, food.serving_label]
+        .some((value) => normalize(String(value ?? "")).includes(normalizedQuery));
+    })
+    .map((food) => ({
+      id: food.id,
+      name: food.name,
+      brand: food.brand ?? "",
+      emoji: food.emoji ?? "🍽️",
+      servingLabel: food.serving_label,
+      nutrition: food.nutrition,
+      source: food.source ?? "",
+      estimated: food.estimated === true,
+    }));
+  response.status(200).json({ outsideFoods });
 }
 
 async function addPreparedBatch(body: JsonObject, response: ApiResponse): Promise<void> {

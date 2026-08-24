@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Drew's Pantry API
-  version: 1.0.0
+  version: 1.1.0
   license:
     name: Private personal use
     identifier: LicenseRef-Proprietary
@@ -241,6 +241,35 @@ paths:
         '422':
           $ref: '#/components/responses/InvalidRequest'
   /v1/external-foods:
+    get:
+      operationId: searchOutsideFoods
+      summary: Search reusable restaurant and packaged outside foods
+      description: >-
+        Use before saving or logging an identifiable outside food. Returns only
+        reusable outside-food definitions, avoiding the much larger full pantry
+        response. With no parameters, returns every saved outside food.
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Partial match against ID, name, brand, or serving label.
+        - in: query
+          name: brand
+          required: false
+          schema:
+            type: string
+          description: Exact brand match, ignoring case and punctuation.
+      responses:
+        '200':
+          description: Matching reusable outside foods
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnyObject'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: saveOutsideFood
       summary: Save or update a reusable restaurant or packaged outside food
@@ -263,8 +292,10 @@ paths:
       operationId: logMealWithoutInventoryDeduction
       summary: Log an outside meal or snack without changing inventory
       description: >-
-        Use an externalFoodId and servings for a saved outside food, or provide a
-        label and nutrition totals for a one-off meal.
+        Log exactly one consumed item per call. Normally use an externalFoodId
+        and servings 1 for a saved outside food. Use label and nutrition totals
+        only for a genuinely unidentifiable or explicitly combined one-off meal.
+        Repeated units should be separate calls unless the user requests grouping.
       x-openai-isConsequential: true
       requestBody:
         required: true

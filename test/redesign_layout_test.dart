@@ -356,6 +356,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('planned meals drill into component recipes and ingredients', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final recipes = store.recipes.take(2).toList();
+    const mealName = 'Weekend brunch';
+    const mealId = 'weekend-brunch';
+    store.saveMealTemplate(
+      MealTemplate(
+        id: mealId,
+        name: mealName,
+        emoji: '🍽️',
+        servings: 2,
+        components: [
+          for (final recipe in recipes)
+            MealComponent(recipeId: recipe.id, servings: 1),
+        ],
+      ),
+    );
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'planned-weekend-brunch',
+        date: store.now,
+        slot: MealSlot.breakfast,
+        source: PlannedMealSource.meal,
+        sourceId: mealId,
+        name: mealName,
+        emoji: '🍽️',
+        servings: 2,
+      ),
+    );
+
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(mealName));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recipes in this meal'), findsOneWidget);
+    expect(find.text(recipes.first.name), findsOneWidget);
+    await tester.tap(find.text(recipes.first.name));
+    await tester.pumpAndSettle();
+
+    expect(find.text('INGREDIENTS'), findsOneWidget);
+    expect(find.text('METHOD'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('planning exposes an editable food preference profile', (
     tester,
   ) async {
