@@ -4,7 +4,7 @@ param(
   [string]$Method,
 
   [Parameter(Mandatory)]
-  [ValidateSet('/v1/inventory', '/v1/history', '/v1/history/reconcile', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/consume/recipe', '/v1/consume/inventory', '/v1/targets', '/v1/access')]
+  [ValidateSet('/v1/inventory', '/v1/history', '/v1/history/reconcile', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/consume/recipe', '/v1/consume/inventory', '/v1/targets', '/v1/preferences', '/v1/access')]
   [string]$Path,
 
   [string]$BodyFile,

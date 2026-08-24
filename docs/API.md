@@ -172,6 +172,27 @@ Calories and macronutrients are planning targets; sodium is displayed as a
 limit. Total sugar intentionally has no percentage because nutrition labels do
 not distinguish all naturally occurring sugar from added sugar consistently.
 
+## Save food preferences and allergies
+
+This private profile is returned with inventory reads so apps and Pantry GPT can
+apply it before suggesting recipes or planning meals:
+
+```http
+POST /v1/preferences
+Content-Type: application/json
+
+{
+  "allergies": ["Tree nuts"],
+  "dislikes": ["Raw tomatoes"],
+  "favorites": ["Indian food", "Cheeseburgers"],
+  "dietaryRules": ["Limit red meat to twice per week"],
+  "planningNotes": "Prefer simple weeknight dinners and planned leftovers."
+}
+```
+
+All arrays are optional and replace their previous values. Allergies are treated
+as hard safety constraints by the Pantry GPT instructions.
+
 ## Read current inventory
 
 ```http

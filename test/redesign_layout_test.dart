@@ -206,4 +206,38 @@ void main() {
     expect(find.text('Add item'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('planning exposes an editable food preference profile', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Food profile'), findsOneWidget);
+    await tester.tap(find.text('Set up'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Allergies and intolerances'),
+      'Tree nuts',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Foods to avoid'),
+      'Raw tomatoes',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Favorites'),
+      'Indian food',
+    );
+    await tester.tap(find.text('Save profile'));
+    await tester.pumpAndSettle();
+
+    expect(store.foodPreferences.allergies, ['Tree nuts']);
+    expect(find.text('Tree nuts'), findsOneWidget);
+    expect(find.text('Raw tomatoes'), findsOneWidget);
+    expect(find.text('Indian food'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -108,6 +108,10 @@ export const pantryApi = onRequest(
         await saveNutritionTargets(asObject(request.body), response);
         return;
       }
+      if (request.method === "POST" && path === "/v1/preferences") {
+        await saveFoodPreferences(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/access") {
         await grantAccess(asObject(request.body), response);
         return;
@@ -128,12 +132,13 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history, nutritionTargets, externalFoods, plannedMeals, groceryItems] = await Promise.all([
+  const [foods, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
     db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
     db.collection("settings").doc("nutrition").get(),
+    db.collection("settings").doc("food_profile").get(),
     db.collection("external_foods").get(),
     db.collection("meal_plan").get(),
     db.collection("grocery_list").get(),
@@ -144,6 +149,7 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
+    foodPreferences: foodPreferences.exists ? serialize(foodPreferences.data() ?? {}) : null,
     externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     plannedMeals: plannedMeals.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     groceryItems: groceryItems.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
@@ -933,6 +939,19 @@ async function saveNutritionTargets(body: JsonObject, response: ApiResponse): Pr
   response.status(200).json({ status: "saved" });
 }
 
+async function saveFoodPreferences(body: JsonObject, response: ApiResponse): Promise<void> {
+  const preferences = {
+    allergies: stringList(body.allergies, "allergies"),
+    dislikes: stringList(body.dislikes, "dislikes"),
+    favorites: stringList(body.favorites, "favorites"),
+    dietary_rules: stringList(body.dietaryRules, "dietaryRules"),
+    planning_notes: optionalString(body.planningNotes) ?? "",
+    updated_at: FieldValue.serverTimestamp(),
+  };
+  await db.collection("settings").doc("food_profile").set(preferences);
+  response.status(200).json({ status: "saved" });
+}
+
 async function loadFoods(): Promise<FoodRecord[]> {
   const snapshot = await db.collection("foods").get();
   return snapshot.docs.map((doc) => {
@@ -1056,6 +1075,17 @@ function scaleNutrition(nutrition: JsonObject, factor: number): Record<string, n
 function asOptionalStringArray(value: unknown): string[] {
   if (value == null) return [];
   return asArray(value, "instructions").map((item, index) => requiredString(item, `instructions[${index}]`));
+}
+function stringList(value: unknown, name: string): string[] {
+  if (value == null) return [];
+  const seen = new Set<string>();
+  return asArray(value, name).map((item, index) => requiredString(item, `${name}[${index}]`))
+    .filter((item) => {
+      const key = item.toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 function parseTimestamp(value: string, name: string): Timestamp {
   const date = new Date(value);

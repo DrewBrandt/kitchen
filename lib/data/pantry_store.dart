@@ -18,6 +18,7 @@ class PantryStore extends ChangeNotifier {
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
     _nutritionTargets = NutritionTargets.defaults;
+    _foodPreferences = FoodPreferences.empty;
     _externalFoods = [];
     _plannedMeals = [];
     _groceryItems = [];
@@ -33,6 +34,7 @@ class PantryStore extends ChangeNotifier {
     _lots = data.lots;
     _recipes = data.recipes;
     _nutritionTargets = data.nutritionTargets;
+    _foodPreferences = data.foodPreferences;
     _externalFoods = data.externalFoods;
     _plannedMeals = data.plannedMeals;
     _groceryItems = data.groceryItems;
@@ -57,6 +59,7 @@ class PantryStore extends ChangeNotifier {
         recipes: seeded.recipes,
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
+        foodPreferences: seeded.foodPreferences,
         externalFoods: seeded.externalFoods,
         plannedMeals: seeded.plannedMeals,
         groceryItems: seeded.groceryItems,
@@ -74,6 +77,7 @@ class PantryStore extends ChangeNotifier {
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
   late NutritionTargets _nutritionTargets;
+  late FoodPreferences _foodPreferences;
   late List<ExternalFood> _externalFoods;
   late List<PlannedMeal> _plannedMeals;
   late List<GroceryListItem> _groceryItems;
@@ -87,6 +91,7 @@ class PantryStore extends ChangeNotifier {
   List<Recipe> get recipes => List.unmodifiable(_recipes);
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
+  FoodPreferences get foodPreferences => _foodPreferences;
   List<ExternalFood> get externalFoods => List.unmodifiable(_externalFoods);
   List<PlannedMeal> get plannedMeals => List.unmodifiable(
     [..._plannedMeals]..sort((a, b) {
@@ -434,6 +439,26 @@ class PantryStore extends ChangeNotifier {
     _nutritionTargets = targets;
     _queue(_cloud?.saveNutritionTargets(targets));
     notifyListeners();
+  }
+
+  void saveFoodPreferences(FoodPreferences preferences) {
+    _foodPreferences = FoodPreferences(
+      allergies: _cleanPreferenceList(preferences.allergies),
+      dislikes: _cleanPreferenceList(preferences.dislikes),
+      favorites: _cleanPreferenceList(preferences.favorites),
+      dietaryRules: _cleanPreferenceList(preferences.dietaryRules),
+      planningNotes: preferences.planningNotes.trim(),
+    );
+    _queue(_cloud?.saveFoodPreferences(_foodPreferences));
+    notifyListeners();
+  }
+
+  List<String> _cleanPreferenceList(Iterable<String> values) {
+    final seen = <String>{};
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty && seen.add(value.toLowerCase()))
+        .toList();
   }
 
   void saveExternalFood(ExternalFood food) {

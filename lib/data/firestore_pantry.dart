@@ -9,6 +9,7 @@ class CloudPantryData {
     required this.recipes,
     required this.history,
     required this.nutritionTargets,
+    required this.foodPreferences,
     required this.externalFoods,
     required this.plannedMeals,
     required this.groceryItems,
@@ -19,6 +20,7 @@ class CloudPantryData {
   final List<Recipe> recipes;
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
+  final FoodPreferences foodPreferences;
   final List<ExternalFood> externalFoods;
   final List<PlannedMeal> plannedMeals;
   final List<GroceryListItem> groceryItems;
@@ -46,7 +48,12 @@ class FirestorePantry {
       db.collection('meal_plan').get(),
       db.collection('grocery_list').get(),
     ]);
-    final targets = await db.collection('settings').doc('nutrition').get();
+    final settings = await Future.wait([
+      db.collection('settings').doc('nutrition').get(),
+      db.collection('settings').doc('food_profile').get(),
+    ]);
+    final targets = settings[0];
+    final profile = settings[1];
     return CloudPantryData(
       foods: results[0].docs.map(_foodFromDoc).toList(),
       lots: results[1].docs.map(_lotFromDoc).toList(),
@@ -55,6 +62,9 @@ class FirestorePantry {
       nutritionTargets: targets.exists
           ? _nutritionTargetsFromData(targets.data()!)
           : NutritionTargets.defaults,
+      foodPreferences: profile.exists
+          ? _foodPreferencesFromData(profile.data()!)
+          : FoodPreferences.empty,
       externalFoods: results[4].docs.map(_externalFoodFromDoc).toList(),
       plannedMeals: results[5].docs.map(_plannedMealFromDoc).toList(),
       groceryItems: results[6].docs.map(_groceryItemFromDoc).toList(),
@@ -94,6 +104,10 @@ class FirestorePantry {
       db.collection('settings').doc('nutrition'),
       _nutritionTargetsData(data.nutritionTargets),
     );
+    batch.set(
+      db.collection('settings').doc('food_profile'),
+      _foodPreferencesData(data.foodPreferences),
+    );
     await batch.commit();
   }
 
@@ -115,6 +129,11 @@ class FirestorePantry {
       .collection('settings')
       .doc('nutrition')
       .set(_nutritionTargetsData(targets));
+
+  Future<void> saveFoodPreferences(FoodPreferences preferences) => db
+      .collection('settings')
+      .doc('food_profile')
+      .set(_foodPreferencesData(preferences));
 
   Future<void> saveExternalFood(ExternalFood food) =>
       db.collection('external_foods').doc(food.id).set(_externalFoodData(food));
@@ -310,6 +329,15 @@ class FirestorePantry {
     'updated_at': FieldValue.serverTimestamp(),
   };
 
+  Map<String, Object?> _foodPreferencesData(FoodPreferences preferences) => {
+    'allergies': preferences.allergies,
+    'dislikes': preferences.dislikes,
+    'favorites': preferences.favorites,
+    'dietary_rules': preferences.dietaryRules,
+    'planning_notes': preferences.planningNotes,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
   Map<String, Object?> _externalFoodData(ExternalFood food) => {
     'name': food.name,
     'brand': food.brand,
@@ -411,6 +439,23 @@ class FirestorePantry {
         sodiumMg: (data['sodium_mg'] as num? ?? 2300).toDouble(),
         label: data['label'] as String? ?? '',
       );
+
+  FoodPreferences _foodPreferencesFromData(Map<String, dynamic> data) =>
+      FoodPreferences(
+        allergies: _stringList(data['allergies']),
+        dislikes: _stringList(data['dislikes']),
+        favorites: _stringList(data['favorites']),
+        dietaryRules: _stringList(data['dietary_rules']),
+        planningNotes: data['planning_notes'] as String? ?? '',
+      );
+
+  List<String> _stringList(Object? value) => value is Iterable
+      ? value
+            .whereType<String>()
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList()
+      : const [];
 
   NutritionTotals _nutritionTotalsFromData(Map<String, dynamic> data) =>
       NutritionTotals(

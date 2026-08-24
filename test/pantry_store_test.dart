@@ -195,6 +195,26 @@ void main() {
     expect(store.nutritionTargets.proteinG, 130);
   });
 
+  test('food preferences are normalized and retained', () {
+    final store = PantryStore.demo();
+
+    store.saveFoodPreferences(
+      const FoodPreferences(
+        allergies: [' Tree nuts ', 'tree nuts'],
+        dislikes: ['Raw tomatoes'],
+        favorites: ['Indian food'],
+        dietaryRules: ['Limit red meat'],
+        planningNotes: ' Prefer easy weeknights. ',
+      ),
+    );
+
+    expect(store.foodPreferences.allergies, ['Tree nuts']);
+    expect(store.foodPreferences.dislikes, ['Raw tomatoes']);
+    expect(store.foodPreferences.favorites, ['Indian food']);
+    expect(store.foodPreferences.dietaryRules, ['Limit red meat']);
+    expect(store.foodPreferences.planningNotes, 'Prefer easy weeknights.');
+  });
+
   test('known outside foods can be reused without inventory changes', () {
     final store = PantryStore.demo();
     const sandwich = ExternalFood(

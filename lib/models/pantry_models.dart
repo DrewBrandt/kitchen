@@ -95,6 +95,31 @@ class NutritionTargets {
   final String label;
 }
 
+class FoodPreferences {
+  const FoodPreferences({
+    this.allergies = const [],
+    this.dislikes = const [],
+    this.favorites = const [],
+    this.dietaryRules = const [],
+    this.planningNotes = '',
+  });
+
+  static const empty = FoodPreferences();
+
+  final List<String> allergies;
+  final List<String> dislikes;
+  final List<String> favorites;
+  final List<String> dietaryRules;
+  final String planningNotes;
+
+  bool get isEmpty =>
+      allergies.isEmpty &&
+      dislikes.isEmpty &&
+      favorites.isEmpty &&
+      dietaryRules.isEmpty &&
+      planningNotes.trim().isEmpty;
+}
+
 class ExternalFood {
   const ExternalFood({
     required this.id,

@@ -19,7 +19,8 @@ paths:
       summary: Read all current pantry context
       description: >-
         Returns food definitions, positive lots, recipes, recent history,
-        nutrition targets, outside foods, planned meals, and grocery items.
+        nutrition targets, food preferences, outside foods, planned meals, and
+        grocery items.
       responses:
         '200':
           description: Current pantry snapshot
@@ -350,6 +351,27 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/preferences:
+    post:
+      operationId: saveFoodPreferences
+      summary: Replace the private food preference and allergy profile
+      description: >-
+        Stores allergies, dislikes, favorites, dietary rules, and free-form
+        planning notes. Allergies are hard safety constraints.
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FoodPreferences'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/InvalidRequest'
 components:
   securitySchemes:
     bearerAuth:
@@ -414,6 +436,28 @@ components:
           type: string
         estimated:
           type: boolean
+    FoodPreferences:
+      type: object
+      additionalProperties: false
+      properties:
+        allergies:
+          type: array
+          items:
+            type: string
+        dislikes:
+          type: array
+          items:
+            type: string
+        favorites:
+          type: array
+          items:
+            type: string
+        dietaryRules:
+          type: array
+          items:
+            type: string
+        planningNotes:
+          type: string
     UnitConversion:
       type: object
       additionalProperties: false

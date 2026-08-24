@@ -1673,31 +1673,153 @@ class _PlanningPageState extends State<_PlanningPage> {
           ),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final calendar = _WeekCalendar(
-            store: widget.store,
-            weekStart: weekStart,
-          );
-          final grocery = _GroceryListCard(store: widget.store, compact: true);
-          if (constraints.maxWidth < 900) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [calendar, const SizedBox(height: 20), grocery],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 2, child: calendar),
-              const SizedBox(width: 20),
-              SizedBox(width: 330, child: grocery),
-            ],
-          );
-        },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FoodPreferencesCard(store: widget.store),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final calendar = _WeekCalendar(
+                store: widget.store,
+                weekStart: weekStart,
+              );
+              final grocery = _GroceryListCard(
+                store: widget.store,
+                compact: true,
+              );
+              if (constraints.maxWidth < 900) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [calendar, const SizedBox(height: 20), grocery],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 2, child: calendar),
+                  const SizedBox(width: 20),
+                  SizedBox(width: 330, child: grocery),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
+}
+
+class _FoodPreferencesCard extends StatelessWidget {
+  const _FoodPreferencesCard({required this.store});
+
+  final PantryStore store;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: store,
+    builder: (context, _) {
+      final profile = store.foodPreferences;
+      final groups = [
+        ('ALLERGIES', profile.allergies, _berry),
+        ('AVOID', profile.dislikes, _amber),
+        ('FAVORITES', profile.favorites, _herb),
+        ('DIETARY RULES', profile.dietaryRules, _sky),
+      ];
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.tune_outlined, color: _amber),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Food profile',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          'Used by meal planning, recipe suggestions, and Pantry GPT.',
+                          style: TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _showFoodPreferences(context, store),
+                    icon: const Icon(Icons.edit_outlined, size: 17),
+                    label: Text(profile.isEmpty ? 'Set up' : 'Edit'),
+                  ),
+                ],
+              ),
+              if (profile.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: Text(
+                    'Add allergies, foods you dislike, favorites, dietary rules, or anything a meal planner should remember.',
+                    style: TextStyle(color: _faint, fontSize: 12),
+                  ),
+                )
+              else ...[
+                const SizedBox(height: 18),
+                for (final group in groups)
+                  if (group.$2.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 13),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.$1,
+                            style: TextStyle(
+                              color: group.$3,
+                              fontSize: 9,
+                              letterSpacing: 1.1,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Wrap(
+                            spacing: 7,
+                            runSpacing: 7,
+                            children: group.$2
+                                .map((item) => Chip(label: Text(item)))
+                                .toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                if (profile.planningNotes.isNotEmpty) ...[
+                  const Text(
+                    'PLANNING NOTES',
+                    style: TextStyle(
+                      color: _violet,
+                      fontSize: 9,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    profile.planningNotes,
+                    style: const TextStyle(color: _muted, fontSize: 12),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _WeekCalendar extends StatelessWidget {
@@ -3936,6 +4058,116 @@ Future<void> _showNutritionTargets(
     controller.dispose();
   }
 }
+
+Future<void> _showFoodPreferences(
+  BuildContext context,
+  PantryStore store,
+) async {
+  final current = store.foodPreferences;
+  final allergies = TextEditingController(text: current.allergies.join('\n'));
+  final dislikes = TextEditingController(text: current.dislikes.join('\n'));
+  final favorites = TextEditingController(text: current.favorites.join('\n'));
+  final dietaryRules = TextEditingController(
+    text: current.dietaryRules.join('\n'),
+  );
+  final planningNotes = TextEditingController(text: current.planningNotes);
+  final fields = <(String, String, TextEditingController)>[
+    (
+      'Allergies and intolerances',
+      'One per line. These are treated as hard safety constraints.',
+      allergies,
+    ),
+    ('Foods to avoid', 'Dislikes and ingredients you do not want.', dislikes),
+    ('Favorites', 'Foods, cuisines, and meals you enjoy.', favorites),
+    (
+      'Dietary rules',
+      'Examples: no pork, pescatarian, or limit red meat.',
+      dietaryRules,
+    ),
+  ];
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Food profile'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'This profile is stored privately with your pantry and is available to Pantry GPT when it reads your inventory.',
+                style: TextStyle(color: _muted),
+              ),
+              const SizedBox(height: 18),
+              for (final field in fields) ...[
+                TextField(
+                  controller: field.$3,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    labelText: field.$1,
+                    helperText: field.$2,
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              TextField(
+                controller: planningNotes,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Other planning notes',
+                  hintText:
+                      'Budget, effort, texture preferences, variety goals, serving habits…',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save profile'),
+        ),
+      ],
+    ),
+  );
+  final updated = submitted == true
+      ? FoodPreferences(
+          allergies: _parsePreferenceList(allergies.text),
+          dislikes: _parsePreferenceList(dislikes.text),
+          favorites: _parsePreferenceList(favorites.text),
+          dietaryRules: _parsePreferenceList(dietaryRules.text),
+          planningNotes: planningNotes.text,
+        )
+      : null;
+  await Future<void>.delayed(kThemeAnimationDuration);
+  for (final controller in [
+    allergies,
+    dislikes,
+    favorites,
+    dietaryRules,
+    planningNotes,
+  ]) {
+    controller.dispose();
+  }
+  if (updated != null) store.saveFoodPreferences(updated);
+}
+
+List<String> _parsePreferenceList(String value) => value
+    .split(RegExp(r'[,\n]'))
+    .map((item) => item.trim())
+    .where((item) => item.isNotEmpty)
+    .toList();
 
 Future<void> _showExternalMeal(
   BuildContext context,

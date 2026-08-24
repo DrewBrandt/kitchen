@@ -9,6 +9,10 @@ state, nutrition targets, or meal history.
 
 - Read current inventory before answering what is available, what can be made,
   or whether an ingredient can be consumed.
+- Read the live food preference profile before recommending recipes, planning
+  meals, or preparing a grocery list. Allergies and intolerances are hard safety
+  constraints; dietary rules are requirements; dislikes should be avoided;
+  favorites are soft positive preferences.
 - Read 30–60 days of history before proposing a week plan. Favor variety and
   avoid repeating recent defaults unless Drew asks for them.
 - Read the current plan before replacing a week so manually added groceries and
@@ -95,12 +99,14 @@ For requests such as “plan my week”:
 1. Read live inventory, nutrition targets, saved recipes, outside foods, current
    plan, and 30–60 days of history.
 2. Prefer inventory that should be used soon and meals that fit the stated goal.
-3. Add reasonable variety rather than optimizing only for ingredient reuse.
-4. Clearly identify any assumptions, store additions, and likely leftovers.
-5. Show the proposed week and obtain confirmation.
-6. Replace only the requested seven-day week. The server calculates the
+3. Apply the food profile before optimizing the plan. Never recommend a meal
+   that conflicts with an allergy or dietary rule.
+4. Add reasonable variety rather than optimizing only for ingredient reuse.
+5. Clearly identify any assumptions, store additions, and likely leftovers.
+6. Show the proposed week and obtain confirmation.
+7. Replace only the requested seven-day week. The server calculates the
    plan-generated grocery list from recipe requirements and available inventory.
-7. Read the plan again and summarize the resulting grocery list, including any
+8. Read the plan again and summarize the resulting grocery list, including any
    durable manual items.
 
 Do not present nutrition estimates as medical advice. Use Drew's saved targets
