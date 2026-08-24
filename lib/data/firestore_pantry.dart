@@ -9,6 +9,7 @@ class CloudPantryData {
     required this.recipes,
     required this.history,
     required this.nutritionTargets,
+    required this.externalFoods,
   });
 
   final List<FoodDefinition> foods;
@@ -16,8 +17,10 @@ class CloudPantryData {
   final List<Recipe> recipes;
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
+  final List<ExternalFood> externalFoods;
 
-  bool get isEmpty => foods.isEmpty && lots.isEmpty && recipes.isEmpty;
+  bool get isEmpty =>
+      foods.isEmpty && lots.isEmpty && recipes.isEmpty && externalFoods.isEmpty;
 }
 
 class FirestorePantry {
@@ -31,6 +34,7 @@ class FirestorePantry {
       db.collection('inventory_lots').get(),
       db.collection('recipes').get(),
       db.collection('consumption_history').orderBy('timestamp').get(),
+      db.collection('external_foods').get(),
     ]);
     final targets = await db.collection('settings').doc('nutrition').get();
     return CloudPantryData(
@@ -41,6 +45,7 @@ class FirestorePantry {
       nutritionTargets: targets.exists
           ? _nutritionTargetsFromData(targets.data()!)
           : NutritionTargets.defaults,
+      externalFoods: results[4].docs.map(_externalFoodFromDoc).toList(),
     );
   }
 
@@ -54,6 +59,12 @@ class FirestorePantry {
     }
     for (final recipe in data.recipes) {
       batch.set(db.collection('recipes').doc(recipe.id), _recipeData(recipe));
+    }
+    for (final food in data.externalFoods) {
+      batch.set(
+        db.collection('external_foods').doc(food.id),
+        _externalFoodData(food),
+      );
     }
     batch.set(
       db.collection('settings').doc('nutrition'),
@@ -80,6 +91,9 @@ class FirestorePantry {
       .collection('settings')
       .doc('nutrition')
       .set(_nutritionTargetsData(targets));
+
+  Future<void> saveExternalFood(ExternalFood food) =>
+      db.collection('external_foods').doc(food.id).set(_externalFoodData(food));
 
   Future<void> saveConsumption(
     ConsumptionEvent event,
@@ -220,6 +234,35 @@ class FirestorePantry {
     'label': targets.label,
     'updated_at': FieldValue.serverTimestamp(),
   };
+
+  Map<String, Object?> _externalFoodData(ExternalFood food) => {
+    'name': food.name,
+    'brand': food.brand,
+    'emoji': food.emoji,
+    'serving_label': food.servingLabel,
+    'nutrition': _nutritionTotalsData(food.nutrition),
+    'source': food.source,
+    'estimated': food.estimated,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  ExternalFood _externalFoodFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return ExternalFood(
+      id: doc.id,
+      name: data['name'] as String,
+      brand: data['brand'] as String? ?? '',
+      emoji: data['emoji'] as String? ?? '🍽️',
+      servingLabel: data['serving_label'] as String? ?? '1 serving',
+      nutrition: _nutritionTotalsFromData(
+        data['nutrition'] as Map<String, dynamic>? ?? const {},
+      ),
+      source: data['source'] as String? ?? '',
+      estimated: data['estimated'] as bool? ?? false,
+    );
+  }
 
   NutritionTargets _nutritionTargetsFromData(Map<String, dynamic> data) =>
       NutritionTargets(

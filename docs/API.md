@@ -67,6 +67,48 @@ Content-Type: application/json
 Only `label` and at least one positive nutrition value are required. If
 `timestamp` is omitted, Firebase records the current time.
 
+## Save and reuse an outside food
+
+Restaurant orders and packaged snacks live in `external_foods`, entirely
+separate from pantry definitions and inventory lots:
+
+```http
+POST /v1/external-foods
+Content-Type: application/json
+
+{
+  "id": "chick-fil-a-chicken-sandwich",
+  "name": "Chicken Sandwich",
+  "brand": "Chick-fil-A",
+  "emoji": "🥪",
+  "servingLabel": "1 sandwich",
+  "calories": 420,
+  "proteinG": 29,
+  "carbsG": 41,
+  "fatG": 18,
+  "fiberG": 1,
+  "sugarG": 6,
+  "sodiumMg": 1460,
+  "source": "Restaurant nutrition page",
+  "estimated": false
+}
+```
+
+After it is saved, log any number of servings without resending nutrition:
+
+```http
+POST /v1/meals
+Content-Type: application/json
+
+{
+  "externalFoodId": "chick-fil-a-chicken-sandwich",
+  "servings": 1,
+  "timestamp": "2026-08-23T13:00:00-04:00"
+}
+```
+
+Neither request reads or changes inventory lots.
+
 ## Save daily nutrition targets
 
 Targets are private, editable, and used by the Food Log percentage displays:

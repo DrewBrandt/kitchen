@@ -91,6 +91,28 @@ class NutritionTargets {
   final String label;
 }
 
+class ExternalFood {
+  const ExternalFood({
+    required this.id,
+    required this.name,
+    required this.servingLabel,
+    required this.nutrition,
+    this.brand = '',
+    this.emoji = '🍽️',
+    this.source = '',
+    this.estimated = false,
+  });
+
+  final String id;
+  final String name;
+  final String servingLabel;
+  final NutritionTotals nutrition;
+  final String brand;
+  final String emoji;
+  final String source;
+  final bool estimated;
+}
+
 extension StorageLocationLabel on StorageLocation {
   String get label => switch (this) {
     StorageLocation.pantry => 'Pantry',

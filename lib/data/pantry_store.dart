@@ -18,6 +18,7 @@ class PantryStore extends ChangeNotifier {
     _lots = SeedData.lots(_now);
     _recipes = SeedData.recipes();
     _nutritionTargets = NutritionTargets.defaults;
+    _externalFoods = [];
   }
 
   PantryStore._cloud({
@@ -30,6 +31,7 @@ class PantryStore extends ChangeNotifier {
     _lots = data.lots;
     _recipes = data.recipes;
     _nutritionTargets = data.nutritionTargets;
+    _externalFoods = data.externalFoods;
     _history.addAll(data.history);
   }
 
@@ -51,6 +53,7 @@ class PantryStore extends ChangeNotifier {
         recipes: seeded.recipes,
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
+        externalFoods: seeded.externalFoods,
       ),
     );
     seeded._cloud = cloud;
@@ -65,6 +68,7 @@ class PantryStore extends ChangeNotifier {
   late List<InventoryLot> _lots;
   late List<Recipe> _recipes;
   late NutritionTargets _nutritionTargets;
+  late List<ExternalFood> _externalFoods;
   final List<ConsumptionEvent> _history = [];
   int _pendingWrites = 0;
   Object? _syncError;
@@ -74,6 +78,7 @@ class PantryStore extends ChangeNotifier {
   List<Recipe> get recipes => List.unmodifiable(_recipes);
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
+  List<ExternalFood> get externalFoods => List.unmodifiable(_externalFoods);
   DateTime get now => _now;
   bool get isSyncing => _pendingWrites > 0;
   Object? get syncError => _syncError;
@@ -89,7 +94,8 @@ class PantryStore extends ChangeNotifier {
     var candidate = base.isEmpty ? 'item' : base;
     var suffix = 2;
     while (_foods.containsKey(candidate) ||
-        _recipes.any((item) => item.id == candidate)) {
+        _recipes.any((item) => item.id == candidate) ||
+        _externalFoods.any((item) => item.id == candidate)) {
       candidate = '$base-${suffix++}';
     }
     return candidate;
@@ -260,6 +266,32 @@ class PantryStore extends ChangeNotifier {
     return event;
   }
 
+  ConsumptionEvent logExternalFood(
+    ExternalFood food, {
+    double servings = 1,
+    DateTime? timestamp,
+    String note = '',
+  }) {
+    if (servings <= 0 || !servings.isFinite) {
+      throw ArgumentError('Servings must be positive');
+    }
+    final servingText = servings == 1
+        ? food.name
+        : '${units.formatAmount(servings)} servings of ${food.name}';
+    final details = [
+      if (food.brand.isNotEmpty) food.brand,
+      food.servingLabel,
+      if (note.trim().isNotEmpty) note.trim(),
+    ].join(' · ');
+    return logExternalMeal(
+      label: servingText,
+      nutrition: food.nutrition.scale(servings),
+      timestamp: timestamp,
+      estimated: food.estimated,
+      note: details,
+    );
+  }
+
   void addLot({
     required FoodDefinition food,
     required double amount,
@@ -351,6 +383,33 @@ class PantryStore extends ChangeNotifier {
     }
     _nutritionTargets = targets;
     _queue(_cloud?.saveNutritionTargets(targets));
+    notifyListeners();
+  }
+
+  void saveExternalFood(ExternalFood food) {
+    final values = [
+      food.nutrition.calories,
+      food.nutrition.proteinG,
+      food.nutrition.carbsG,
+      food.nutrition.fatG,
+      food.nutrition.fiberG,
+      food.nutrition.sugarG,
+      food.nutrition.sodiumMg,
+    ];
+    if (food.name.trim().isEmpty || food.servingLabel.trim().isEmpty) {
+      throw ArgumentError('Name and serving are required');
+    }
+    if (values.any((value) => !value.isFinite || value < 0) ||
+        !values.any((value) => value > 0)) {
+      throw ArgumentError('Enter at least one nutrition value');
+    }
+    final index = _externalFoods.indexWhere((item) => item.id == food.id);
+    if (index < 0) {
+      _externalFoods = [..._externalFoods, food];
+    } else {
+      _externalFoods[index] = food;
+    }
+    _queue(_cloud?.saveExternalFood(food));
     notifyListeners();
   }
 

@@ -66,6 +66,10 @@ export const pantryApi = onRequest(
         await logExternalMeal(asObject(request.body), response);
         return;
       }
+      if (request.method === "POST" && path === "/v1/external-foods") {
+        await saveExternalFood(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/targets") {
         await saveNutritionTargets(asObject(request.body), response);
         return;
@@ -90,12 +94,13 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history, nutritionTargets] = await Promise.all([
+  const [foods, lots, recipes, history, nutritionTargets, externalFoods] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
     db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
     db.collection("settings").doc("nutrition").get(),
+    db.collection("external_foods").get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
@@ -103,6 +108,7 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
+    externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     exportedAt: new Date().toISOString(),
   });
 }
@@ -207,32 +213,60 @@ async function grantAccess(body: JsonObject, response: ApiResponse): Promise<voi
 }
 
 async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise<void> {
-  const nutrition = {
-    calories: nonNegativeNumber(body.calories, "calories"),
-    protein_g: nonNegativeNumber(body.proteinG, "proteinG"),
-    carbs_g: nonNegativeNumber(body.carbsG, "carbsG"),
-    fat_g: nonNegativeNumber(body.fatG, "fatG"),
-    fiber_g: nonNegativeNumber(body.fiberG, "fiberG"),
-    sugar_g: nonNegativeNumber(body.sugarG, "sugarG"),
-    sodium_mg: nonNegativeNumber(body.sodiumMg, "sodiumMg"),
-  };
-  if (!Object.values(nutrition).some((value) => value > 0)) {
-    throw new ValidationError("At least one nutrition value must be positive");
+  const externalFoodId = optionalString(body.externalFoodId);
+  let nutrition: Record<string, number>;
+  let label: string;
+  let note: string;
+  let estimated: boolean;
+  if (externalFoodId != null) {
+    const saved = await db.collection("external_foods").doc(externalFoodId).get();
+    if (!saved.exists) throw new ValidationError("Unknown external food");
+    const data = saved.data() ?? {};
+    const servings = body.servings == null ? 1 : positiveNumber(body.servings, "servings");
+    nutrition = scaleNutrition(asObject(data.nutrition), servings);
+    label = optionalString(body.label) ?? (servings === 1
+      ? String(data.name)
+      : `${servings} servings of ${String(data.name)}`);
+    note = optionalString(body.note) ?? [data.brand, data.serving_label].filter(Boolean).join(" · ");
+    estimated = typeof body.estimated === "boolean" ? body.estimated : data.estimated === true;
+  } else {
+    nutrition = nutritionFromBody(body);
+    label = requiredString(body.label, "label");
+    note = optionalString(body.note) ?? "";
+    estimated = body.estimated !== false;
   }
   const timestamp = optionalString(body.timestamp);
   const reference = db.collection("consumption_history").doc();
   await reference.set({
-    label: requiredString(body.label, "label"),
+    label,
     kind: "external",
     recipe_id: null,
     timestamp: timestamp == null ? FieldValue.serverTimestamp() : parseTimestamp(timestamp, "timestamp"),
     deductions: [],
     undone_at: null,
     nutrition,
-    nutrition_estimated: body.estimated !== false,
-    note: optionalString(body.note) ?? "",
+    nutrition_estimated: estimated,
+    note,
   });
   response.status(201).json({ id: reference.id, status: "logged" });
+}
+
+async function saveExternalFood(body: JsonObject, response: ApiResponse): Promise<void> {
+  const name = requiredString(body.name, "name");
+  const brand = optionalString(body.brand) ?? "";
+  const id = optionalString(body.id) ?? slug(`${brand}-${name}`);
+  const nutrition = nutritionFromBody(body);
+  await db.collection("external_foods").doc(id).set({
+    name,
+    brand,
+    emoji: optionalString(body.emoji) ?? "🍽️",
+    serving_label: requiredString(body.servingLabel, "servingLabel"),
+    nutrition,
+    source: optionalString(body.source) ?? "",
+    estimated: body.estimated === true,
+    updated_at: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  response.status(200).json({ id, status: "saved" });
 }
 
 async function saveNutritionTargets(body: JsonObject, response: ApiResponse): Promise<void> {
@@ -336,6 +370,32 @@ function nonNegativeNumber(value: unknown, name: string): number {
     throw new ValidationError(`${name} must be a non-negative number`);
   }
   return value;
+}
+function nutritionFromBody(body: JsonObject): Record<string, number> {
+  const nutrition = {
+    calories: nonNegativeNumber(body.calories, "calories"),
+    protein_g: nonNegativeNumber(body.proteinG, "proteinG"),
+    carbs_g: nonNegativeNumber(body.carbsG, "carbsG"),
+    fat_g: nonNegativeNumber(body.fatG, "fatG"),
+    fiber_g: nonNegativeNumber(body.fiberG, "fiberG"),
+    sugar_g: nonNegativeNumber(body.sugarG, "sugarG"),
+    sodium_mg: nonNegativeNumber(body.sodiumMg, "sodiumMg"),
+  };
+  if (!Object.values(nutrition).some((value) => value > 0)) {
+    throw new ValidationError("At least one nutrition value must be positive");
+  }
+  return nutrition;
+}
+function scaleNutrition(nutrition: JsonObject, factor: number): Record<string, number> {
+  return {
+    calories: nonNegativeNumber(nutrition.calories, "nutrition.calories") * factor,
+    protein_g: nonNegativeNumber(nutrition.protein_g, "nutrition.protein_g") * factor,
+    carbs_g: nonNegativeNumber(nutrition.carbs_g, "nutrition.carbs_g") * factor,
+    fat_g: nonNegativeNumber(nutrition.fat_g, "nutrition.fat_g") * factor,
+    fiber_g: nonNegativeNumber(nutrition.fiber_g, "nutrition.fiber_g") * factor,
+    sugar_g: nonNegativeNumber(nutrition.sugar_g, "nutrition.sugar_g") * factor,
+    sodium_mg: nonNegativeNumber(nutrition.sodium_mg, "nutrition.sodium_mg") * factor,
+  };
 }
 function asOptionalStringArray(value: unknown): string[] {
   if (value == null) return [];

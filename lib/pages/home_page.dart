@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/pantry_store.dart';
 import '../models/pantry_models.dart';
 import '../widgets/food_editor_dialog.dart';
+import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 
@@ -838,10 +839,21 @@ class _FoodLogPageState extends State<_FoodLogPage> {
       title: 'Food log',
       subtitle:
           'Calories and nutrients from recipes, pantry items, and food away from home.',
-      action: FilledButton.icon(
-        onPressed: () => _showExternalMeal(context, store, selectedDay),
-        icon: const Icon(Icons.add),
-        label: const Text('Log food'),
+      action: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => showExternalFoodEditor(context, store),
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: const Text('Save food'),
+          ),
+          FilledButton.icon(
+            onPressed: () => _showExternalMeal(context, store, selectedDay),
+            icon: const Icon(Icons.add),
+            label: const Text('Log food'),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -873,6 +885,66 @@ class _FoodLogPageState extends State<_FoodLogPage> {
             targets: store.nutritionTargets,
             onEdit: () => _showNutritionTargets(context, store),
           ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Known outside foods',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              Text(
+                'Reusable · never touches inventory',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (store.externalFoods.isEmpty)
+            const _EmptyCard(
+              icon: Icons.bookmarks_outlined,
+              text:
+                  'Save a restaurant order or packaged snack to log it again without another lookup.',
+            )
+          else
+            ...store.externalFoods.map(
+              (food) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  child: ListTile(
+                    leading: CircleAvatar(child: Text(food.emoji)),
+                    title: Text(food.name),
+                    subtitle: Text(
+                      '${food.brand.isEmpty ? food.servingLabel : '${food.brand} · ${food.servingLabel}'} · ${_nutritionLabel(food.nutrition)}',
+                    ),
+                    trailing: Wrap(
+                      spacing: 4,
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit saved food',
+                          onPressed: () => showExternalFoodEditor(
+                            context,
+                            store,
+                            existing: food,
+                          ),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        FilledButton(
+                          onPressed: () => _showLogKnownFood(
+                            context,
+                            store,
+                            food,
+                            selectedDay,
+                          ),
+                          child: const Text('Log'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 20),
           Text(
             'Meals and snacks',
@@ -1082,6 +1154,100 @@ class _EmptyCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+Future<void> _showLogKnownFood(
+  BuildContext context,
+  PantryStore store,
+  ExternalFood food,
+  DateTime day,
+) async {
+  final servings = TextEditingController(text: '1');
+  final note = TextEditingController();
+  String? error;
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text('Log ${food.name}'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('${food.servingLabel} · ${_nutritionLabel(food.nutrition)}'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: servings,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Servings eaten'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: note,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  hintText: 'Optional customizations',
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final amount = double.tryParse(servings.text.trim());
+              if (amount == null || amount <= 0) {
+                setDialogState(
+                  () => error = 'Enter a positive serving amount.',
+                );
+              } else {
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text('Add to log'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (submitted == true && context.mounted) {
+    final today = DateTime.now();
+    final event = store.logExternalFood(
+      food,
+      servings: double.parse(servings.text.trim()),
+      timestamp: DateUtils.isSameDay(day, today)
+          ? today
+          : DateTime(day.year, day.month, day.day, 12),
+      note: note.text,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${event.label} added without changing inventory.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => store.undo(event.id),
+        ),
+      ),
+    );
+  }
+  servings.dispose();
+  note.dispose();
 }
 
 Future<void> _showNutritionTargets(

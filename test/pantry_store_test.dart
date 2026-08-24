@@ -162,4 +162,25 @@ void main() {
     expect(store.nutritionTargets, same(targets));
     expect(store.nutritionTargets.proteinG, 130);
   });
+
+  test('known outside foods can be reused without inventory changes', () {
+    final store = PantryStore.demo();
+    const sandwich = ExternalFood(
+      id: 'restaurant-sandwich',
+      name: 'Chicken sandwich',
+      brand: 'Restaurant',
+      servingLabel: '1 sandwich',
+      nutrition: NutritionTotals(calories: 420, proteinG: 29),
+    );
+    final eggsBefore = store.totalFor('egg');
+
+    store.saveExternalFood(sandwich);
+    final event = store.logExternalFood(sandwich, servings: 2);
+
+    expect(store.externalFoods.single.id, sandwich.id);
+    expect(event.kind, ConsumptionKind.external);
+    expect(event.nutrition!.calories, 840);
+    expect(event.deductions, isEmpty);
+    expect(store.totalFor('egg'), eggsBefore);
+  });
 }

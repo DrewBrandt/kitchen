@@ -44,7 +44,7 @@ jobs:
           else
             base_href="/$repository_name/"
           fi
-          flutter build web --release --base-href "$base_href"
+          flutter build web --release --base-href "$base_href" --pwa-strategy=none
           touch build/web/.nojekyll
 
       - name: Configure Pages
