@@ -40,6 +40,20 @@ jobs:
           if [[ $test_status -ne 0 ]]; then
             failing_test="$(grep -E ' \[E\]$' flutter-test.log | tail -n 1 || true)"
             echo "::error title=Flutter test failure::${failing_test:-Flutter tests failed; inspect the job log.}"
+            python3 - <<'PY'
+          from pathlib import Path
+
+          lines = Path("flutter-test.log").read_text(errors="replace").splitlines()
+          markers = [
+              index
+              for index, line in enumerate(lines)
+              if "EXCEPTION CAUGHT" in line or "TestFailure was thrown" in line
+          ]
+          if markers:
+              detail = "\n".join(lines[markers[-1] : markers[-1] + 28])
+              detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Flutter test details::{detail}")
+          PY
             exit "$test_status"
           fi
 
