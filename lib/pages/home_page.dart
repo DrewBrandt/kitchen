@@ -35,7 +35,7 @@ class PantryHomePage extends StatefulWidget {
 class _PantryHomePageState extends State<PantryHomePage> {
   int selectedIndex = 0;
 
-  static const destinations = [
+  static const mobileDestinations = [
     NavigationDestination(
       icon: Icon(Icons.home_outlined),
       selectedIcon: Icon(Icons.home),
@@ -52,16 +52,52 @@ class _PantryHomePageState extends State<PantryHomePage> {
       label: 'Recipes',
     ),
     NavigationDestination(
-      icon: Icon(Icons.storefront_outlined),
-      selectedIcon: Icon(Icons.storefront),
-      label: 'Eating out',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.monitor_heart_outlined),
       selectedIcon: Icon(Icons.monitor_heart),
       label: 'Food log',
     ),
+    NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
   ];
+
+  int get _mobileIndex => switch (selectedIndex) {
+    0 || 1 || 2 => selectedIndex,
+    4 => 3,
+    _ => 4,
+  };
+
+  Future<void> _openMobileMore(BuildContext context) async {
+    final value = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text('More'),
+              subtitle: Text('Dining, meal history, and longer-term trends'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.storefront_outlined),
+              title: const Text('Eating out'),
+              onTap: () => Navigator.pop(context, 3),
+            ),
+            ListTile(
+              leading: const Icon(Icons.history_outlined),
+              title: const Text('History'),
+              onTap: () => Navigator.pop(context, 5),
+            ),
+            ListTile(
+              leading: const Icon(Icons.show_chart_outlined),
+              title: const Text('Trends'),
+              onTap: () => Navigator.pop(context, 6),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (value != null && mounted) setState(() => selectedIndex = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +112,8 @@ class _PantryHomePageState extends State<PantryHomePage> {
       _RecipesPage(store: widget.store),
       _EatingOutPage(store: widget.store),
       _FoodLogPage(store: widget.store),
+      _HistoryPage(store: widget.store),
+      _TrendsPage(store: widget.store),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -135,10 +173,19 @@ class _PantryHomePageState extends State<PantryHomePage> {
             bottomNavigationBar: NavigationBar(
               backgroundColor: const Color(0xFF101311),
               indicatorColor: _raised,
-              selectedIndex: selectedIndex,
-              destinations: destinations,
-              onDestinationSelected: (value) =>
-                  setState(() => selectedIndex = value),
+              labelBehavior:
+                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              selectedIndex: _mobileIndex,
+              destinations: mobileDestinations,
+              onDestinationSelected: (value) {
+                if (value <= 2) {
+                  setState(() => selectedIndex = value);
+                } else if (value == 3) {
+                  setState(() => selectedIndex = 4);
+                } else {
+                  _openMobileMore(context);
+                }
+              },
             ),
           );
         }
@@ -249,6 +296,16 @@ class _PantrySidebar extends StatelessWidget {
               label: 'Food log',
               selected: selectedIndex == 4,
               onTap: () => onSelected(4),
+            ),
+            _SidebarDestination(
+              label: 'History',
+              selected: selectedIndex == 5,
+              onTap: () => onSelected(5),
+            ),
+            _SidebarDestination(
+              label: 'Trends',
+              selected: selectedIndex == 6,
+              onTap: () => onSelected(6),
             ),
             const Spacer(),
             const Divider(),
@@ -1397,6 +1454,867 @@ class _EatingOutPlaceCard extends StatelessWidget {
     ),
   );
 }
+
+class _HistoryPage extends StatefulWidget {
+  const _HistoryPage({required this.store});
+  final PantryStore store;
+
+  @override
+  State<_HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<_HistoryPage> {
+  int rangeDays = 14;
+
+  @override
+  Widget build(BuildContext context) {
+    final events = _eventsInRange(widget.store, rangeDays);
+    final groups = _groupEventsByDay(events);
+    final repeats = _mealFrequencies(events);
+    final repeatedCount = repeats.where((item) => item.count >= 3).length;
+    final range = _rangeLabel(rangeDays);
+    final subtitle = events.isEmpty
+        ? 'No meals logged in this range yet.'
+        : '${events.length} meals · ${repeats.length} distinct foods · '
+              '$repeatedCount repeated three times or more';
+    return _PageShell(
+      eyebrow: range,
+      title: 'History',
+      subtitle: subtitle,
+      action: _RangePicker(
+        values: const [7, 14, 30],
+        labels: const ['1 week', '2 weeks', '30 days'],
+        selected: rangeDays,
+        onSelected: (value) => setState(() => rangeDays = value),
+      ),
+      child: events.isEmpty
+          ? const _EmptyCard(
+              icon: Icons.history_outlined,
+              text: 'Your meals will appear here as you cook or log food.',
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final timeline = _HistoryTimeline(
+                  groups: groups,
+                  frequencies: {
+                    for (final item in repeats) item.key: item.count,
+                  },
+                );
+                final repeated = _RepeatedMealsCard(items: repeats);
+                if (constraints.maxWidth < 820) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [timeline, const SizedBox(height: 18), repeated],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: timeline),
+                    const SizedBox(width: 20),
+                    Expanded(child: repeated),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _HistoryTimeline extends StatelessWidget {
+  const _HistoryTimeline({required this.groups, required this.frequencies});
+  final List<_DayEvents> groups;
+  final Map<String, int> frequencies;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Day by day',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          for (final (index, group) in groups.indexed) ...[
+            _HistoryDayRow(group: group, frequencies: frequencies),
+            if (index != groups.length - 1)
+              const Divider(height: 30, color: _border),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class _HistoryDayRow extends StatelessWidget {
+  const _HistoryDayRow({required this.group, required this.frequencies});
+  final _DayEvents group;
+  final Map<String, int> frequencies;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = group.events.fold(
+      const NutritionTotals(),
+      (sum, event) => sum + (event.nutrition ?? const NutritionTotals()),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final date = SizedBox(
+          width: constraints.maxWidth < 520 ? 82 : 92,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _weekdayLabel(group.day),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _monthDay(group.day),
+                style: const TextStyle(
+                  color: _faint,
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        );
+        final meals = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: group.events.map((event) {
+            final repeats = frequencies[_mealKey(event.label)] ?? 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 5,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Icon(_eventIcon(event.kind), size: 16, color: _muted),
+                  Text(event.label, style: const TextStyle(fontSize: 13)),
+                  if (repeats > 1)
+                    _SmallBadge(
+                      label: '$repeats× in range',
+                      color: repeats >= 3 ? _amber : _faint,
+                    ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+        final nutrition = Text(
+          '${total.calories.round()} cal\n${_compactNumber(total.proteinG)}g protein',
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            color: _muted,
+            fontFamily: 'monospace',
+            fontSize: 11,
+            height: 1.55,
+          ),
+        );
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            date,
+            const SizedBox(width: 10),
+            Expanded(child: meals),
+            if (constraints.maxWidth >= 450) ...[
+              const SizedBox(width: 12),
+              nutrition,
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RepeatedMealsCard extends StatelessWidget {
+  const _RepeatedMealsCard({required this.items});
+  final List<_MealFrequency> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.take(6).toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Most repeated',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Useful context when planning for more variety.',
+              style: TextStyle(color: _muted, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            for (final (index, item) in visible.indexed) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _raised,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      '${item.count}×',
+                      style: const TextStyle(
+                        color: _amber,
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.label, style: const TextStyle(fontSize: 13)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Last had ${_relativeMealDate(item.lastEaten)}',
+                          style: const TextStyle(color: _faint, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (index != visible.length - 1)
+                const Divider(height: 24, color: _border),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrendsPage extends StatefulWidget {
+  const _TrendsPage({required this.store});
+  final PantryStore store;
+
+  @override
+  State<_TrendsPage> createState() => _TrendsPageState();
+}
+
+class _TrendsPageState extends State<_TrendsPage> {
+  int rangeDays = 30;
+  _DriverMetric driver = _DriverMetric.protein;
+
+  @override
+  Widget build(BuildContext context) {
+    final events = _eventsInRange(widget.store, rangeDays);
+    final days = _dailyNutrition(events, rangeDays);
+    final totals = days.fold(
+      const NutritionTotals(),
+      (sum, item) => sum + item.nutrition,
+    );
+    final average = totals.scale(1 / rangeDays);
+    return _PageShell(
+      eyebrow: _rangeLabel(rangeDays),
+      title: 'Trends',
+      subtitle:
+          'Daily nutrition, target comparisons, and the foods driving each nutrient.',
+      action: _RangePicker(
+        values: const [7, 30, 90],
+        labels: const ['7 days', '30 days', '90 days'],
+        selected: rangeDays,
+        onSelected: (value) => setState(() => rangeDays = value),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ProteinTrendCard(
+            days: days,
+            target: widget.store.nutritionTargets.proteinG,
+            average: average.proteinG,
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final averages = _AverageTargetsCard(
+                average: average,
+                targets: widget.store.nutritionTargets,
+              );
+              final drivers = _NutrientDriversCard(
+                events: events,
+                selected: driver,
+                onSelected: (value) => setState(() => driver = value),
+              );
+              if (constraints.maxWidth < 820) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [averages, const SizedBox(height: 20), drivers],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: averages),
+                  const SizedBox(width: 20),
+                  Expanded(child: drivers),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProteinTrendCard extends StatelessWidget {
+  const _ProteinTrendCard({
+    required this.days,
+    required this.target,
+    required this.average,
+  });
+  final List<_DailyNutrition> days;
+  final double target;
+  final double average;
+
+  @override
+  Widget build(BuildContext context) {
+    final peak = days.fold(target, (value, day) {
+      return day.nutrition.proteinG > value ? day.nutrition.proteinG : value;
+    });
+    final chartMax = peak <= 0 ? 1.0 : peak * 1.2;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Protein, day by day',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Average ${_compactNumber(average)}g per day',
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                _SmallBadge(
+                  label: 'Target ${_compactNumber(target)}g',
+                  color: _herb,
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              height: 190,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final chartWidth = days.length > 31
+                      ? days.length * 13.0
+                      : constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: days.length > 31,
+                    child: SizedBox(
+                      width: chartWidth,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 28 + 138 * target / chartMax,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Container(height: 1, color: _herb),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: days.map((day) {
+                                final height =
+                                    138 * day.nutrition.proteinG / chartMax;
+                                return Expanded(
+                                  child: Tooltip(
+                                    message:
+                                        '${_monthDay(day.day)} · ${_compactNumber(day.nutrition.proteinG)}g protein',
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            height: height,
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  day.nutrition.proteinG >=
+                                                      target
+                                                  ? _herb
+                                                  : _sky,
+                                              borderRadius:
+                                                  const BorderRadius.vertical(
+                                                    top: Radius.circular(4),
+                                                  ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            day.day.day == 1 ||
+                                                    days.length <= 14 ||
+                                                    day == days.last
+                                                ? '${day.day.month}/${day.day.day}'
+                                                : '',
+                                            style: const TextStyle(
+                                              color: _faint,
+                                              fontFamily: 'monospace',
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AverageTargetsCard extends StatelessWidget {
+  const _AverageTargetsCard({required this.average, required this.targets});
+  final NutritionTotals average;
+  final NutritionTargets targets;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [
+      _TargetComparison('Calories', average.calories, targets.calories, 'cal'),
+      _TargetComparison('Protein', average.proteinG, targets.proteinG, 'g'),
+      _TargetComparison('Carbs', average.carbsG, targets.carbsG, 'g'),
+      _TargetComparison('Fat', average.fatG, targets.fatG, 'g'),
+      _TargetComparison('Fiber', average.fiberG, targets.fiberG, 'g'),
+      _TargetComparison(
+        'Sodium',
+        average.sodiumMg,
+        targets.sodiumMg,
+        'mg',
+        isLimit: true,
+      ),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Daily average vs. target',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Average across every calendar day in the selected range.',
+              style: TextStyle(color: _muted, fontSize: 12),
+            ),
+            const SizedBox(height: 20),
+            for (final row in rows) _TargetComparisonRow(item: row),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TargetComparisonRow extends StatelessWidget {
+  const _TargetComparisonRow({required this.item});
+  final _TargetComparison item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = item.target <= 0 ? 0.0 : item.value / item.target;
+    final caution = item.isLimit && ratio > 1;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(item.label)),
+              Text(
+                '${_compactNumber(item.value)} / ${_compactNumber(item.target)} ${item.unit}',
+                style: TextStyle(
+                  color: caution ? _berry : _muted,
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio.clamp(0, 1),
+              minHeight: 7,
+              backgroundColor: _raised,
+              color: caution ? _berry : _amber,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutrientDriversCard extends StatelessWidget {
+  const _NutrientDriversCard({
+    required this.events,
+    required this.selected,
+    required this.onSelected,
+  });
+  final List<ConsumptionEvent> events;
+  final _DriverMetric selected;
+  final ValueChanged<_DriverMetric> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final contributors = _nutrientContributors(events, selected);
+    final max = contributors.isEmpty ? 1.0 : contributors.first.value;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'What drives each nutrient',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: _DriverMetric.values.map((metric) {
+                return ChoiceChip(
+                  label: Text(metric.label),
+                  selected: selected == metric,
+                  onSelected: (_) => onSelected(metric),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+            if (contributors.isEmpty)
+              const Text(
+                'No nutrition data in this range.',
+                style: TextStyle(color: _muted),
+              )
+            else
+              for (final item in contributors.take(6))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          Text(
+                            '${_compactNumber(item.value)}${selected.unit}',
+                            style: const TextStyle(
+                              color: _muted,
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: max <= 0 ? 0 : item.value / max,
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: selected.color,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RangePicker extends StatelessWidget {
+  const _RangePicker({
+    required this.values,
+    required this.labels,
+    required this.selected,
+    required this.onSelected,
+  });
+  final List<int> values;
+  final List<String> labels;
+  final int selected;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 7,
+    runSpacing: 7,
+    children: values.indexed.map((entry) {
+      final (index, value) = entry;
+      return ChoiceChip(
+        label: Text(labels[index]),
+        selected: selected == value,
+        onSelected: (_) => onSelected(value),
+      );
+    }).toList(),
+  );
+}
+
+class _SmallBadge extends StatelessWidget {
+  const _SmallBadge({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontFamily: 'monospace', fontSize: 10),
+    ),
+  );
+}
+
+class _DayEvents {
+  const _DayEvents(this.day, this.events);
+  final DateTime day;
+  final List<ConsumptionEvent> events;
+}
+
+class _MealFrequency {
+  const _MealFrequency({
+    required this.key,
+    required this.label,
+    required this.count,
+    required this.lastEaten,
+  });
+  final String key;
+  final String label;
+  final int count;
+  final DateTime lastEaten;
+}
+
+class _DailyNutrition {
+  const _DailyNutrition(this.day, this.nutrition);
+  final DateTime day;
+  final NutritionTotals nutrition;
+}
+
+class _TargetComparison {
+  const _TargetComparison(
+    this.label,
+    this.value,
+    this.target,
+    this.unit, {
+    this.isLimit = false,
+  });
+  final String label;
+  final double value;
+  final double target;
+  final String unit;
+  final bool isLimit;
+}
+
+enum _DriverMetric {
+  protein('Protein', 'g', _herb),
+  sodium('Sodium', 'mg', _berry),
+  fiber('Fiber', 'g', _amber),
+  sugar('Sugar', 'g', _violet);
+
+  const _DriverMetric(this.label, this.unit, this.color);
+  final String label;
+  final String unit;
+  final Color color;
+
+  double value(NutritionTotals nutrition) => switch (this) {
+    _DriverMetric.protein => nutrition.proteinG,
+    _DriverMetric.sodium => nutrition.sodiumMg,
+    _DriverMetric.fiber => nutrition.fiberG,
+    _DriverMetric.sugar => nutrition.sugarG,
+  };
+}
+
+class _NutrientContributor {
+  const _NutrientContributor(this.label, this.value);
+  final String label;
+  final double value;
+}
+
+List<ConsumptionEvent> _eventsInRange(PantryStore store, int days) {
+  final now = DateTime.now();
+  final cutoff = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(Duration(days: days - 1));
+  return store.history
+      .where(
+        (event) => event.undoneAt == null && !event.timestamp.isBefore(cutoff),
+      )
+      .toList()
+    ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+}
+
+List<_DayEvents> _groupEventsByDay(List<ConsumptionEvent> events) {
+  final grouped = <DateTime, List<ConsumptionEvent>>{};
+  for (final event in events) {
+    final day = DateTime(
+      event.timestamp.year,
+      event.timestamp.month,
+      event.timestamp.day,
+    );
+    grouped.putIfAbsent(day, () => []).add(event);
+  }
+  return grouped.entries
+      .map((entry) => _DayEvents(entry.key, entry.value))
+      .toList()
+    ..sort((a, b) => b.day.compareTo(a.day));
+}
+
+List<_MealFrequency> _mealFrequencies(List<ConsumptionEvent> events) {
+  final grouped = <String, List<ConsumptionEvent>>{};
+  for (final event in events) {
+    grouped.putIfAbsent(_mealKey(event.label), () => []).add(event);
+  }
+  final result = grouped.entries.map((entry) {
+    entry.value.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return _MealFrequency(
+      key: entry.key,
+      label: entry.value.first.label,
+      count: entry.value.length,
+      lastEaten: entry.value.first.timestamp,
+    );
+  }).toList();
+  result.sort((a, b) {
+    final count = b.count.compareTo(a.count);
+    return count != 0 ? count : b.lastEaten.compareTo(a.lastEaten);
+  });
+  return result;
+}
+
+List<_DailyNutrition> _dailyNutrition(List<ConsumptionEvent> events, int days) {
+  final now = DateTime.now();
+  final first = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(Duration(days: days - 1));
+  final totals = <DateTime, NutritionTotals>{};
+  for (final event in events) {
+    final day = DateTime(
+      event.timestamp.year,
+      event.timestamp.month,
+      event.timestamp.day,
+    );
+    totals[day] =
+        (totals[day] ?? const NutritionTotals()) +
+        (event.nutrition ?? const NutritionTotals());
+  }
+  return List.generate(days, (index) {
+    final day = first.add(Duration(days: index));
+    return _DailyNutrition(day, totals[day] ?? const NutritionTotals());
+  });
+}
+
+List<_NutrientContributor> _nutrientContributors(
+  List<ConsumptionEvent> events,
+  _DriverMetric metric,
+) {
+  final labels = <String, String>{};
+  final totals = <String, double>{};
+  for (final event in events) {
+    final key = _mealKey(event.label);
+    labels[key] = event.label;
+    totals[key] =
+        (totals[key] ?? 0) +
+        metric.value(event.nutrition ?? const NutritionTotals());
+  }
+  final result = totals.entries
+      .where((entry) => entry.value > 0)
+      .map((entry) => _NutrientContributor(labels[entry.key]!, entry.value))
+      .toList();
+  result.sort((a, b) => b.value.compareTo(a.value));
+  return result;
+}
+
+String _mealKey(String label) => label.trim().toLowerCase();
 
 class _FoodLogPage extends StatefulWidget {
   const _FoodLogPage({required this.store});
@@ -2550,6 +3468,64 @@ String _calendarDate(DateTime date) {
     'December',
   ];
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
+}
+
+String _rangeLabel(int days) {
+  final end = DateTime.now();
+  final start = DateTime(
+    end.year,
+    end.month,
+    end.day,
+  ).subtract(Duration(days: days - 1));
+  return '${_monthDay(start)} – ${_monthDay(end)}';
+}
+
+String _monthDay(DateTime date) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}';
+}
+
+String _weekdayLabel(DateTime date) {
+  const days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  final today = DateTime.now();
+  if (DateUtils.isSameDay(date, today)) return 'Today';
+  if (DateUtils.isSameDay(date, today.subtract(const Duration(days: 1)))) {
+    return 'Yesterday';
+  }
+  return days[date.weekday - 1];
+}
+
+String _relativeMealDate(DateTime date) {
+  final now = DateTime.now();
+  final days = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime(date.year, date.month, date.day)).inDays;
+  if (days <= 0) return 'today';
+  if (days == 1) return 'yesterday';
+  return '$days days ago';
 }
 
 Future<void> _showAddLot(BuildContext context, PantryStore store) async {

@@ -142,6 +142,19 @@ Returns food definitions, positive inventory lots, recipes, and the 500 most
 recent food-log events. Codex can use this to answer “what can I make?” and
 “what have I eaten today?” before writing anything.
 
+## Read meal-planning history
+
+```http
+GET /v1/history?days=30
+```
+
+Returns active food-log events in the requested 1–365 day range plus a compact
+planning summary: distinct meal count, foods repeated three or more times, the
+most repeated foods, their last-eaten dates, and recent meal names. This is the
+preferred context for requests such as “plan my week” because it lets Codex
+avoid recent defaults without downloading the entire pantry. Undone events are
+excluded.
+
 ## Define or update a food
 
 ```http

@@ -33,7 +33,14 @@ void main() {
     await pumpPantry(tester, const Size(1440, 980));
     expect(tester.takeException(), isNull);
 
-    for (final page in ['Inventory', 'Recipes', 'Eating out', 'Food log']) {
+    for (final page in [
+      'Inventory',
+      'Recipes',
+      'Eating out',
+      'Food log',
+      'History',
+      'Trends',
+    ]) {
       await tester.tap(find.text(page).first);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: '$page should render');
@@ -85,6 +92,45 @@ void main() {
     expect(find.text('Chick-fil-A'), findsOneWidget);
     expect(find.text('Chicken sandwich'), findsOneWidget);
     expect(find.text('1 saved item'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('history surfaces repetition and trends show contributors', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final now = DateTime.now();
+    for (var index = 0; index < 3; index++) {
+      store.logExternalMeal(
+        label: 'Chicken sandwich',
+        timestamp: now.subtract(Duration(days: index * 2)),
+        nutrition: const NutritionTotals(
+          calories: 420,
+          proteinG: 29,
+          sodiumMg: 1460,
+        ),
+      );
+    }
+    store.logExternalMeal(
+      label: 'Greek yogurt',
+      timestamp: now.subtract(const Duration(days: 1)),
+      nutrition: const NutritionTotals(calories: 140, proteinG: 15, sugarG: 10),
+    );
+
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('History').first);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('4 meals'), findsOneWidget);
+    expect(find.text('Most repeated'), findsOneWidget);
+    expect(find.text('3×'), findsOneWidget);
+
+    await tester.tap(find.text('Trends').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Protein, day by day'), findsOneWidget);
+    expect(find.text('What drives each nutrient'), findsOneWidget);
+    expect(find.text('Chicken sandwich'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

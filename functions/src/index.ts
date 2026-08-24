@@ -50,6 +50,10 @@ export const pantryApi = onRequest(
         await exportInventory(response);
         return;
       }
+      if (request.method === "GET" && path === "/v1/history") {
+        await exportHistory(request.query.days, response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/foods") {
         await createFood(asObject(request.body), response);
         return;
@@ -110,6 +114,68 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
     externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     exportedAt: new Date().toISOString(),
+  });
+}
+
+async function exportHistory(rawDays: unknown, response: ApiResponse): Promise<void> {
+  const parsedDays = typeof rawDays === "string" ? Number(rawDays) : 30;
+  if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 365) {
+    throw new ValidationError("days must be a whole number between 1 and 365");
+  }
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (parsedDays - 1));
+  const snapshot = await db.collection("consumption_history")
+    .orderBy("timestamp", "desc")
+    .limit(1000)
+    .get();
+  const events: Array<JsonObject & { id: string }> = snapshot.docs
+    .map((doc) => ({ id: doc.id, ...doc.data() } as JsonObject & { id: string }))
+    .filter((event) => {
+      const timestamp = event.timestamp;
+      return timestamp instanceof Timestamp &&
+        timestamp.toDate() >= cutoff &&
+        event.undone_at == null;
+    });
+  const meals = new Map<string, { label: string; count: number; lastEaten: Date }>();
+  for (const event of events) {
+    const label = String(event.label ?? "Unnamed meal");
+    const key = label.trim().toLocaleLowerCase();
+    const timestamp = (event.timestamp as Timestamp).toDate();
+    const current = meals.get(key);
+    if (current == null) {
+      meals.set(key, { label, count: 1, lastEaten: timestamp });
+    } else {
+      current.count += 1;
+      if (timestamp > current.lastEaten) {
+        current.label = label;
+        current.lastEaten = timestamp;
+      }
+    }
+  }
+  const repeated = [...meals.values()]
+    .sort((a, b) => b.count - a.count || b.lastEaten.getTime() - a.lastEaten.getTime())
+    .map((meal) => ({
+      label: meal.label,
+      count: meal.count,
+      lastEaten: meal.lastEaten.toISOString(),
+    }));
+  response.status(200).json({
+    rangeDays: parsedDays,
+    from: cutoff.toISOString(),
+    to: now.toISOString(),
+    summary: {
+      eventCount: events.length,
+      distinctMeals: meals.size,
+      repeatedThreeOrMore: repeated.filter((meal) => meal.count >= 3).length,
+      mostRepeated: repeated.slice(0, 20),
+      recentMealNames: repeated
+        .sort((a, b) => Date.parse(b.lastEaten) - Date.parse(a.lastEaten))
+        .slice(0, 30)
+        .map((meal) => meal.label),
+    },
+    events: events.map((event) => serialize(event)),
   });
 }
 
