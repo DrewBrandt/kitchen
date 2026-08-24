@@ -63,15 +63,24 @@ the normal Firebase web configuration already required by every browser client.
 
 ## Codex API credential
 
-The Cloud Function uses the `PANTRY_API_TOKEN` secret. Set it directly through
-Firebase Secret Manager rather than committing it:
+Cloud Functions require the Firebase Blaze plan, although low-volume usage is
+normally covered by its no-cost allowances. After upgrading, generate the
+credential and send it directly to Firebase Secret Manager with:
 
-```sh
-firebase functions:secrets:set PANTRY_API_TOKEN
+```powershell
+.\tools\setup_api_secret.ps1
 ```
 
-The command prompts locally for the value. The function receives it at runtime;
-it does not belong in Flutter, GitHub Actions, or source control.
+The generated token is never printed. Firebase holds one copy and this Windows
+account holds a DPAPI-encrypted copy outside the repository. The function
+receives it at runtime; it does not belong in Flutter, GitHub Actions, chat, or
+source control.
+
+After deploying the function, make an authenticated request with:
+
+```powershell
+.\tools\pantry_api.ps1 -Method GET -Path /v1/inventory
+```
 
 ## Verify
 

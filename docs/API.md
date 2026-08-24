@@ -12,13 +12,17 @@ Every request uses:
 Authorization: Bearer <PANTRY_API_TOKEN>
 ```
 
-Set the Firebase Functions secret before deployment:
+Cloud Functions and Secret Manager require the Firebase Blaze plan. Generate a
+random token, store it in Firebase, and keep a Windows-encrypted local copy by
+running from the repository root:
 
-```sh
-firebase functions:secrets:set PANTRY_API_TOKEN
+```powershell
+.\tools\setup_api_secret.ps1
 ```
 
-Never store this token in the Flutter client or commit it to Git.
+The token is not displayed or passed through chat. Never store it in the Flutter
+client or commit it to Git. Use `tools/pantry_api.ps1` for authenticated calls;
+POST bodies are supplied as JSON files with `-BodyFile`.
 
 ## Read current inventory
 
