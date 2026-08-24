@@ -7,6 +7,15 @@ import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 
+const _ink = Color(0xFFECF1EE);
+const _muted = Color(0xFF97A29B);
+const _faint = Color(0xFF6E7A73);
+const _raised = Color(0xFF1E2321);
+const _border = Color(0xFF29302C);
+const _amber = Color(0xFFF0B85A);
+const _herb = Color(0xFF7DD89A);
+const _berry = Color(0xFFE77986);
+
 class PantryHomePage extends StatefulWidget {
   const PantryHomePage({
     super.key,
@@ -54,6 +63,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
         store: widget.store,
         onOpenInventory: () => setState(() => selectedIndex = 1),
         onOpenRecipes: () => setState(() => selectedIndex = 2),
+        onOpenFoodLog: () => setState(() => selectedIndex = 3),
       ),
       _InventoryPage(store: widget.store),
       _RecipesPage(store: widget.store),
@@ -82,7 +92,29 @@ class _PantryHomePageState extends State<PantryHomePage> {
         if (!wide) {
           return Scaffold(
             appBar: AppBar(
-              title: Text(destinations[selectedIndex].label),
+              titleSpacing: 18,
+              title: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _amber,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Text('🫙', style: TextStyle(fontSize: 16)),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Pantry',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontFamily: 'serif',
+                      fontSize: 24,
+                    ),
+                  ),
+                ],
+              ),
               actions: [
                 IconButton(
                   tooltip: 'Sign out',
@@ -93,6 +125,8 @@ class _PantryHomePageState extends State<PantryHomePage> {
             ),
             body: content,
             bottomNavigationBar: NavigationBar(
+              backgroundColor: const Color(0xFF101311),
+              indicatorColor: _raised,
               selectedIndex: selectedIndex,
               destinations: destinations,
               onDestinationSelected: (value) =>
@@ -103,45 +137,13 @@ class _PantryHomePageState extends State<PantryHomePage> {
         return Scaffold(
           body: Row(
             children: [
-              SafeArea(
-                child: NavigationRail(
-                  extended: constraints.maxWidth >= 1080,
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) =>
-                      setState(() => selectedIndex = value),
-                  leading: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🫙', style: TextStyle(fontSize: 30)),
-                        if (constraints.maxWidth >= 1080) ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            'Pantry',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  destinations: destinations
-                      .map(
-                        (item) => NavigationRailDestination(
-                          icon: item.icon,
-                          selectedIcon: item.selectedIcon,
-                          label: Text(item.label),
-                        ),
-                      )
-                      .toList(),
-                  trailing: IconButton(
-                    tooltip: 'Sign out',
-                    onPressed: widget.onSignOut,
-                    icon: const Icon(Icons.logout),
-                  ),
-                ),
+              _PantrySidebar(
+                selectedIndex: selectedIndex,
+                inventoryCount: widget.store.foods.length,
+                recipeCount: widget.store.recipes.length,
+                onSelected: (value) => setState(() => selectedIndex = value),
+                onSignOut: widget.onSignOut,
               ),
-              const VerticalDivider(width: 1),
               Expanded(child: content),
             ],
           ),
@@ -151,58 +153,277 @@ class _PantryHomePageState extends State<PantryHomePage> {
   }
 }
 
+class _PantrySidebar extends StatelessWidget {
+  const _PantrySidebar({
+    required this.selectedIndex,
+    required this.inventoryCount,
+    required this.recipeCount,
+    required this.onSelected,
+    required this.onSignOut,
+  });
+
+  final int selectedIndex;
+  final int inventoryCount;
+  final int recipeCount;
+  final ValueChanged<int> onSelected;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 236,
+    decoration: const BoxDecoration(
+      color: Color(0xFF101311),
+      border: Border(right: BorderSide(color: _border)),
+    ),
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 22, 14, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _amber,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Text('🫙', style: TextStyle(fontSize: 16)),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Pantry',
+                    style: TextStyle(
+                      color: _ink,
+                      fontFamily: 'serif',
+                      fontSize: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+            const _NavGroupLabel('Kitchen'),
+            _SidebarDestination(
+              label: 'Today',
+              selected: selectedIndex == 0,
+              onTap: () => onSelected(0),
+            ),
+            _SidebarDestination(
+              label: 'Inventory',
+              badge: '$inventoryCount',
+              selected: selectedIndex == 1,
+              onTap: () => onSelected(1),
+            ),
+            _SidebarDestination(
+              label: 'Recipes',
+              badge: '$recipeCount',
+              selected: selectedIndex == 2,
+              onTap: () => onSelected(2),
+            ),
+            const SizedBox(height: 24),
+            const _NavGroupLabel('Eating'),
+            _SidebarDestination(
+              label: 'Food log',
+              selected: selectedIndex == 3,
+              onTap: () => onSelected(3),
+            ),
+            const Spacer(),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const CircleAvatar(
+                  radius: 13,
+                  backgroundColor: Color(0xFF313A35),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('Drew', style: TextStyle(color: _muted)),
+                ),
+                TextButton(
+                  onPressed: onSignOut,
+                  style: TextButton.styleFrom(
+                    foregroundColor: _faint,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Sign out'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _NavGroupLabel extends StatelessWidget {
+  const _NavGroupLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+    child: Text(
+      label.toUpperCase(),
+      style: const TextStyle(color: _faint, fontSize: 11, letterSpacing: 1.3),
+    ),
+  );
+}
+
+class _SidebarDestination extends StatelessWidget {
+  const _SidebarDestination({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.badge = '',
+  });
+
+  final String label;
+  final String badge;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(9),
+    child: Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: selected ? _raised : Colors.transparent,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: selected ? _amber : const Color(0xFF333B36),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? _ink : _muted,
+                fontSize: 13.5,
+                fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ),
+          Text(
+            badge,
+            style: const TextStyle(
+              color: _faint,
+              fontFamily: 'monospace',
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _PageShell extends StatelessWidget {
   const _PageShell({
     required this.title,
     required this.subtitle,
     required this.child,
     this.action,
+    this.eyebrow,
   });
 
   final String title;
   final String subtitle;
   final Widget child;
   final Widget? action;
+  final String? eyebrow;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        MediaQuery.sizeOf(context).width < 600 ? 18 : 44,
+        MediaQuery.sizeOf(context).width < 600 ? 24 : 40,
+        MediaQuery.sizeOf(context).width < 600 ? 18 : 44,
+        64,
+      ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1120),
+          constraints: const BoxConstraints(maxWidth: 1180),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 640;
+                  final heading = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (eyebrow != null) ...[
                         Text(
-                          title,
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          eyebrow!.toUpperCase(),
+                          style: const TextStyle(
+                            color: _faint,
+                            fontSize: 12,
+                            letterSpacing: 1.4,
+                          ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 10),
+                      ],
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.displaySmall
+                            ?.copyWith(
+                              fontFamily: 'serif',
+                              fontSize: compact ? 38 : 44,
+                              height: 1.05,
+                              fontWeight: FontWeight.w400,
+                            ),
+                      ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 8),
                         Text(
                           subtitle,
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: _muted, height: 1.45),
                         ),
                       ],
-                    ),
-                  ),
-                  ?action,
-                ],
+                    ],
+                  );
+                  if (compact && action != null) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        heading,
+                        const SizedBox(height: 20),
+                        Align(alignment: Alignment.centerLeft, child: action),
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(child: heading),
+                      ?action,
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               child,
             ],
           ),
@@ -217,11 +438,13 @@ class _Dashboard extends StatelessWidget {
     required this.store,
     required this.onOpenInventory,
     required this.onOpenRecipes,
+    required this.onOpenFoodLog,
   });
 
   final PantryStore store;
   final VoidCallback onOpenInventory;
   final VoidCallback onOpenRecipes;
+  final VoidCallback onOpenFoodLog;
 
   @override
   Widget build(BuildContext context) {
@@ -231,9 +454,6 @@ class _Dashboard extends StatelessWidget {
           lot.quantityBase > 0 &&
           date.difference(store.now).inDays <= 7;
     }).toList()..sort((a, b) => a.bestBy!.compareTo(b.bestBy!));
-    final makeable = store.recipes
-        .where((recipe) => store.missingFor(recipe).isEmpty)
-        .length;
     final readyRecipes =
         store.recipes
             .where((recipe) => store.missingFor(recipe).isEmpty)
@@ -250,123 +470,159 @@ class _Dashboard extends StatelessWidget {
                 .compareTo(store.missingFor(b).length);
             return byMissing != 0 ? byMissing : a.name.compareTo(b.name);
           });
+    final suggestions = (readyRecipes.isNotEmpty ? readyRecipes : almostReady)
+        .take(4)
+        .toList();
     return _PageShell(
-      title: 'Good ${_dayPart()}',
-      subtitle: 'Here is what your kitchen can do today.',
+      eyebrow: _calendarDate(store.now),
+      title: 'Good ${_dayPart()}, Drew.',
+      subtitle: expiring.isEmpty
+          ? 'Your kitchen is in good shape. Here is what you can make today.'
+          : '${expiring.length} ${expiring.length == 1 ? 'lot wants' : 'lots want'} using this week.',
+      action: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          OutlinedButton(
+            onPressed: onOpenFoodLog,
+            child: const Text('Log food'),
+          ),
+          FilledButton(
+            onPressed: () => showGroceryImportDialog(context, store),
+            child: const Text('Put away groceries'),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _StatCard(
-                value: '${store.foods.length}',
-                label: 'foods tracked',
-                icon: Icons.inventory_2_outlined,
-              ),
-              _StatCard(
-                value: '$makeable',
-                label: 'recipes ready',
-                icon: Icons.restaurant_menu,
-              ),
-              _StatCard(
-                value: '${expiring.length}',
-                label: 'lots use soon',
-                icon: Icons.schedule,
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Text(
-            'Use soon',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          if (expiring.isEmpty)
-            const _EmptyCard(
-              icon: Icons.check_circle_outline,
-              text: 'Nothing expires in the next week.',
-            )
-          else
-            ...expiring.take(4).map((lot) {
-              final food = store.food(lot.foodId);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: ListTile(
-                    leading: Text(
-                      food.emoji,
-                      style: const TextStyle(fontSize: 28),
-                    ),
-                    title: Text(food.name),
-                    subtitle: Text(
-                      '${store.units.bestInventoryLabel(food, lot.quantityBase)} · ${lot.location.label}',
-                    ),
-                    trailing: Text(_relativeDate(store.now, lot.bestBy!)),
-                  ),
-                ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 760;
+              final nutrition = _NutritionSummary(
+                nutrition: store.nutritionForDay(store.now),
+                targets: store.nutritionTargets,
+                onEdit: () => _showNutritionTargets(context, store),
               );
-            }),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  readyRecipes.isEmpty ? 'Closest meal' : 'Cook next',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              TextButton(
-                onPressed: onOpenRecipes,
-                child: const Text('Browse recipes'),
-              ),
-            ],
+              final useSoon = _UseSoonCard(store: store, expiring: expiring);
+              if (stacked) {
+                return Column(
+                  children: [nutrition, const SizedBox(height: 18), useSoon],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: nutrition),
+                  const SizedBox(width: 18),
+                  Expanded(child: useSoon),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 12),
-          if (readyRecipes.isEmpty && almostReady.isEmpty)
-            const _EmptyCard(
-              icon: Icons.menu_book_outlined,
-              text: 'Add a recipe to start matching meals to your pantry.',
-            )
-          else
-            ...((readyRecipes.isNotEmpty ? readyRecipes : almostReady)
-                .take(3)
-                .map((recipe) {
-                  final missing = store.missingFor(recipe);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Card(
-                      child: ListTile(
-                        onTap: onOpenRecipes,
-                        leading: Text(
-                          recipe.emoji,
-                          style: const TextStyle(fontSize: 28),
-                        ),
-                        title: Text(recipe.name),
-                        subtitle: Text(
-                          missing.isEmpty
-                              ? 'Everything is in stock'
-                              : _missingSummary(store, missing),
-                        ),
-                        trailing: Icon(
-                          missing.isEmpty
-                              ? Icons.check_circle_outline
-                              : Icons.shopping_basket_outlined,
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          readyRecipes.isEmpty
+                              ? 'Closest to cookable'
+                              : 'Cookable right now',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
+                      TextButton(
+                        onPressed: onOpenRecipes,
+                        child: const Text('All recipes'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (suggestions.isEmpty)
+                    const _EmptyCard(
+                      icon: Icons.menu_book_outlined,
+                      text:
+                          'Add a recipe to start matching meals to your pantry.',
+                    )
+                  else
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth >= 800 ? 4 : 2;
+                        final width =
+                            (constraints.maxWidth - (columns - 1) * 12) /
+                            columns;
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: suggestions.map((recipe) {
+                            final missing = store.missingFor(recipe);
+                            return SizedBox(
+                              width: width,
+                              child: InkWell(
+                                onTap: onOpenRecipes,
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: _raised,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        recipe.emoji,
+                                        style: const TextStyle(fontSize: 26),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        recipe.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 7),
+                                      Text(
+                                        missing.isEmpty
+                                            ? '${store.units.formatAmount(recipe.servings)} servings · in stock'
+                                            : 'Missing ${missing.length}',
+                                        style: const TextStyle(
+                                          color: _muted,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
-                  );
-                })),
-          const SizedBox(height: 20),
-          FilledButton.tonalIcon(
-            onPressed: onOpenInventory,
-            icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Put away groceries'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onOpenInventory,
+              icon: const Icon(Icons.inventory_2_outlined, size: 18),
+              label: Text('${store.foods.length} foods in inventory'),
+            ),
           ),
         ],
       ),
@@ -374,40 +630,91 @@ class _Dashboard extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.value,
-    required this.label,
-    required this.icon,
-  });
-  final String value;
-  final String label;
-  final IconData icon;
+class _UseSoonCard extends StatelessWidget {
+  const _UseSoonCard({required this.store, required this.expiring});
+  final PantryStore store;
+  final List<InventoryLot> expiring;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 210,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            CircleAvatar(child: Icon(icon)),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Use soon',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(label),
-              ],
-            ),
-          ],
-        ),
+              ),
+              Text(
+                '${expiring.length} ${expiring.length == 1 ? 'lot' : 'lots'}',
+                style: const TextStyle(
+                  color: _faint,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (expiring.isEmpty)
+            const Text(
+              'Nothing expires in the next week.',
+              style: TextStyle(color: _muted),
+            )
+          else
+            ...expiring.take(4).map((lot) {
+              final food = store.food(lot.foodId);
+              final urgent = lot.bestBy!.difference(store.now).inDays <= 3;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Row(
+                  children: [
+                    Text(food.emoji, style: const TextStyle(fontSize: 24)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(food.name, style: const TextStyle(fontSize: 14)),
+                          Text(
+                            '${store.units.bestInventoryLabel(food, lot.quantityBase)} · ${lot.location.label}',
+                            style: const TextStyle(color: _muted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: (urgent ? _berry : _amber).withValues(
+                          alpha: .14,
+                        ),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Text(
+                        _relativeDate(store.now, lot.bestBy!),
+                        style: TextStyle(
+                          color: urgent ? _berry : _amber,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
       ),
     ),
   );
@@ -419,9 +726,11 @@ class _InventoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _PageShell(
+    eyebrow:
+        '${store.foods.length} foods · ${store.lots.where((lot) => lot.quantityBase > 0).length} lots',
     title: 'Inventory',
     subtitle:
-        'Counted items stay natural; measured items convert behind the scenes.',
+        'Counted and measured ingredients, organized by storage location.',
     action: Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -476,13 +785,14 @@ class _FoodCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amount = store.totalFor(food.id);
-    final lots = store
+    final activeLots = store
         .lotsFor(food.id)
         .where((lot) => lot.quantityBase > 0)
-        .length;
+        .toList();
+    final lots = activeLots.length;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -507,21 +817,57 @@ class _FoodCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Edit food definition',
+                TextButton(
                   onPressed: () =>
                       showFoodEditor(context, store, existing: food),
-                  icon: const Icon(Icons.edit_outlined),
+                  style: TextButton.styleFrom(
+                    foregroundColor: _faint,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Edit'),
                 ),
               ],
             ),
             const SizedBox(height: 18),
             Text(
               store.units.bestInventoryLabel(food, amount),
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontFamily: 'monospace',
+                fontSize: 26,
+                fontWeight: FontWeight.w400,
+              ),
             ),
+            if (activeLots.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: activeLots.map((lot) {
+                  final days = lot.bestBy?.difference(store.now).inDays;
+                  final color = days == null
+                      ? _herb
+                      : days <= 3
+                      ? _berry
+                      : days <= 7
+                      ? _amber
+                      : _herb;
+                  return Expanded(
+                    flex: (lot.quantityBase * 100).round().clamp(1, 1000000),
+                    child: Container(
+                      height: 6,
+                      margin: const EdgeInsets.only(right: 5),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 14),
             Text(
               '$lots ${lots == 1 ? 'lot' : 'lots'} · ${food.defaultLocation.label}',
+              style: const TextStyle(color: _muted, fontSize: 12),
             ),
             if (food.nutrition != null) ...[
               const SizedBox(height: 8),
@@ -537,14 +883,13 @@ class _FoodCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton(
                 onPressed: amount <= 0
                     ? null
                     : () => _showConsume(context, store, food),
-                icon: const Icon(Icons.remove_circle_outline),
-                label: Text(
+                child: Text(
                   food.mode == QuantityMode.counted ? 'Use one' : 'Use some',
                 ),
               ),
@@ -579,6 +924,7 @@ class _RecipesPage extends StatelessWidget {
       recipes.sort((a, b) => a.name.compareTo(b.name));
     }
     return _PageShell(
+      eyebrow: '${store.recipes.length} recipes · ${ready.length} cookable now',
       title: 'Recipes',
       subtitle: 'Start with what is ready, or see exactly what to pick up.',
       action: FilledButton.icon(
@@ -643,7 +989,7 @@ class _RecipeSection extends StatelessWidget {
         title,
         style: Theme.of(
           context,
-        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 4),
       Text(
@@ -654,11 +1000,24 @@ class _RecipeSection extends StatelessWidget {
       if (recipes.isEmpty)
         _EmptyCard(icon: Icons.restaurant_menu, text: emptyText)
       else
-        ...recipes.map(
-          (recipe) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _RecipeCard(store: store, recipe: recipe),
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth >= 720
+                ? (constraints.maxWidth - 14) / 2
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: 14,
+              runSpacing: 14,
+              children: recipes
+                  .map(
+                    (recipe) => SizedBox(
+                      width: width,
+                      child: _RecipeCard(store: store, recipe: recipe),
+                    ),
+                  )
+                  .toList(),
+            );
+          },
         ),
     ],
   );
@@ -675,15 +1034,22 @@ class _RecipeCard extends StatelessWidget {
     final recipeNutrition = store.nutritionForRecipe(recipe);
     final compact = MediaQuery.sizeOf(context).width < 600;
     final availabilityChip = Chip(
-      avatar: Icon(
-        missing.isEmpty ? Icons.check_circle : Icons.shopping_basket_outlined,
-        size: 18,
+      backgroundColor: (missing.isEmpty ? _herb : _amber).withValues(
+        alpha: .14,
       ),
-      label: Text(missing.isEmpty ? 'Ready' : 'Missing ${missing.length}'),
+      side: BorderSide.none,
+      label: Text(
+        missing.isEmpty ? 'Ready' : 'Missing ${missing.length}',
+        style: TextStyle(
+          color: missing.isEmpty ? _herb : _amber,
+          fontFamily: 'monospace',
+          fontSize: 11,
+        ),
+      ),
     );
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -698,7 +1064,8 @@ class _RecipeCard extends StatelessWidget {
                       Text(
                         recipe.name,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
@@ -747,7 +1114,16 @@ class _RecipeCard extends StatelessWidget {
               children: recipe.ingredients.map((ingredient) {
                 final food = store.food(ingredient.foodId);
                 return Chip(
-                  label: Text(store.units.ingredientLabel(food, ingredient)),
+                  backgroundColor: missing.containsKey(food.id)
+                      ? _berry.withValues(alpha: .13)
+                      : _raised,
+                  label: Text(
+                    store.units.ingredientLabel(food, ingredient),
+                    style: TextStyle(
+                      color: missing.containsKey(food.id) ? _berry : _muted,
+                      fontSize: 12,
+                    ),
+                  ),
                 );
               }).toList(),
             ),
@@ -759,7 +1135,7 @@ class _RecipeCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(
                     context,
-                  ).colorScheme.secondaryContainer.withValues(alpha: 0.45),
+                  ).colorScheme.error.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
@@ -836,6 +1212,9 @@ class _FoodLogPageState extends State<_FoodLogPage> {
     final today = DateTime.now();
     final isToday = DateUtils.isSameDay(selectedDay, today);
     return _PageShell(
+      eyebrow: isToday
+          ? 'Today · ${_calendarDate(selectedDay)}'
+          : _calendarDate(selectedDay),
       title: 'Food log',
       subtitle:
           'Calories and nutrients from recipes, pantry items, and food away from home.',
@@ -997,139 +1376,156 @@ class _NutritionSummary extends StatelessWidget {
   final VoidCallback onEdit;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) {
+    final caloriesLeft = (targets.calories - nutrition.calories)
+        .clamp(0, double.infinity)
+        .toDouble();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Today's nutrition",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                TextButton(onPressed: onEdit, child: const Text('Targets')),
+              ],
+            ),
+            if (targets.label.isNotEmpty)
+              Text(
+                targets.label,
+                style: const TextStyle(color: _faint, fontSize: 12),
+              ),
+            const SizedBox(height: 18),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 14,
+              runSpacing: 6,
+              children: [
+                Text(
+                  _compactNumber(nutrition.calories),
+                  style: const TextStyle(
+                    color: _amber,
+                    fontFamily: 'monospace',
+                    fontSize: 40,
+                    height: 1,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'of ${_compactNumber(targets.calories)} cal · ${_compactNumber(caloriesLeft)} left',
+                    style: const TextStyle(color: _muted, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _NutritionRow(
+              label: 'Protein',
+              value: nutrition.proteinG,
+              target: targets.proteinG,
+              unit: 'g',
+              color: _herb,
+            ),
+            _NutritionRow(
+              label: 'Carbs',
+              value: nutrition.carbsG,
+              target: targets.carbsG,
+              unit: 'g',
+              color: _amber,
+            ),
+            _NutritionRow(
+              label: 'Fat',
+              value: nutrition.fatG,
+              target: targets.fatG,
+              unit: 'g',
+              color: _amber,
+            ),
+            _NutritionRow(
+              label: 'Fiber',
+              value: nutrition.fiberG,
+              target: targets.fiberG,
+              unit: 'g',
+              color: _herb,
+            ),
+            _NutritionRow(
+              label: 'Sodium',
+              value: nutrition.sodiumMg,
+              target: targets.sodiumMg,
+              unit: 'mg',
+              color: _amber,
+              isLimit: true,
+              bottomPadding: 0,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NutritionRow extends StatelessWidget {
+  const _NutritionRow({
+    required this.label,
+    required this.value,
+    required this.target,
+    required this.unit,
+    required this.color,
+    this.isLimit = false,
+    this.bottomPadding = 16,
+  });
+
+  final String label;
+  final double value;
+  final double target;
+  final String unit;
+  final Color color;
+  final bool isLimit;
+  final double bottomPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = value / target;
+    final over = isLimit && percent > 1;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Daily nutrition',
-                  style: Theme.of(context).textTheme.titleMedium,
+                child: Text(label, style: const TextStyle(fontSize: 13)),
+              ),
+              Text(
+                '${_compactNumber(value)} $unit',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+              Text(
+                ' / ${_compactNumber(target)} $unit',
+                style: const TextStyle(
+                  color: _faint,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
                 ),
               ),
-              TextButton.icon(
-                onPressed: onEdit,
-                icon: const Icon(Icons.tune, size: 18),
-                label: const Text('Targets'),
-              ),
             ],
           ),
-          if (targets.label.isNotEmpty) ...[
-            Text(
-              targets.label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _NutrientTile(
-                label: 'Calories',
-                value: nutrition.calories,
-                unit: 'cal',
-                target: targets.calories,
-              ),
-              _NutrientTile(
-                label: 'Protein',
-                value: nutrition.proteinG,
-                unit: 'g',
-                target: targets.proteinG,
-              ),
-              _NutrientTile(
-                label: 'Carbs',
-                value: nutrition.carbsG,
-                unit: 'g',
-                target: targets.carbsG,
-              ),
-              _NutrientTile(
-                label: 'Fat',
-                value: nutrition.fatG,
-                unit: 'g',
-                target: targets.fatG,
-              ),
-              _NutrientTile(
-                label: 'Fiber',
-                value: nutrition.fiberG,
-                unit: 'g',
-                target: targets.fiberG,
-              ),
-              _NutrientTile(label: 'Sugar', value: nutrition.sugarG, unit: 'g'),
-              _NutrientTile(
-                label: 'Sodium',
-                value: nutrition.sodiumMg,
-                unit: 'mg',
-                target: targets.sodiumMg,
-                isLimit: true,
-              ),
-            ],
+          const SizedBox(height: 7),
+          LinearProgressIndicator(
+            value: percent.clamp(0, 1),
+            minHeight: 8,
+            color: over ? _berry : color,
+            borderRadius: BorderRadius.circular(4),
           ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _NutrientTile extends StatelessWidget {
-  const _NutrientTile({
-    required this.label,
-    required this.value,
-    required this.unit,
-    this.target,
-    this.isLimit = false,
-  });
-  final String label;
-  final double value;
-  final String unit;
-  final double? target;
-  final bool isLimit;
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = target == null ? null : value / target!;
-    final overLimit = isLimit && percent != null && percent > 1;
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 3),
-          Text(
-            '${_compactNumber(value)} $unit',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          if (percent != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              '${(percent * 100).round()}% of ${isLimit ? 'limit' : 'target'}',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: overLimit ? Theme.of(context).colorScheme.error : null,
-              ),
-            ),
-            const SizedBox(height: 5),
-            LinearProgressIndicator(
-              value: percent.clamp(0, 1),
-              minHeight: 4,
-              color: overLimit ? Theme.of(context).colorScheme.error : null,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ],
         ],
       ),
     );

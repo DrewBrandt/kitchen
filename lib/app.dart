@@ -30,35 +30,89 @@ class PantryApp extends StatelessWidget {
 }
 
 ThemeData _theme(Brightness brightness) {
-  const seed = Color(0xFFD7943B);
+  const seed = Color(0xFFF0B85A);
   final dark = brightness == Brightness.dark;
+  final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness)
+      .copyWith(
+        primary: dark ? const Color(0xFFF0B85A) : const Color(0xFF8A5700),
+        onPrimary: dark ? const Color(0xFF1A1205) : Colors.white,
+        surface: dark ? const Color(0xFF171B19) : const Color(0xFFFFFDF7),
+        onSurface: dark ? const Color(0xFFECF1EE) : const Color(0xFF20231F),
+        onSurfaceVariant: dark
+            ? const Color(0xFF97A29B)
+            : const Color(0xFF626B65),
+        outline: dark ? const Color(0xFF313A35) : const Color(0xFFD8D3C8),
+        outlineVariant: dark
+            ? const Color(0xFF29302C)
+            : const Color(0xFFE8E2D8),
+        error: dark ? const Color(0xFFE77986) : const Color(0xFFB3261E),
+      );
   return ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: brightness),
+    colorScheme: scheme,
     useMaterial3: true,
+    fontFamily: 'Public Sans',
     scaffoldBackgroundColor: dark
-        ? const Color(0xFF11100F)
+        ? const Color(0xFF101311)
         : const Color(0xFFF7F5EF),
+    textTheme: ThemeData(brightness: brightness).textTheme.apply(
+      bodyColor: scheme.onSurface,
+      displayColor: scheme.onSurface,
+      fontFamily: 'Public Sans',
+    ),
     cardTheme: CardThemeData(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: dark ? const Color(0xFF1C1A18) : const Color(0xFFFFFDF7),
+      color: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
     ),
     appBarTheme: dark
         ? const AppBarTheme(
-            backgroundColor: Color(0xFF11100F),
+            backgroundColor: Color(0xFF101311),
             surfaceTintColor: Colors.transparent,
+            elevation: 0,
           )
         : null,
     navigationRailTheme: dark
-        ? const NavigationRailThemeData(backgroundColor: Color(0xFF11100F))
+        ? const NavigationRailThemeData(backgroundColor: Color(0xFF101311))
         : null,
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        side: BorderSide(color: scheme.outline),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(foregroundColor: scheme.primary),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: dark ? const Color(0xFF1E2321) : scheme.surface,
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+      labelStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: scheme.primary,
+      linearTrackColor: dark ? const Color(0xFF29302C) : scheme.outlineVariant,
+    ),
     inputDecorationTheme: InputDecorationTheme(
-      border: const OutlineInputBorder(),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
       filled: dark,
-      fillColor: dark ? const Color(0xFF24201C) : null,
+      fillColor: dark ? const Color(0xFF1E2321) : null,
     ),
     dividerTheme: dark
-        ? const DividerThemeData(color: Color(0xFF3A342D))
+        ? const DividerThemeData(color: Color(0xFF29302C))
         : null,
   );
 }
