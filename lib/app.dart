@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'data/pantry_store.dart';
 import 'pages/home_page.dart';
+import 'services/web_auth_strategy.dart';
 
 class PantryApp extends StatelessWidget {
   const PantryApp({super.key});
@@ -136,7 +137,11 @@ class _SignInPageState extends State<_SignInPage> {
     try {
       final provider = GoogleAuthProvider();
       if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(provider);
+        if (shouldUseGoogleRedirect) {
+          await FirebaseAuth.instance.signInWithRedirect(provider);
+        } else {
+          await FirebaseAuth.instance.signInWithPopup(provider);
+        }
       } else {
         await FirebaseAuth.instance.signInWithProvider(provider);
       }
@@ -149,7 +154,8 @@ class _SignInPageState extends State<_SignInPage> {
           'unauthorized-domain' =>
             'This website domain has not been authorized in Firebase yet.',
           'popup-closed-by-user' => 'Sign-in was cancelled.',
-          _ => 'Could not sign in (${error.code}).',
+          _ => 'Could not sign in (${error.code}): '
+              '${error.message ?? 'No details were provided.'}',
         },
       );
     } catch (_) {

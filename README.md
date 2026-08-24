@@ -64,6 +64,18 @@ publishes the app whenever `main` is pushed.
 No Firebase secret is required by GitHub Actions. The Pages build contains only
 the normal Firebase web configuration already required by every browser client.
 
+## Firefox mobile sign-in
+
+Use the Firebase-hosted app at
+`https://pantry-tracker-4bc45.web.app` on Firefox mobile. The app uses a
+same-origin redirect there so Firefox cannot block Firebase's authentication
+handoff as cross-site storage. Build with a root base path and deploy with:
+
+```sh
+flutter build web --release --base-href / --pwa-strategy=none
+firebase deploy --only hosting
+```
+
 ## Codex API credential
 
 Cloud Functions require the Firebase Blaze plan, although low-volume usage is
