@@ -175,6 +175,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('recipe cards open the mock-inspired detail sheet', (
+    tester,
+  ) async {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 24));
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('Recipes').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('View recipe').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('INGREDIENTS'), findsOneWidget);
+    expect(find.text('METHOD'), findsOneWidget);
+    expect(find.text('Start cooking'), findsOneWidget);
+    expect(find.text('EASE'), findsOneWidget);
+    expect(find.text('TASTE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('making a recipe asks for feedback and can disable prompts', (
+    tester,
+  ) async {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 24));
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('Recipes').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Make batch'), findsWidgets);
+    await tester.tap(find.text('Make batch').first);
+    await tester.pumpAndSettle();
+    final recipeName = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(Text),
+          ),
+        )
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .firstWhere((text) => text.startsWith('Make ') && text != 'Make batch')
+        .replaceFirst('Make ', '');
+    await tester.tap(find.text('Make batch').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('How did $recipeName go?'), findsOneWidget);
+    await tester.tap(find.text("Don't ask again for this recipe"));
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store.recipes
+          .firstWhere((recipe) => recipe.name == recipeName)
+          .promptForFeedback,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('planning shows meals and generated grocery shortages', (
     tester,
   ) async {

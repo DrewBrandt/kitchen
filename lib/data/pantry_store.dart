@@ -19,6 +19,7 @@ class PantryStore extends ChangeNotifier {
     _recipes = SeedData.recipes();
     _mealTemplates = [];
     _preparedBatches = [];
+    _recipeFeedback = [];
     _nutritionTargets = NutritionTargets.defaults;
     _foodPreferences = FoodPreferences.empty;
     _externalFoods = [];
@@ -37,6 +38,7 @@ class PantryStore extends ChangeNotifier {
     _recipes = data.recipes;
     _mealTemplates = data.mealTemplates;
     _preparedBatches = data.preparedBatches;
+    _recipeFeedback = data.recipeFeedback;
     _nutritionTargets = data.nutritionTargets;
     _foodPreferences = data.foodPreferences;
     _externalFoods = data.externalFoods;
@@ -64,6 +66,7 @@ class PantryStore extends ChangeNotifier {
         recipes: seeded.recipes,
         mealTemplates: seeded.mealTemplates,
         preparedBatches: seeded.preparedBatches,
+        recipeFeedback: seeded.recipeFeedback,
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
         foodPreferences: seeded.foodPreferences,
@@ -86,6 +89,7 @@ class PantryStore extends ChangeNotifier {
   late List<Recipe> _recipes;
   late List<MealTemplate> _mealTemplates;
   late List<PreparedBatch> _preparedBatches;
+  late List<RecipeMakeFeedback> _recipeFeedback;
   late NutritionTargets _nutritionTargets;
   late FoodPreferences _foodPreferences;
   late List<ExternalFood> _externalFoods;
@@ -107,6 +111,8 @@ class PantryStore extends ChangeNotifier {
   );
   List<PreparedBatch> get activePreparedBatches =>
       preparedBatches.where((batch) => batch.isActive).toList();
+  List<RecipeMakeFeedback> get recipeFeedback =>
+      List.unmodifiable(_recipeFeedback);
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
   FoodPreferences get foodPreferences => _foodPreferences;
@@ -134,6 +140,7 @@ class PantryStore extends ChangeNotifier {
         _recipes = data.recipes;
         _mealTemplates = data.mealTemplates;
         _preparedBatches = data.preparedBatches;
+        _recipeFeedback = data.recipeFeedback;
         _history
           ..clear()
           ..addAll(data.history);
@@ -184,6 +191,75 @@ class PantryStore extends ChangeNotifier {
     FoodDefinition food,
     double baseAmount,
   ) => food.nutrition?.forBaseAmount(baseAmount);
+
+  List<PreparedBatch> preparationsForRecipe(String recipeId) =>
+      _preparedBatches
+          .where(
+            (batch) =>
+                batch.source == PreparedSource.recipe &&
+                batch.sourceId == recipeId,
+          )
+          .toList()
+        ..sort((a, b) => b.madeAt.compareTo(a.madeAt));
+
+  DateTime? lastMadeRecipe(String recipeId) {
+    final preparations = preparationsForRecipe(recipeId);
+    return preparations.isEmpty ? null : preparations.first.madeAt;
+  }
+
+  int recipeMakesThisYear(String recipeId) => preparationsForRecipe(
+    recipeId,
+  ).where((batch) => batch.madeAt.year == _now.year).length;
+
+  List<RecipeMakeFeedback> feedbackForRecipe(String recipeId) =>
+      _recipeFeedback
+          .where((feedback) => feedback.recipeId == recipeId)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  double? averageTasteForRecipe(String recipeId) =>
+      _averageFeedback(recipeId, (feedback) => feedback.tasteRating);
+
+  double? averageEaseForRecipe(String recipeId) =>
+      _averageFeedback(recipeId, (feedback) => feedback.easeRating);
+
+  double? averageMinutesForRecipe(String recipeId) =>
+      _averageFeedback(recipeId, (feedback) => feedback.actualMinutes);
+
+  double? _averageFeedback(
+    String recipeId,
+    num? Function(RecipeMakeFeedback feedback) select,
+  ) {
+    final values = feedbackForRecipe(
+      recipeId,
+    ).map(select).whereType<num>().map((value) => value.toDouble()).toList();
+    if (values.isEmpty) return null;
+    return values.reduce((a, b) => a + b) / values.length;
+  }
+
+  void saveRecipeMakeFeedback(RecipeMakeFeedback feedback) {
+    if (feedback.tasteRating == null &&
+        feedback.easeRating == null &&
+        feedback.actualMinutes == null) {
+      return;
+    }
+    for (final rating in [feedback.tasteRating, feedback.easeRating]) {
+      if (rating != null && (rating < 1 || rating > 5)) {
+        throw ArgumentError('Recipe ratings must be between 1 and 5');
+      }
+    }
+    if (feedback.actualMinutes != null && feedback.actualMinutes! <= 0) {
+      throw ArgumentError('Recipe time must be positive');
+    }
+    final index = _recipeFeedback.indexWhere((item) => item.id == feedback.id);
+    if (index < 0) {
+      _recipeFeedback = [..._recipeFeedback, feedback];
+    } else {
+      _recipeFeedback[index] = feedback;
+    }
+    _queue(_cloud?.saveRecipeFeedback(feedback));
+    notifyListeners();
+  }
 
   NutritionTotals? nutritionForAmount(
     FoodDefinition food,
@@ -765,7 +841,7 @@ class PantryStore extends ChangeNotifier {
     if (index < 0) {
       _recipes = [..._recipes, recipe];
     } else {
-      _recipes[index] = recipe;
+      _recipes = [..._recipes]..[index] = recipe;
     }
     _queue(_cloud?.saveRecipe(recipe));
     _refreshPlannedGroceries();

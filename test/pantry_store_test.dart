@@ -346,6 +346,56 @@ void main() {
     );
   });
 
+  test('recipe make feedback produces personal averages and make history', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 24));
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    final firstBatch = store.prepareRecipe(recipe);
+    final secondBatch = store.addPreparedBatch(
+      name: recipe.name,
+      servings: recipe.servings,
+      source: PreparedSource.recipe,
+      sourceId: recipe.id,
+      madeAt: DateTime(2026, 8, 20),
+    );
+
+    store.saveRecipeMakeFeedback(
+      RecipeMakeFeedback(
+        id: 'feedback-1',
+        recipeId: recipe.id,
+        preparedBatchId: firstBatch.id,
+        createdAt: DateTime(2026, 8, 24),
+        tasteRating: 5,
+        easeRating: 4,
+        actualMinutes: 20,
+      ),
+    );
+    store.saveRecipeMakeFeedback(
+      RecipeMakeFeedback(
+        id: 'feedback-2',
+        recipeId: recipe.id,
+        preparedBatchId: secondBatch.id,
+        createdAt: DateTime(2026, 8, 20),
+        tasteRating: 3,
+        easeRating: 5,
+        actualMinutes: 30,
+      ),
+    );
+
+    expect(store.recipeMakesThisYear(recipe.id), 2);
+    expect(store.lastMadeRecipe(recipe.id), firstBatch.madeAt);
+    expect(store.averageTasteForRecipe(recipe.id), 4);
+    expect(store.averageEaseForRecipe(recipe.id), 4.5);
+    expect(store.averageMinutesForRecipe(recipe.id), 25);
+
+    store.saveRecipe(recipe.copyWith(promptForFeedback: false));
+    expect(
+      store.recipes
+          .firstWhere((item) => item.id == recipe.id)
+          .promptForFeedback,
+      isFalse,
+    );
+  });
+
   test('combined meals consume independent prepared recipe components', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final pancakes = store.recipes.firstWhere((item) => item.id == 'pancakes');
