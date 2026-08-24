@@ -18,6 +18,8 @@ param(
 
   [string]$Brand,
 
+  [string]$Id,
+
   [string]$BaseUrl = 'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/pantryApi'
 )
 
@@ -36,6 +38,12 @@ if (-not [string]::IsNullOrWhiteSpace($BodyFile) -and
     -not [string]::IsNullOrWhiteSpace($Body)) {
   throw 'Use either -BodyFile or -Body, not both.'
 }
+if (-not [string]::IsNullOrWhiteSpace($Id) -and $Path -notin @('/v1/foods', '/v1/recipes')) {
+  throw '-Id is supported only with /v1/foods or /v1/recipes.'
+}
+if (-not [string]::IsNullOrWhiteSpace($Id) -and -not [string]::IsNullOrWhiteSpace($Query)) {
+  throw 'Use either -Id or -Query, not both.'
+}
 
 $secureToken = ConvertTo-SecureString (Get-Content -LiteralPath $encryptedTokenPath -Raw)
 $tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
@@ -45,6 +53,18 @@ try {
   $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
   if ($Path -eq '/v1/history') {
     $requestPath = "$Path`?days=$Days"
+  }
+  elseif ($Method -eq 'GET' -and
+      $Path -in @('/v1/foods', '/v1/recipes') -and
+      -not [string]::IsNullOrWhiteSpace($Id)) {
+    $requestPath = "$Path/$([uri]::EscapeDataString($Id))"
+  }
+  elseif ($Method -eq 'GET' -and $Path -in @('/v1/foods', '/v1/recipes')) {
+    $requestPath = if ([string]::IsNullOrWhiteSpace($Query)) {
+      $Path
+    } else {
+      "$Path`?q=$([uri]::EscapeDataString($Query))"
+    }
   }
   elseif ($Method -eq 'GET' -and $Path -eq '/v1/external-foods') {
     $queryParts = @()
