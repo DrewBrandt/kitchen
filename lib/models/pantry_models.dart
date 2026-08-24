@@ -483,6 +483,8 @@ class PlannedMeal {
     required this.emoji,
     required this.servings,
     this.sourceId,
+    this.groupId,
+    this.intent = PlannedMealIntent.prepare,
     this.note = '',
     this.completedAt,
   });
@@ -492,6 +494,8 @@ class PlannedMeal {
   final MealSlot slot;
   final PlannedMealSource source;
   final String? sourceId;
+  final String? groupId;
+  final PlannedMealIntent intent;
   final String name;
   final String emoji;
   final double servings;
@@ -503,6 +507,8 @@ class PlannedMeal {
     MealSlot? slot,
     PlannedMealSource? source,
     String? sourceId,
+    String? groupId,
+    PlannedMealIntent? intent,
     String? name,
     String? emoji,
     double? servings,
@@ -515,12 +521,23 @@ class PlannedMeal {
     slot: slot ?? this.slot,
     source: source ?? this.source,
     sourceId: sourceId ?? this.sourceId,
+    groupId: groupId ?? this.groupId,
+    intent: intent ?? this.intent,
     name: name ?? this.name,
     emoji: emoji ?? this.emoji,
     servings: servings ?? this.servings,
     note: note ?? this.note,
     completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
   );
+}
+
+enum PlannedMealIntent { prepare, leftover }
+
+extension PlannedMealIntentLabel on PlannedMealIntent {
+  String get label => switch (this) {
+    PlannedMealIntent.prepare => 'Cook',
+    PlannedMealIntent.leftover => 'Leftovers',
+  };
 }
 
 extension MealSlotLabel on MealSlot {

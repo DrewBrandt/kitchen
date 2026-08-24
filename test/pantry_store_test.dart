@@ -306,6 +306,53 @@ void main() {
     expect(store.groceryItems.where((item) => item.fromPlan), isEmpty);
   });
 
+  test('leftover recipe plans retain identity without adding groceries', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'leftover-pancakes',
+        groupId: 'monday-dinner',
+        intent: PlannedMealIntent.leftover,
+        date: DateTime(2026, 8, 24),
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: 2,
+      ),
+    );
+
+    expect(store.plannedMeals.single.sourceId, recipe.id);
+    expect(store.plannedRequirementsBase, isEmpty);
+    expect(store.groceryItems.where((item) => item.fromPlan), isEmpty);
+  });
+
+  test('grouped recipe components can be removed as one meal', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipes = store.recipes.take(2).toList();
+    for (final recipe in recipes) {
+      store.savePlannedMeal(
+        PlannedMeal(
+          id: 'group-${recipe.id}',
+          groupId: 'monday-dinner',
+          date: DateTime(2026, 8, 24),
+          slot: MealSlot.dinner,
+          source: PlannedMealSource.recipe,
+          sourceId: recipe.id,
+          name: recipe.name,
+          emoji: recipe.emoji,
+          servings: 2,
+        ),
+      );
+    }
+
+    expect(store.plannedMeals, hasLength(2));
+    store.deletePlannedMealGroup('monday-dinner');
+    expect(store.plannedMeals, isEmpty);
+  });
+
   test('manual grocery items can be checked and removed independently', () {
     final store = PantryStore.demo();
 

@@ -106,32 +106,24 @@ class _PantryHomePageState extends State<PantryHomePage> {
               title: const Text('Trends'),
               onTap: () => Navigator.pop(context, 6),
             ),
+            ListTile(
+              leading: const Icon(Icons.tune_outlined),
+              title: const Text('Food profile'),
+              onTap: () => Navigator.pop(context, -1),
+            ),
           ],
         ),
       ),
     );
-    if (value != null && mounted) setState(() => selectedIndex = value);
+    if (value == -1 && context.mounted) {
+      await _showFoodPreferences(context, widget.store);
+    } else if (value != null && mounted) {
+      setState(() => selectedIndex = value);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      _Dashboard(
-        store: widget.store,
-        onOpenInventory: () => setState(() => selectedIndex = 1),
-        onOpenRecipes: () => setState(() => selectedIndex = 2),
-        onOpenFoodLog: () => setState(() => selectedIndex = 4),
-        onOpenPlan: () => setState(() => selectedIndex = 7),
-      ),
-      _InventoryPage(store: widget.store),
-      _RecipesPage(store: widget.store),
-      _EatingOutPage(store: widget.store),
-      _FoodLogPage(store: widget.store),
-      _HistoryPage(store: widget.store),
-      _TrendsPage(store: widget.store),
-      _PlanningPage(store: widget.store),
-      _GroceryListPage(store: widget.store),
-    ];
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 850;
@@ -148,7 +140,25 @@ class _PantryHomePageState extends State<PantryHomePage> {
                   ),
                   actions: const [SizedBox.shrink()],
                 ),
-              Expanded(child: pages[selectedIndex]),
+              Expanded(
+                child: switch (selectedIndex) {
+                  0 => _Dashboard(
+                    store: widget.store,
+                    onOpenInventory: () => setState(() => selectedIndex = 1),
+                    onOpenRecipes: () => setState(() => selectedIndex = 2),
+                    onOpenFoodLog: () => setState(() => selectedIndex = 4),
+                    onOpenPlan: () => setState(() => selectedIndex = 7),
+                  ),
+                  1 => _InventoryPage(store: widget.store),
+                  2 => _RecipesPage(store: widget.store),
+                  3 => _EatingOutPage(store: widget.store),
+                  4 => _FoodLogPage(store: widget.store),
+                  5 => _HistoryPage(store: widget.store),
+                  6 => _TrendsPage(store: widget.store),
+                  7 => _PlanningPage(store: widget.store),
+                  _ => _GroceryListPage(store: widget.store),
+                },
+              ),
             ],
           ),
         );
@@ -214,11 +224,13 @@ class _PantryHomePageState extends State<PantryHomePage> {
                 inventoryCount: widget.store.foods.length,
                 recipeCount: widget.store.recipes.length,
                 externalFoodCount: widget.store.externalFoods.length,
-                planCount: widget.store.plannedMeals.length,
+                planCount: _plannedMealGroupCount(widget.store.plannedMeals),
                 groceryCount: widget.store.groceryItems
                     .where((item) => !item.checked)
                     .length,
                 onSelected: (value) => setState(() => selectedIndex = value),
+                onFoodProfile: () =>
+                    _showFoodPreferences(context, widget.store),
                 onSignOut: widget.onSignOut,
               ),
               Expanded(child: content),
@@ -239,6 +251,7 @@ class _PantrySidebar extends StatelessWidget {
     required this.planCount,
     required this.groceryCount,
     required this.onSelected,
+    required this.onFoodProfile,
     required this.onSignOut,
   });
 
@@ -249,6 +262,7 @@ class _PantrySidebar extends StatelessWidget {
   final int planCount;
   final int groceryCount;
   final ValueChanged<int> onSelected;
+  final VoidCallback onFoodProfile;
   final VoidCallback onSignOut;
 
   @override
@@ -349,26 +363,51 @@ class _PantrySidebar extends StatelessWidget {
             const Spacer(),
             const Divider(),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const CircleAvatar(
-                  radius: 13,
-                  backgroundColor: Color(0xFF313A35),
+            InkWell(
+              onTap: onFoodProfile,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 13,
+                      backgroundColor: Color(0xFF313A35),
+                      child: Icon(
+                        Icons.person_outline,
+                        size: 15,
+                        color: _muted,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Drew', style: TextStyle(color: _muted)),
+                          Text(
+                            'Food profile',
+                            style: TextStyle(color: _faint, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.tune_outlined, size: 16, color: _faint),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text('Drew', style: TextStyle(color: _muted)),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onSignOut,
+                style: TextButton.styleFrom(
+                  foregroundColor: _faint,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  textStyle: const TextStyle(fontSize: 11),
                 ),
-                TextButton(
-                  onPressed: onSignOut,
-                  style: TextButton.styleFrom(
-                    foregroundColor: _faint,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                  child: const Text('Sign out'),
-                ),
-              ],
+                child: const Text('Sign out'),
+              ),
             ),
           ],
         ),
@@ -2060,13 +2099,14 @@ class _PlanningPageState extends State<_PlanningPage> {
     final groceries = widget.store.groceryItems
         .where((item) => !item.checked)
         .length;
+    final mealCount = _plannedMealGroupCount(meals);
     return _PageShell(
       eyebrow: '${_monthDay(weekStart)} – ${_monthDay(end)}',
       title: DateUtils.isSameDay(weekStart, _startOfWeek(widget.store.now))
           ? 'This week'
           : 'Week of ${_monthDay(weekStart)}',
       subtitle:
-          '${meals.length} ${meals.length == 1 ? 'meal' : 'meals'} planned · $groceries groceries needed',
+          '$mealCount ${mealCount == 1 ? 'meal' : 'meals'} planned · $groceries groceries needed',
       action: Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -2092,33 +2132,9 @@ class _PlanningPageState extends State<_PlanningPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _FoodPreferencesCard(store: widget.store),
-          const SizedBox(height: 20),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final calendar = _WeekCalendar(
-                store: widget.store,
-                weekStart: weekStart,
-              );
-              final grocery = _GroceryListCard(
-                store: widget.store,
-                compact: true,
-              );
-              if (constraints.maxWidth < 900) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [calendar, const SizedBox(height: 20), grocery],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 2, child: calendar),
-                  const SizedBox(width: 20),
-                  SizedBox(width: 330, child: grocery),
-                ],
-              );
-            },
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: _WeekCalendar(store: widget.store, weekStart: weekStart),
           ),
         ],
       ),
@@ -2126,6 +2142,8 @@ class _PlanningPageState extends State<_PlanningPage> {
   }
 }
 
+// Kept as a reusable inline summary if Food Profile later gets its own page.
+// ignore: unused_element
 class _FoodPreferencesCard extends StatelessWidget {
   const _FoodPreferencesCard({required this.store});
 
@@ -2244,31 +2262,25 @@ class _WeekCalendar extends StatelessWidget {
   final DateTime weekStart;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 720
-          ? 4
-          : constraints.maxWidth >= 480
-          ? 2
-          : 1;
-      final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
-      return Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: List.generate(7, (index) {
-          final day = weekStart.add(Duration(days: index));
-          return SizedBox(
-            width: width,
-            child: _PlanDayCard(
-              store: store,
-              day: day,
-              meals: store.plannedForDay(day),
-              compact: columns == 1,
-            ),
-          );
-        }),
-      );
-    },
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF131715),
+      border: Border.all(color: const Color(0xFF232926)),
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Column(
+      children: List.generate(7, (index) {
+        final day = weekStart.add(Duration(days: index));
+        return _PlanDayCard(
+          store: store,
+          day: day,
+          meals: store.plannedForDay(day),
+          compact: MediaQuery.sizeOf(context).width < 620,
+          last: index == 6,
+        );
+      }),
+    ),
   );
 }
 
@@ -2278,69 +2290,184 @@ class _PlanDayCard extends StatelessWidget {
     required this.day,
     required this.meals,
     required this.compact,
+    required this.last,
   });
   final PantryStore store;
   final DateTime day;
   final List<PlannedMeal> meals;
   final bool compact;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
     final today = DateUtils.isSameDay(day, store.now);
+    final grouped = <String, List<PlannedMeal>>{};
+    for (final meal in meals) {
+      grouped.putIfAbsent(meal.groupId ?? meal.id, () => []).add(meal);
+    }
+    final dateLabel = '${day.month}/${day.day}';
+    final content = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final group in grouped.values)
+          _PlannedMealGroupChip(store: store, meals: group),
+        InkWell(
+          onTap: () => _showPlannedMealEditor(context, store, day),
+          borderRadius: BorderRadius.circular(13),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF333B36)),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Text(
+              meals.isEmpty ? '+ Add a meal' : '+',
+              style: const TextStyle(color: _faint, fontSize: 12),
+            ),
+          ),
+        ),
+      ],
+    );
     return Container(
-      constraints: BoxConstraints(minHeight: compact ? 118 : 250),
-      padding: const EdgeInsets.all(13),
+      padding: EdgeInsets.fromLTRB(14, compact ? 14 : 12, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF171B19),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: today ? _amber : _border),
+        color: today ? const Color(0xFF171C18) : Colors.transparent,
+        border: last ? null : const Border(bottom: BorderSide(color: _border)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _weekdayLabel(day),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: today ? _amber : _ink,
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _PlanDayLabel(day: day, today: today, dateLabel: dateLabel),
+                const SizedBox(height: 10),
+                content,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 92,
+                  child: _PlanDayLabel(
+                    day: day,
+                    today: today,
+                    dateLabel: dateLabel,
                   ),
                 ),
-              ),
-              Text(
-                '${day.month}/${day.day}',
-                style: const TextStyle(
-                  color: _faint,
-                  fontFamily: 'monospace',
-                  fontSize: 10,
+                const SizedBox(width: 14),
+                Expanded(child: content),
+              ],
+            ),
+    );
+  }
+}
+
+class _PlanDayLabel extends StatelessWidget {
+  const _PlanDayLabel({
+    required this.day,
+    required this.today,
+    required this.dateLabel,
+  });
+  final DateTime day;
+  final bool today;
+  final String dateLabel;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        _weekdayLabel(day),
+        style: TextStyle(
+          color: today ? _amber : _muted,
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        dateLabel,
+        style: const TextStyle(
+          color: _faint,
+          fontFamily: 'monospace',
+          fontSize: 11,
+        ),
+      ),
+    ],
+  );
+}
+
+class _PlannedMealGroupChip extends StatelessWidget {
+  const _PlannedMealGroupChip({required this.store, required this.meals});
+  final PantryStore store;
+  final List<PlannedMeal> meals;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = meals.first;
+    final groupId = first.groupId;
+    final name = meals.map((meal) => meal.name).join(' + ');
+    final leftover = meals.every(
+      (meal) => meal.intent == PlannedMealIntent.leftover,
+    );
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 440, minHeight: 42),
+      padding: const EdgeInsets.fromLTRB(11, 7, 7, 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B201D),
+        border: Border.all(color: const Color(0xFF262D29)),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(meals.length == 1 ? first.emoji : '🍽️'),
+          const SizedBox(width: 9),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${first.slot.label}${leftover ? ' · leftovers' : ''}'
+                      .toUpperCase(),
+                  style: const TextStyle(
+                    color: _faint,
+                    fontSize: 9,
+                    letterSpacing: 1,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: first.completedAt == null ? _ink : _faint,
+                    fontSize: 12.5,
+                    height: 1.25,
+                    decoration: first.completedAt == null
+                        ? null
+                        : TextDecoration.lineThrough,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          for (final meal in meals)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _PlannedMealTile(store: store, meal: meal),
-            ),
-          InkWell(
-            onTap: () => _showPlannedMealEditor(context, store, day),
-            borderRadius: BorderRadius.circular(11),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              decoration: BoxDecoration(
-                border: Border.all(color: _border),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Text(
-                '+ Add',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _faint, fontSize: 11),
-              ),
-            ),
+          const SizedBox(width: 5),
+          IconButton(
+            tooltip: 'Remove from plan',
+            onPressed: () => groupId == null
+                ? store.deletePlannedMeal(first.id)
+                : store.deletePlannedMealGroup(groupId),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            icon: const Icon(Icons.close, size: 15, color: _faint),
           ),
         ],
       ),
@@ -2348,6 +2475,8 @@ class _PlanDayCard extends StatelessWidget {
   }
 }
 
+// Retained for legacy single-entry plans while grouped plans use the compact chip.
+// ignore: unused_element
 class _PlannedMealTile extends StatelessWidget {
   const _PlannedMealTile({required this.store, required this.meal});
   final PantryStore store;
@@ -2445,26 +2574,37 @@ class _GroceryListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remaining = store.groceryItems.where((item) => !item.checked).length;
+    final weekStart = _startOfWeek(store.now);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final done = store.groceryItems.where((item) => item.checked).length;
     return _PageShell(
-      eyebrow: 'Shopping',
+      eyebrow: '${_monthDay(weekStart)} – ${_monthDay(weekEnd)}',
       title: 'Grocery list',
       subtitle:
-          '$remaining ${remaining == 1 ? 'item' : 'items'} left · planned ingredients are reduced by what is already in your kitchen.',
-      action: FilledButton.icon(
-        onPressed: () => _showManualGroceryEditor(context, store),
-        icon: const Icon(Icons.add),
-        label: const Text('Add item'),
+          'Grouped by aisle, shared ingredients merged into one entry · $done of ${store.groceryItems.length} checked',
+      action: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        children: [
+          OutlinedButton(
+            onPressed: store.rebuildGroceryList,
+            child: const Text('Rebuild from plan'),
+          ),
+          FilledButton.icon(
+            onPressed: () => _showManualGroceryEditor(context, store),
+            icon: const Icon(Icons.add),
+            label: const Text('Add item'),
+          ),
+        ],
       ),
-      child: _GroceryListCard(store: store, compact: false),
+      child: _GroceryListCard(store: store),
     );
   }
 }
 
 class _GroceryListCard extends StatelessWidget {
-  const _GroceryListCard({required this.store, required this.compact});
+  const _GroceryListCard({required this.store});
   final PantryStore store;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2474,84 +2614,171 @@ class _GroceryListCard extends StatelessWidget {
         .where((entry) => store.totalFor(entry.key) >= entry.value)
         .map((entry) => store.food(entry.key))
         .toList();
-    final visible = compact ? items.take(8).toList() : items;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 22 : 26),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    final grouped = <String, List<GroceryListItem>>{};
+    for (final item in items) {
+      grouped.putIfAbsent(_grocerySection(store, item), () => []).add(item);
+    }
+    const order = [
+      'Produce',
+      'Meat & seafood',
+      'Dairy & eggs',
+      'Pantry',
+      'Other',
+    ];
+    final sections = order
+        .where((name) => grouped[name]?.isNotEmpty == true)
+        .toList();
+    if (items.isEmpty) {
+      return const _EmptyCard(
+        icon: Icons.shopping_cart_outlined,
+        text: 'Plan recipes or add a shopping item to start your list.',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 900
+                ? 3
+                : constraints.maxWidth >= 580
+                ? 2
+                : 1;
+            final width = (constraints.maxWidth - (columns - 1) * 14) / columns;
+            return Wrap(
+              spacing: 14,
+              runSpacing: 14,
               children: [
-                Expanded(
-                  child: Text(
-                    'Grocery list',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                for (final section in sections)
+                  SizedBox(
+                    width: width,
+                    child: _GrocerySectionCard(
+                      store: store,
+                      title: section,
+                      items: grouped[section]!,
                     ),
                   ),
-                ),
-                Text(
-                  '${items.length} items',
-                  style: const TextStyle(
+              ],
+            );
+          },
+        ),
+        if (alreadyHave.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF131715),
+              border: Border.all(color: const Color(0xFF232926)),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ALREADY IN THE KITCHEN — LEFT OFF THE LIST',
+                  style: TextStyle(
                     color: _faint,
-                    fontFamily: 'monospace',
-                    fontSize: 11,
+                    fontSize: 10,
+                    letterSpacing: 1.1,
                   ),
+                ),
+                const SizedBox(height: 13),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: alreadyHave
+                      .map(
+                        (food) => Chip(
+                          avatar: Text(food.emoji),
+                          label: Text(food.name),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
             ),
-            const SizedBox(height: 5),
-            const Text(
-              'Built from unfinished planned recipes minus current inventory.',
-              style: TextStyle(color: _muted, fontSize: 12),
-            ),
-            const SizedBox(height: 18),
-            if (items.isEmpty)
-              const _EmptyCard(
-                icon: Icons.shopping_cart_outlined,
-                text: 'Plan recipes or add a shopping item to start your list.',
-              )
-            else
-              for (final item in visible)
-                _GroceryItemRow(store: store, item: item),
-            if (compact && items.length > visible.length)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '+ ${items.length - visible.length} more on the full list',
-                  style: const TextStyle(color: _faint, fontSize: 11),
-                ),
-              ),
-            if (alreadyHave.isNotEmpty) ...[
-              const Divider(height: 32),
-              const Text(
-                'ALREADY IN THE KITCHEN',
-                style: TextStyle(
-                  color: _faint,
-                  fontSize: 10,
-                  letterSpacing: 1.1,
-                ),
-              ),
-              const SizedBox(height: 11),
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: alreadyHave
-                    .map(
-                      (food) => Chip(
-                        avatar: Text(food.emoji),
-                        label: Text(food.name),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        ],
+      ],
     );
   }
+}
+
+class _GrocerySectionCard extends StatelessWidget {
+  const _GrocerySectionCard({
+    required this.store,
+    required this.title,
+    required this.items,
+  });
+  final PantryStore store;
+  final String title;
+  final List<GroceryListItem> items;
+
+  String get emoji => switch (title) {
+    'Produce' => '🥬',
+    'Meat & seafood' => '🥩',
+    'Dairy & eggs' => '🥛',
+    'Pantry' => '🫙',
+    _ => '🛒',
+  };
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: const Color(0xFF171B19),
+      border: Border.all(color: _border),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              '${items.length}',
+              style: const TextStyle(
+                color: _faint,
+                fontFamily: 'monospace',
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (final item in items) _GroceryItemRow(store: store, item: item),
+      ],
+    ),
+  );
+}
+
+String _grocerySection(PantryStore store, GroceryListItem item) {
+  if (item.foodId == null) return 'Other';
+  final food = store.food(item.foodId!);
+  final text = '${food.name} ${food.aliases.join(' ')}'.toLowerCase();
+  if (RegExp(
+    r'chicken|beef|pork|turkey|fish|salmon|shrimp|burger|steak',
+  ).hasMatch(text)) {
+    return 'Meat & seafood';
+  }
+  if (RegExp(r'milk|cheese|egg|butter|yogurt|cream').hasMatch(text)) {
+    return 'Dairy & eggs';
+  }
+  if (food.defaultLocation == StorageLocation.fridge ||
+      RegExp(
+        r'broccoli|carrot|potato|garlic|lemon|onion|asparagus|pepper|lettuce|tomato',
+      ).hasMatch(text)) {
+    return 'Produce';
+  }
+  return 'Pantry';
 }
 
 class _GroceryItemRow extends StatelessWidget {
@@ -2568,6 +2795,29 @@ class _GroceryItemRow extends StatelessWidget {
         item.quantityBase!,
       );
     }
+    final usedBy = item.foodId == null
+        ? const <String>[]
+        : store.plannedMeals
+              .where(
+                (meal) =>
+                    meal.intent == PlannedMealIntent.prepare &&
+                    meal.source == PlannedMealSource.recipe &&
+                    meal.sourceId != null,
+              )
+              .map(
+                (meal) =>
+                    store.recipes.where((recipe) => recipe.id == meal.sourceId),
+              )
+              .expand((recipes) => recipes)
+              .where(
+                (recipe) => recipe.ingredients.any(
+                  (ingredient) => ingredient.foodId == item.foodId,
+                ),
+              )
+              .map((recipe) => recipe.name)
+              .toSet()
+              .take(2)
+              .toList();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -2581,12 +2831,28 @@ class _GroceryItemRow extends StatelessWidget {
           Text(item.emoji),
           const SizedBox(width: 9),
           Expanded(
-            child: Text(
-              item.name,
-              style: TextStyle(
-                color: item.checked ? _faint : _ink,
-                decoration: item.checked ? TextDecoration.lineThrough : null,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  style: TextStyle(
+                    color: item.checked ? _faint : _ink,
+                    decoration: item.checked
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                ),
+                if (usedBy.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'For ${usedBy.join(' + ')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _faint, fontSize: 10.5),
+                  ),
+                ],
+              ],
             ),
           ),
           if (amount.isNotEmpty)
@@ -4864,6 +5130,9 @@ DateTime _startOfWeek(DateTime date) {
   return day.subtract(Duration(days: day.weekday - DateTime.monday));
 }
 
+int _plannedMealGroupCount(Iterable<PlannedMeal> meals) =>
+    meals.map((meal) => meal.groupId ?? meal.id).toSet().length;
+
 String _shortPlanDate(DateTime date) {
   if (DateUtils.isSameDay(date, DateTime.now())) return 'Today';
   return _monthDay(date);
@@ -4928,7 +5197,9 @@ Future<void> _showPlannedMealEditor(
       ? PlannedMealSource.external
       : PlannedMealSource.custom;
   var slot = MealSlot.dinner;
+  var intent = PlannedMealIntent.prepare;
   Recipe? recipe = store.recipes.isEmpty ? null : store.recipes.first;
+  final selectedRecipes = <Recipe>{?recipe};
   MealTemplate? mealTemplate = store.mealTemplates.isEmpty
       ? null
       : store.mealTemplates.first;
@@ -5002,23 +5273,46 @@ Future<void> _showPlannedMealEditor(
                 ),
                 const SizedBox(height: 12),
                 if (source == PlannedMealSource.recipe)
-                  DropdownButtonFormField<Recipe>(
-                    initialValue: recipe,
-                    decoration: const InputDecoration(labelText: 'Recipe'),
-                    items: store.recipes
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text('${value.emoji}  ${value.name}'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setDialogState(() {
-                      recipe = value;
-                      if (value != null) {
-                        servings.text = _compactNumber(value.servings);
-                      }
-                    }),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'RECIPES IN THIS MEAL',
+                        style: TextStyle(
+                          color: _faint,
+                          fontSize: 10,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: store.recipes
+                            .map(
+                              (value) => FilterChip(
+                                selected: selectedRecipes.contains(value),
+                                avatar: Text(value.emoji),
+                                label: Text(value.name),
+                                onSelected: (selected) => setDialogState(() {
+                                  if (selected) {
+                                    selectedRecipes.add(value);
+                                    recipe = value;
+                                    if (selectedRecipes.length == 1) {
+                                      servings.text = _compactNumber(
+                                        value.servings,
+                                      );
+                                    }
+                                  } else {
+                                    selectedRecipes.remove(value);
+                                    recipe = selectedRecipes.firstOrNull;
+                                  }
+                                }),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
                   )
                 else if (source == PlannedMealSource.meal)
                   DropdownButtonFormField<MealTemplate>(
@@ -5078,6 +5372,27 @@ Future<void> _showPlannedMealEditor(
                     ],
                   ),
                 const SizedBox(height: 12),
+                if (source == PlannedMealSource.recipe ||
+                    source == PlannedMealSource.meal) ...[
+                  DropdownButtonFormField<PlannedMealIntent>(
+                    initialValue: intent,
+                    decoration: const InputDecoration(labelText: 'Plan as'),
+                    items: PlannedMealIntent.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(
+                              value == PlannedMealIntent.prepare
+                                  ? 'Cook / prepare'
+                                  : 'Eat leftovers (no groceries)',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setDialogState(() => intent = value!),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
                   controller: servings,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -5119,7 +5434,8 @@ Future<void> _showPlannedMealEditor(
             onPressed: () {
               final servingCount = double.tryParse(servings.text);
               final invalidSource =
-                  (source == PlannedMealSource.recipe && recipe == null) ||
+                  (source == PlannedMealSource.recipe &&
+                      selectedRecipes.isEmpty) ||
                   (source == PlannedMealSource.meal && mealTemplate == null) ||
                   (source == PlannedMealSource.external && external == null) ||
                   (source == PlannedMealSource.custom &&
@@ -5140,28 +5456,55 @@ Future<void> _showPlannedMealEditor(
   );
   if (submitted == true) {
     final servingCount = double.parse(servings.text);
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final groupId = 'meal-$timestamp';
+    if (source == PlannedMealSource.recipe) {
+      for (final selected in selectedRecipes) {
+        store.savePlannedMeal(
+          PlannedMeal(
+            id: 'plan-$timestamp-${selected.id}',
+            groupId: groupId,
+            intent: intent,
+            date: DateTime(day.year, day.month, day.day),
+            slot: slot,
+            source: PlannedMealSource.recipe,
+            sourceId: selected.id,
+            name: selected.name,
+            emoji: selected.emoji,
+            servings: servingCount,
+            note: note.text.trim(),
+          ),
+        );
+      }
+      for (final controller in [name, emoji, servings, note]) {
+        controller.dispose();
+      }
+      return;
+    }
     final plannedName = switch (source) {
-      PlannedMealSource.recipe => recipe!.name,
+      PlannedMealSource.recipe => throw StateError('Handled above'),
       PlannedMealSource.meal => mealTemplate!.name,
       PlannedMealSource.external => external!.name,
       PlannedMealSource.custom => name.text.trim(),
     };
     final plannedEmoji = switch (source) {
-      PlannedMealSource.recipe => recipe!.emoji,
+      PlannedMealSource.recipe => throw StateError('Handled above'),
       PlannedMealSource.meal => mealTemplate!.emoji,
       PlannedMealSource.external => external!.emoji,
       PlannedMealSource.custom =>
         emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
     };
     final sourceId = switch (source) {
-      PlannedMealSource.recipe => recipe!.id,
+      PlannedMealSource.recipe => throw StateError('Handled above'),
       PlannedMealSource.meal => mealTemplate!.id,
       PlannedMealSource.external => external!.id,
       PlannedMealSource.custom => null,
     };
     store.savePlannedMeal(
       PlannedMeal(
-        id: 'plan-${DateTime.now().microsecondsSinceEpoch}',
+        id: 'plan-$timestamp',
+        groupId: groupId,
+        intent: intent,
         date: DateTime(day.year, day.month, day.day),
         slot: slot,
         source: source,

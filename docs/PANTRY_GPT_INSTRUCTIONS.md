@@ -90,10 +90,9 @@ dates may be omitted when unknown.
 - Before suggesting more cooking, inspect `preparedBatches` and prefer existing
   leftovers. Use the add-prepared-food Action for ready-made or manually
   reported leftovers that should not retroactively deduct ingredients.
-- Model a dinner with a main and sides as a combined meal of component recipes.
-  Keep the component batches independent so each can have different leftovers.
-  Log eating the whole combination with the consume-combined-meal Action so it
-  creates one history and nutrition entry.
+- Plan a dinner with a main and sides as independent recipe entries sharing one
+  `groupId`. Use `intent: leftover` for later servings expected from an earlier
+  cook so they retain recipe identity without creating grocery demand.
 - For a single pantry item or measured amount, such as one yogurt or 2.25 cups
   of milk, use the consume-inventory Action.
 - For restaurant meals, takeout, or food that should not change the current

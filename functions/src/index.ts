@@ -280,6 +280,11 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       throw new ValidationError(`entries[${index}].source is invalid`);
     }
     const sourceId = optionalString(item.sourceId);
+    const groupId = optionalString(item.groupId);
+    const intent = (optionalString(item.intent) ?? "prepare").toLowerCase();
+    if (!["prepare", "leftover"].includes(intent)) {
+      throw new ValidationError(`entries[${index}].intent is invalid`);
+    }
     const servings = item.servings == null ? 1 : positiveNumber(item.servings, `entries[${index}].servings`);
     let name: string;
     let emoji: string;
@@ -290,7 +295,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       const recipe = recipes.get(sourceId) ?? {};
       name = optionalString(item.name) ?? String(recipe.name);
       emoji = optionalString(item.emoji) ?? String(recipe.emoji ?? "🍽️");
-      addRecipeRequirements(sourceId, servings);
+      if (intent === "prepare") addRecipeRequirements(sourceId, servings);
     } else if (source === "meal") {
       if (sourceId == null || !mealTemplates.has(sourceId)) {
         throw new ValidationError(`entries[${index}] references an unknown combined meal`);
@@ -303,7 +308,9 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
         const component = asObject(rawComponent);
         const recipeId = requiredString(component.recipe_id, `components[${componentIndex}].recipe_id`);
         const componentServings = positiveNumber(component.servings, `components[${componentIndex}].servings`);
-        addRecipeRequirements(recipeId, componentServings * servings / templateServings);
+        if (intent === "prepare") {
+          addRecipeRequirements(recipeId, componentServings * servings / templateServings);
+        }
       }
     } else if (source === "external") {
       if (sourceId == null || !externalFoods.has(sourceId)) {
@@ -323,6 +330,8 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
         slot,
         source,
         source_id: sourceId ?? null,
+        group_id: groupId ?? null,
+        intent,
         name,
         emoji,
         servings,

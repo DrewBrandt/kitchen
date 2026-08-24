@@ -14,8 +14,8 @@ class PantryApp extends StatelessWidget {
     title: 'Pantry',
     debugShowCheckedModeBanner: false,
     themeMode: ThemeMode.dark,
-    theme: _theme(Brightness.light),
-    darkTheme: _theme(Brightness.dark),
+    theme: pantryTheme(Brightness.light),
+    darkTheme: pantryTheme(Brightness.dark),
     home: StreamBuilder<User?>(
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
@@ -30,7 +30,7 @@ class PantryApp extends StatelessWidget {
   );
 }
 
-ThemeData _theme(Brightness brightness) {
+ThemeData pantryTheme(Brightness brightness) {
   const seed = Color(0xFFF0B85A);
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness)
@@ -154,8 +154,9 @@ class _SignInPageState extends State<_SignInPage> {
           'unauthorized-domain' =>
             'This website domain has not been authorized in Firebase yet.',
           'popup-closed-by-user' => 'Sign-in was cancelled.',
-          _ => 'Could not sign in (${error.code}): '
-              '${error.message ?? 'No details were provided.'}',
+          _ =>
+            'Could not sign in (${error.code}): '
+                '${error.message ?? 'No details were provided.'}',
         },
       );
     } catch (_) {

@@ -936,6 +936,14 @@ components:
           enum: [recipe, meal, external, custom]
         sourceId:
           type: string
+        groupId:
+          type: string
+          description: Groups independent recipe entries into one planned meal.
+        intent:
+          type: string
+          enum: [prepare, leftover]
+          default: prepare
+          description: Leftovers retain recipe identity without adding grocery demand.
         name:
           type: string
         emoji:

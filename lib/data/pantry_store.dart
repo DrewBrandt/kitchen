@@ -997,7 +997,8 @@ class PantryStore extends ChangeNotifier {
           (availablePrepared[batch.sourceId!] ?? 0) + batch.remainingServings;
     }
     for (final meal in _plannedMeals.where(
-      (item) => item.completedAt == null,
+      (item) =>
+          item.completedAt == null && item.intent == PlannedMealIntent.prepare,
     )) {
       final recipeNeeds = <String, double>{};
       if (meal.source == PlannedMealSource.recipe && meal.sourceId != null) {
@@ -1076,6 +1077,14 @@ class PantryStore extends ChangeNotifier {
     _savePlanning();
   }
 
+  void deletePlannedMealGroup(String groupId) {
+    _plannedMeals = _plannedMeals
+        .where((meal) => meal.groupId != groupId)
+        .toList();
+    _rebuildGroceryList();
+    _savePlanning();
+  }
+
   void setPlannedMealCompleted(String id, bool completed) {
     final index = _plannedMeals.indexWhere((meal) => meal.id == id);
     if (index < 0) throw StateError('Unknown planned meal $id');
@@ -1093,6 +1102,11 @@ class PantryStore extends ChangeNotifier {
     _groceryItems[index] = _groceryItems[index].copyWith(
       checked: !_groceryItems[index].checked,
     );
+    _savePlanning();
+  }
+
+  void rebuildGroceryList() {
+    _rebuildGroceryList();
     _savePlanning();
   }
 

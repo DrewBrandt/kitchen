@@ -240,15 +240,18 @@ Content-Type: application/json
       "slot": "dinner",
       "source": "recipe",
       "sourceId": "butter-chicken",
+      "groupId": "monday-dinner",
+      "intent": "prepare",
       "servings": 4,
       "note": "Use the naan"
     },
     {
       "date": "2026-08-26",
       "slot": "lunch",
-      "source": "custom",
-      "name": "Leftovers",
-      "emoji": "🥡",
+      "source": "recipe",
+      "sourceId": "butter-chicken",
+      "groupId": "wednesday-lunch",
+      "intent": "leftover",
       "servings": 1
     }
   ]
@@ -260,8 +263,10 @@ totals ingredients from referenced recipes, scales them to planned servings,
 subtracts positive inventory lots, and rebuilds plan-generated grocery items.
 Manual grocery items and checked state for unchanged foods are preserved.
 
-`source` may be `recipe`, `external`, or `custom`. Recipe and external entries
-use `sourceId`; custom entries require `name`.
+`source` may be `recipe`, `meal`, `external`, or `custom`. Recipe and external
+entries use `sourceId`; custom entries require `name`. Give recipe components
+the same `groupId` to display them as one meal. `intent` defaults to `prepare`;
+use `leftover` to retain recipe identity without adding grocery demand.
 
 ## Add a manual grocery item
 

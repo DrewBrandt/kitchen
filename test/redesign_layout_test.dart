@@ -256,12 +256,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(recipe.name), findsWidgets);
-    expect(find.text('Grocery list'), findsWidgets);
-    expect(find.textContaining('Built from unfinished'), findsOneWidget);
+    expect(find.text('+ Add a meal'), findsWidgets);
 
     await tester.tap(find.text('Grocery list').first);
     await tester.pumpAndSettle();
     expect(find.text('Add item'), findsOneWidget);
+    expect(find.text('Rebuild from plan'), findsOneWidget);
+    expect(find.textContaining('Grouped by aisle'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the open week view repaints when a meal is added', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final recipe = store.recipes.first;
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'live-plan-update',
+        groupId: 'live-dinner',
+        date: store.now,
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: recipe.servings,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(recipe.name), findsWidgets);
+    expect(find.textContaining('1 meal planned'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -270,11 +300,9 @@ void main() {
   ) async {
     final store = PantryStore.demo();
     await pumpPantry(tester, const Size(1440, 980), store: store);
-    await tester.tap(find.text('This week').first);
-    await tester.pumpAndSettle();
 
     expect(find.text('Food profile'), findsOneWidget);
-    await tester.tap(find.text('Set up'));
+    await tester.tap(find.text('Food profile'));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -293,9 +321,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.foodPreferences.allergies, ['Tree nuts']);
-    expect(find.text('Tree nuts'), findsOneWidget);
-    expect(find.text('Raw tomatoes'), findsOneWidget);
-    expect(find.text('Indian food'), findsOneWidget);
+    expect(store.foodPreferences.dislikes, ['Raw tomatoes']);
+    expect(store.foodPreferences.favorites, ['Indian food']);
     expect(tester.takeException(), isNull);
   });
 }
