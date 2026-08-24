@@ -48,7 +48,7 @@ class DefaultFirebaseOptions {
     appId: '1:36936390054:web:2094daeddbdf8bf3166b67',
     messagingSenderId: '36936390054',
     projectId: 'pantry-tracker-4bc45',
-    authDomain: 'pantry-tracker-4bc45.web.app',
+    authDomain: 'pantry-tracker-4bc45.firebaseapp.com',
     storageBucket: 'pantry-tracker-4bc45.firebasestorage.app',
     measurementId: 'G-VCG11VCF78',
   );

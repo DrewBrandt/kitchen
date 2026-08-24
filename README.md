@@ -67,7 +67,7 @@ the normal Firebase web configuration already required by every browser client.
 ## Firefox mobile sign-in
 
 Use the Firebase-hosted app at
-`https://pantry-tracker-4bc45.web.app` on Firefox mobile. The app uses a
+`https://pantry-tracker-4bc45.firebaseapp.com` on Firefox mobile. The app uses a
 same-origin redirect there so Firefox cannot block Firebase's authentication
 handoff as cross-site storage. Build with a root base path and deploy with:
 
