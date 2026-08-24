@@ -43,6 +43,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
       _Dashboard(
         store: widget.store,
         onOpenInventory: () => setState(() => selectedIndex = 1),
+        onOpenRecipes: () => setState(() => selectedIndex = 2),
       ),
       _InventoryPage(store: widget.store),
       _RecipesPage(store: widget.store),
@@ -188,10 +189,15 @@ class _PageShell extends StatelessWidget {
 }
 
 class _Dashboard extends StatelessWidget {
-  const _Dashboard({required this.store, required this.onOpenInventory});
+  const _Dashboard({
+    required this.store,
+    required this.onOpenInventory,
+    required this.onOpenRecipes,
+  });
 
   final PantryStore store;
   final VoidCallback onOpenInventory;
+  final VoidCallback onOpenRecipes;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +210,22 @@ class _Dashboard extends StatelessWidget {
     final makeable = store.recipes
         .where((recipe) => store.missingFor(recipe).isEmpty)
         .length;
+    final readyRecipes =
+        store.recipes
+            .where((recipe) => store.missingFor(recipe).isEmpty)
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    final almostReady =
+        store.recipes
+            .where((recipe) => store.missingFor(recipe).isNotEmpty)
+            .toList()
+          ..sort((a, b) {
+            final byMissing = store
+                .missingFor(a)
+                .length
+                .compareTo(store.missingFor(b).length);
+            return byMissing != 0 ? byMissing : a.name.compareTo(b.name);
+          });
     return _PageShell(
       title: 'Good ${_dayPart()}',
       subtitle: 'Here is what your kitchen can do today.',
@@ -264,6 +286,58 @@ class _Dashboard extends StatelessWidget {
                 ),
               );
             }),
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  readyRecipes.isEmpty ? 'Closest meal' : 'Cook next',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(
+                onPressed: onOpenRecipes,
+                child: const Text('Browse recipes'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (readyRecipes.isEmpty && almostReady.isEmpty)
+            const _EmptyCard(
+              icon: Icons.menu_book_outlined,
+              text: 'Add a recipe to start matching meals to your pantry.',
+            )
+          else
+            ...((readyRecipes.isNotEmpty ? readyRecipes : almostReady)
+                .take(3)
+                .map((recipe) {
+                  final missing = store.missingFor(recipe);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Card(
+                      child: ListTile(
+                        onTap: onOpenRecipes,
+                        leading: Text(
+                          recipe.emoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
+                        title: Text(recipe.name),
+                        subtitle: Text(
+                          missing.isEmpty
+                              ? 'Everything is in stock'
+                              : _missingSummary(store, missing),
+                        ),
+                        trailing: Icon(
+                          missing.isEmpty
+                              ? Icons.check_circle_outline
+                              : Icons.shopping_basket_outlined,
+                        ),
+                      ),
+                    ),
+                  );
+                })),
           const SizedBox(height: 20),
           FilledButton.tonalIcon(
             onPressed: onOpenInventory,
@@ -463,25 +537,106 @@ class _RecipesPage extends StatelessWidget {
   final PantryStore store;
 
   @override
-  Widget build(BuildContext context) => _PageShell(
-    title: 'Recipes',
-    subtitle:
-        'Cook a recipe and its ingredients come out of inventory together.',
-    action: FilledButton.icon(
-      onPressed: () => showRecipeEditor(context, store),
-      icon: const Icon(Icons.add),
-      label: const Text('New recipe'),
-    ),
-    child: Column(
-      children: store.recipes
-          .map(
-            (recipe) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _RecipeCard(store: store, recipe: recipe),
+  Widget build(BuildContext context) {
+    final ready = <Recipe>[];
+    final quickRun = <Recipe>[];
+    final planning = <Recipe>[];
+    for (final recipe in store.recipes) {
+      final missingCount = store.missingFor(recipe).length;
+      if (missingCount == 0) {
+        ready.add(recipe);
+      } else if (missingCount <= 2) {
+        quickRun.add(recipe);
+      } else {
+        planning.add(recipe);
+      }
+    }
+    for (final recipes in [ready, quickRun, planning]) {
+      recipes.sort((a, b) => a.name.compareTo(b.name));
+    }
+    return _PageShell(
+      title: 'Recipes',
+      subtitle: 'Start with what is ready, or see exactly what to pick up.',
+      action: FilledButton.icon(
+        onPressed: () => showRecipeEditor(context, store),
+        icon: const Icon(Icons.add),
+        label: const Text('New recipe'),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _RecipeSection(
+            title: 'Ready to cook',
+            subtitle: 'Every tracked ingredient is in stock.',
+            recipes: ready,
+            store: store,
+            emptyText: 'No complete matches yet.',
+          ),
+          const SizedBox(height: 28),
+          _RecipeSection(
+            title: 'Quick grocery run',
+            subtitle: 'Missing only one or two ingredients.',
+            recipes: quickRun,
+            store: store,
+            emptyText: 'Nothing is one or two items away right now.',
+          ),
+          if (planning.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _RecipeSection(
+              title: 'Needs more planning',
+              subtitle: 'Useful ideas for a future shopping trip.',
+              recipes: planning,
+              store: store,
+              emptyText: '',
             ),
-          )
-          .toList(),
-    ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecipeSection extends StatelessWidget {
+  const _RecipeSection({
+    required this.title,
+    required this.subtitle,
+    required this.recipes,
+    required this.store,
+    required this.emptyText,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<Recipe> recipes;
+  final PantryStore store;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        subtitle,
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+      const SizedBox(height: 12),
+      if (recipes.isEmpty)
+        _EmptyCard(icon: Icons.restaurant_menu, text: emptyText)
+      else
+        ...recipes.map(
+          (recipe) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _RecipeCard(store: store, recipe: recipe),
+          ),
+        ),
+    ],
   );
 }
 
@@ -572,6 +727,32 @@ class _RecipeCard extends StatelessWidget {
                 );
               }).toList(),
             ),
+            if (missing.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.secondaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pick up',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(_missingSummary(store, missing)),
+                  ],
+                ),
+              ),
+            ],
             if (recipeNutrition != null) ...[
               const SizedBox(height: 12),
               Row(
@@ -919,6 +1100,16 @@ void _showMissingInventory(
     context,
   ).showSnackBar(SnackBar(content: Text('Not enough inventory: $details.')));
 }
+
+String _missingSummary(
+  PantryStore store,
+  Map<String, double> missing,
+) => missing.entries
+    .map((entry) {
+      final food = store.food(entry.key);
+      return '${food.name} — ${store.units.bestInventoryLabel(food, entry.value)}';
+    })
+    .join(' · ');
 
 Future<void> _confirmDeleteRecipe(
   BuildContext context,
