@@ -1,7 +1,6 @@
 # Project instructions
 
 **I do not and will not ever give a fuck about backward compatibility. Just fix it and migrate.**
-
 ## Isolation, integration, and deployment
 
 - Start every implementation task in its own Git worktree on a dedicated `codex/` branch. Do not implement directly on `main`.

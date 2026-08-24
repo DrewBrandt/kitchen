@@ -869,6 +869,10 @@ class PantryStore extends ChangeNotifier {
     )) {
       throw ArgumentError('The base unit must have a conversion of 1');
     }
+    if (food.displayUnit != null &&
+        !food.conversions.any((item) => item.unit == food.displayUnit)) {
+      throw ArgumentError('The display unit must match a conversion');
+    }
     _foods[food.id] = food;
     _queue(_cloud?.saveFood(food));
     notifyListeners();

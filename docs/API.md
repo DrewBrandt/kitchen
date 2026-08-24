@@ -214,9 +214,50 @@ as hard safety constraints by the Pantry GPT instructions.
 GET /v1/inventory
 ```
 
-Returns food definitions, positive inventory lots, recipes, and the 500 most
-recent food-log events. Codex can use this to answer “what can I make?” and
-“what have I eaten today?” before writing anything.
+Returns compact stock `items`. Each item contains the canonical food ID and name,
+quantity mode, base/display units, total quantity in the base unit, and its
+positive lots with location, best-by date, and optional product identity. It
+does not include full food or product definitions, history, targets, preferences,
+recipes, plans, groceries, or prepared foods. Use the focused endpoints below
+for that context.
+
+## Find a food definition
+
+```http
+GET /v1/foods?q=white%20rice
+GET /v1/foods/{id}
+```
+
+The search matches canonical IDs, names, and aliases and returns the complete
+definition, including supported units, conversions, and nutrition. Omit `q` only
+when the complete definition list is actually needed.
+
+## Find a recipe
+
+```http
+GET /v1/recipes?q=orange%20chicken
+GET /v1/recipes/{id}
+```
+
+The search matches recipe IDs and names. An exact-ID read avoids transferring
+the complete recipe collection.
+
+## Read prepared foods
+
+```http
+GET /v1/prepared-batches
+```
+
+Returns only prepared batches with servings remaining.
+
+## Read nutrition targets and food preferences
+
+```http
+GET /v1/targets
+GET /v1/preferences
+```
+
+These return the small private settings documents independently of inventory.
 
 ## Read meal-planning history
 
@@ -451,6 +492,8 @@ and reports affected lots, recipes, and history. With `dryRun: false`, it
 validates every target recipe unit before changing anything, then rewrites
 inventory, recipes, prepared batches, history deductions, and grocery
 references in one Firestore batch. Batches are capped at 450 writes.
+When `canonicalConversions` removes the food's current display unit, the
+mapping must provide a supported `canonicalDisplayUnit`.
 
 The reviewed mapping for the current pantry is
 `tools/canonical_product_migration.json`. Keep it in dry-run mode until the new

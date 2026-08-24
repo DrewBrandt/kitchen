@@ -43,8 +43,13 @@ class UnitService {
   }
 
   String bestInventoryLabel(FoodDefinition food, double baseAmount) {
-    if (food.displayUnit != null) {
-      final preferred = food.conversionFor(food.displayUnit!);
+    final preferred = food.displayUnit == null
+        ? null
+        : food.conversions.cast<UnitConversion?>().firstWhere(
+            (conversion) => conversion?.unit == food.displayUnit,
+            orElse: () => null,
+          );
+    if (preferred != null) {
       return formatUnitAmount(
         food,
         fromBase(food, baseAmount, preferred.unit),

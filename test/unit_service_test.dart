@@ -78,5 +78,21 @@ void main() {
       expect(units.bestInventoryLabel(buns, 8), '8 buns');
       expect(units.bestInventoryLabel(rotini, 454), '1 box');
     });
+
+    test('falls back when persisted display unit is not a conversion', () {
+      const rotini = FoodDefinition(
+        id: 'rotini',
+        name: 'Rotini',
+        mode: QuantityMode.measured,
+        baseUnit: 'gram',
+        displayUnit: 'box',
+        conversions: [
+          UnitConversion(unit: 'gram', symbol: 'g', baseAmount: 1),
+          UnitConversion(unit: 'ounce', symbol: 'oz', baseAmount: 28.3495),
+        ],
+      );
+
+      expect(units.bestInventoryLabel(rotini, 454), '~16 oz');
+    });
   });
 }

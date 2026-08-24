@@ -67,6 +67,34 @@ export const pantryApi = onRequest(
         await exportInventory(response);
         return;
       }
+      if (request.method === "GET" && path === "/v1/foods") {
+        await searchFoods(request.query.q, response);
+        return;
+      }
+      if (request.method === "GET" && path.startsWith("/v1/foods/")) {
+        await exportDocument("foods", decodePathId(path, "/v1/foods/"), "food", response);
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/recipes") {
+        await searchRecipes(request.query.q, response);
+        return;
+      }
+      if (request.method === "GET" && path.startsWith("/v1/recipes/")) {
+        await exportDocument("recipes", decodePathId(path, "/v1/recipes/"), "recipe", response);
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/prepared-batches") {
+        await exportPreparedBatches(response);
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/targets") {
+        await exportSetting("nutrition", "nutritionTargets", response);
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/preferences") {
+        await exportSetting("food_profile", "foodPreferences", response);
+        return;
+      }
       if (request.method === "GET" && path === "/v1/history") {
         await exportHistory(request.query.days, response);
         return;
@@ -197,37 +225,116 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, products, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates, recipeFeedback] = await Promise.all([
+  const [foods, products, lots] = await Promise.all([
     db.collection("foods").get(),
     db.collection("products").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
-    db.collection("recipes").get(),
-    db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
-    db.collection("settings").doc("nutrition").get(),
-    db.collection("settings").doc("food_profile").get(),
-    db.collection("external_foods").get(),
-    db.collection("meal_plan").get(),
-    db.collection("grocery_list").get(),
-    db.collection("prepared_batches").where("remaining_servings", ">", 0).get(),
-    db.collection("meal_templates").get(),
-    db.collection("recipe_feedback").get(),
   ]);
+  const foodsById = new Map(foods.docs.map((doc) => [doc.id, doc.data()]));
+  const productsById = new Map(products.docs.map((doc) => [doc.id, doc.data()]));
+  const items = new Map<string, JsonObject & { lots: JsonObject[] }>();
+  for (const document of lots.docs) {
+    const data = document.data();
+    const foodId = String(data.food_id);
+    const food = foodsById.get(foodId);
+    if (food == null) continue;
+    let item = items.get(foodId);
+    if (item == null) {
+      item = {
+        foodId,
+        name: food.name,
+        emoji: food.emoji ?? "🥫",
+        quantityMode: food.quantity_mode,
+        baseUnit: food.base_unit,
+        displayUnit: food.display_unit ?? food.base_unit,
+        totalQuantityBase: 0,
+        lots: [],
+      };
+      items.set(foodId, item);
+    }
+    const productId = typeof data.product_id === "string" ? data.product_id : undefined;
+    const product = productId == null ? undefined : productsById.get(productId);
+    const quantityBase = Number(data.quantity_base);
+    item.totalQuantityBase = Number(item.totalQuantityBase) + quantityBase;
+    item.lots.push({
+      id: document.id,
+      quantityBase,
+      location: data.location,
+      bestBy: data.best_by instanceof Timestamp ? data.best_by.toDate().toISOString() : null,
+      productId,
+      productName: product?.name,
+      brand: product?.brand,
+      estimated: data.quantity_estimated === true || undefined,
+    });
+  }
   response.status(200).json({
-    foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    products: products.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    lots: lots.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
-    foodPreferences: foodPreferences.exists ? serialize(foodPreferences.data() ?? {}) : null,
-    externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    plannedMeals: plannedMeals.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    groceryItems: groceryItems.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    preparedBatches: preparedBatches.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    mealTemplates: mealTemplates.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
-    recipeFeedback: recipeFeedback.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    items: [...items.values()].sort((a, b) => String(a.name).localeCompare(String(b.name))),
     exportedAt: new Date().toISOString(),
   });
+}
+
+async function searchFoods(queryValue: unknown, response: ApiResponse): Promise<void> {
+  const query = optionalString(queryValue);
+  const normalizedQuery = query == null ? null : normalize(query);
+  const snapshot = await db.collection("foods").get();
+  const foods = snapshot.docs
+    .map((doc): JsonObject => ({ id: doc.id, ...doc.data() }))
+    .filter((food) => normalizedQuery == null || [food.id, food.name, ...(Array.isArray(food.aliases) ? food.aliases : [])]
+      .some((value) => normalize(String(value ?? "")).includes(normalizedQuery)))
+    .map((food) => serialize(food));
+  response.status(200).json({ foods });
+}
+
+async function searchRecipes(queryValue: unknown, response: ApiResponse): Promise<void> {
+  const query = optionalString(queryValue);
+  const normalizedQuery = query == null ? null : normalize(query);
+  const snapshot = await db.collection("recipes").get();
+  const recipes = snapshot.docs
+    .map((doc): JsonObject => ({ id: doc.id, ...doc.data() }))
+    .filter((recipe) => normalizedQuery == null || [recipe.id, recipe.name]
+      .some((value) => normalize(String(value ?? "")).includes(normalizedQuery)))
+    .map((recipe) => serialize(recipe));
+  response.status(200).json({ recipes });
+}
+
+async function exportDocument(
+  collection: string,
+  id: string,
+  responseKey: string,
+  response: ApiResponse,
+): Promise<void> {
+  const document = await db.collection(collection).doc(id).get();
+  if (!document.exists) {
+    response.status(404).json({ error: `${responseKey} not found` });
+    return;
+  }
+  response.status(200).json({ [responseKey]: serialize({ id: document.id, ...document.data() }) });
+}
+
+async function exportPreparedBatches(response: ApiResponse): Promise<void> {
+  const snapshot = await db.collection("prepared_batches").where("remaining_servings", ">", 0).get();
+  response.status(200).json({
+    preparedBatches: snapshot.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+  });
+}
+
+async function exportSetting(documentId: string, responseKey: string, response: ApiResponse): Promise<void> {
+  const document = await db.collection("settings").doc(documentId).get();
+  response.status(200).json({
+    [responseKey]: document.exists ? serialize(document.data() ?? {}) : null,
+  });
+}
+
+function decodePathId(path: string, prefix: string): string {
+  const encodedId = path.substring(prefix.length);
+  if (encodedId.length === 0 || encodedId.includes("/")) throw new ValidationError("invalid resource id");
+  try {
+    const id = decodeURIComponent(encodedId);
+    if (id.length === 0 || id.includes("/")) throw new ValidationError("invalid resource id");
+    return id;
+  } catch {
+    throw new ValidationError("invalid resource id");
+  }
 }
 
 async function exportPlanning(response: ApiResponse): Promise<void> {
@@ -844,6 +951,7 @@ async function migrateCanonicalProducts(body: JsonObject, response: ApiResponse)
       targetFoodId: optionalString(mapping.targetFoodId) ??
         requiredString(mapping.sourceFoodId, `mappings[${index}].sourceFoodId`),
       canonicalName: optionalString(mapping.canonicalName),
+      canonicalDisplayUnit: optionalString(mapping.canonicalDisplayUnit)?.toLowerCase(),
       canonicalAliases: mapping.canonicalAliases == null
         ? []
         : stringList(mapping.canonicalAliases, `mappings[${index}].canonicalAliases`),
@@ -917,6 +1025,12 @@ async function migrateCanonicalProducts(body: JsonObject, response: ApiResponse)
       (mapping.canonicalConversions ?? asArray(target.conversions, `foods.${mapping.targetFoodId}.conversions`))
         .map((raw) => String(asObject(raw).unit).toLowerCase()),
     );
+    const displayUnit = mapping.canonicalDisplayUnit ?? optionalString(target.display_unit)?.toLowerCase();
+    if (displayUnit != null && !supportedUnits.has(displayUnit)) {
+      throw new ValidationError(
+        `Display unit "${displayUnit}" is not supported by target "${mapping.targetFoodId}"; provide canonicalDisplayUnit`,
+      );
+    }
     for (const recipe of recipeSnapshot.docs) {
       for (const rawIngredient of asArray(recipe.data().ingredients, `recipes.${recipe.id}.ingredients`)) {
         const ingredient = asObject(rawIngredient);
@@ -973,6 +1087,7 @@ async function migrateCanonicalProducts(body: JsonObject, response: ApiResponse)
     batch.set(targetReference, {
       ...(mapping.canonicalName == null ? {} : { name: mapping.canonicalName }),
       ...(mapping.canonicalConversions == null ? {} : { conversions: mapping.canonicalConversions }),
+      ...(mapping.canonicalDisplayUnit == null ? {} : { display_unit: mapping.canonicalDisplayUnit }),
       aliases: [...new Set([...existingAliases, String(source.name), ...mapping.canonicalAliases])],
       updated_at: FieldValue.serverTimestamp(),
     }, { merge: true });

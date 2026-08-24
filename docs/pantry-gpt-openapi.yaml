@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Drew's Pantry API
-  version: 1.1.0
+  version: 1.2.0
   license:
     name: Private personal use
     identifier: LicenseRef-Proprietary
@@ -16,11 +16,11 @@ paths:
   /v1/inventory:
     get:
       operationId: getPantryInventory
-      summary: Read all current pantry context
+      summary: Read current pantry stock
       description: >-
-        Returns food definitions, positive lots, recipes, recent history,
-        nutrition targets, food preferences, outside foods, planned meals, and
-        grocery items.
+        Returns compact stock items with names, total base quantities, and
+        positive lots. Use food lookup for conversions and nutrition, and use
+        the other focused read endpoints for non-inventory context.
       responses:
         '200':
           description: Current pantry snapshot
@@ -160,6 +160,19 @@ paths:
         '202': {$ref: '#/components/responses/Success'}
         '401': {$ref: '#/components/responses/Unauthorized'}
   /v1/foods:
+    get:
+      operationId: findPantryFoods
+      summary: Find pantry food definitions
+      description: Returns matching definitions and their units, conversions, and nutrition.
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema: {type: string}
+          description: Case-insensitive ID, name, or alias search. Omit to return all definitions.
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: saveFoodDefinition
       summary: Create or update a pantry food definition
@@ -180,6 +193,19 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/foods/{id}:
+    get:
+      operationId: getPantryFood
+      summary: Read one pantry food definition
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /v1/groceries:
     post:
       operationId: addGroceryHaul
@@ -222,6 +248,18 @@ paths:
         '422':
           $ref: '#/components/responses/InvalidRequest'
   /v1/recipes:
+    get:
+      operationId: findRecipes
+      summary: Find saved recipes
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema: {type: string}
+          description: Case-insensitive ID or name search. Omit to return all recipes.
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: saveRecipe
       summary: Create or update a recipe
@@ -242,6 +280,19 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/recipes/{id}:
+    get:
+      operationId: getRecipe
+      summary: Read one saved recipe
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /v1/migrations/canonical-products:
     post:
       operationId: migrateCanonicalProducts
@@ -394,6 +445,12 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '422': {$ref: '#/components/responses/InvalidRequest'}
   /v1/prepared-batches:
+    get:
+      operationId: getPreparedFoods
+      summary: Read prepared foods with servings remaining
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: addPreparedFood
       summary: Add a manual or ready-made leftover
@@ -550,6 +607,12 @@ paths:
         '422':
           $ref: '#/components/responses/InvalidRequest'
   /v1/targets:
+    get:
+      operationId: getNutritionTargets
+      summary: Read daily nutrition targets
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: saveNutritionTargets
       summary: Replace daily nutrition targets
@@ -591,6 +654,12 @@ paths:
         '422':
           $ref: '#/components/responses/InvalidRequest'
   /v1/preferences:
+    get:
+      operationId: getFoodPreferences
+      summary: Read the private food preference and allergy profile
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: saveFoodPreferences
       summary: Replace the private food preference and allergy profile
@@ -631,6 +700,12 @@ components:
             $ref: '#/components/schemas/Error'
     InvalidRequest:
       description: Validation failed and no partial write was applied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested resource does not exist
       content:
         application/json:
           schema:
@@ -789,6 +864,8 @@ components:
         targetFoodId:
           type: string
         canonicalName:
+          type: string
+        canonicalDisplayUnit:
           type: string
         canonicalAliases:
           type: array

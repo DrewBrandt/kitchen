@@ -118,6 +118,16 @@ void main() {
     expect(store.recipes.any((item) => item.id == recipe.id), isTrue);
   });
 
+  test('food definitions reject a display unit without a conversion', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final food = store.food('flour').copyWith(displayUnit: 'bag');
+
+    expect(
+      () => store.saveFood(food),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test('nutrition scales with food units and recipe servings', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final eggs = store
