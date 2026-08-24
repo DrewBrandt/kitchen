@@ -49,10 +49,10 @@ jobs:
               for index, line in enumerate(lines)
               if "EXCEPTION CAUGHT" in line or "TestFailure was thrown" in line
           ]
-          if markers:
-              detail = "\n".join(lines[markers[-1] : markers[-1] + 28])
+          for number, marker in enumerate(markers[-4:], start=1):
+              detail = "\n".join(lines[marker : marker + 28])
               detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(f"::error title=Flutter test details::{detail}")
+              print(f"::error title=Flutter test details {number}::{detail}")
           PY
             exit "$test_status"
           fi
