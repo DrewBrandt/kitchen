@@ -2217,8 +2217,11 @@ class _HistoryDayRow extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Icon(_eventIcon(event.kind), size: 16, color: _muted),
-                  Text(event.label, style: const TextStyle(fontSize: 13)),
-                  if (repeats > 1)
+                  Text(
+                    event.displayLabel,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  if (repeats > event.count)
                     _SmallBadge(
                       label: '$repeats× in range',
                       color: repeats >= 3 ? _amber : _faint,
@@ -2772,7 +2775,27 @@ class _SmallBadge extends StatelessWidget {
 class _DayEvents {
   const _DayEvents(this.day, this.events);
   final DateTime day;
+  final List<_CollapsedConsumption> events;
+}
+
+class _CollapsedConsumption {
+  const _CollapsedConsumption(this.events);
+
   final List<ConsumptionEvent> events;
+
+  ConsumptionEvent get representative => events.first;
+  int get count => events.length;
+  String get label => representative.label;
+  String get displayLabel => count == 1 ? label : '$count× $label';
+  ConsumptionKind get kind => representative.kind;
+
+  NutritionTotals? get nutrition {
+    if (!events.any((event) => event.nutrition != null)) return null;
+    return events.fold<NutritionTotals>(
+      const NutritionTotals(),
+      (total, event) => total + (event.nutrition ?? const NutritionTotals()),
+    );
+  }
 }
 
 class _MealFrequency {
@@ -2860,9 +2883,34 @@ List<_DayEvents> _groupEventsByDay(List<ConsumptionEvent> events) {
     grouped.putIfAbsent(day, () => []).add(event);
   }
   return grouped.entries
-      .map((entry) => _DayEvents(entry.key, entry.value))
+      .map(
+        (entry) => _DayEvents(entry.key, _collapseSameDayEvents(entry.value)),
+      )
       .toList()
     ..sort((a, b) => b.day.compareTo(a.day));
+}
+
+List<_CollapsedConsumption> _collapseSameDayEvents(
+  Iterable<ConsumptionEvent> events,
+) {
+  final grouped = <String, List<ConsumptionEvent>>{};
+  for (final event in events) {
+    final key = [
+      event.kind.name,
+      event.recipeId ?? '',
+      _mealKey(event.label),
+      event.note.trim().toLowerCase(),
+    ].join('|');
+    grouped.putIfAbsent(key, () => []).add(event);
+  }
+  final result = grouped.values.map((items) {
+    items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return _CollapsedConsumption(items);
+  }).toList();
+  result.sort(
+    (a, b) => b.representative.timestamp.compareTo(a.representative.timestamp),
+  );
+  return result;
 }
 
 List<_MealFrequency> _mealFrequencies(List<ConsumptionEvent> events) {
@@ -2956,6 +3004,7 @@ class _FoodLogPageState extends State<_FoodLogPage> {
   Widget build(BuildContext context) {
     final store = widget.store;
     final events = store.eventsForDay(selectedDay);
+    final collapsedEvents = _collapseSameDayEvents(events);
     final nutrition = store.nutritionForDay(selectedDay);
     final today = DateTime.now();
     final isToday = DateUtils.isSameDay(selectedDay, today);
@@ -3003,7 +3052,7 @@ class _FoodLogPageState extends State<_FoodLogPage> {
           ),
           const SizedBox(height: 12),
           _MealContributionChart(
-            events: events,
+            events: collapsedEvents,
             nutrition: nutrition,
             targets: store.nutritionTargets,
             onEdit: () => _showNutritionTargets(context, store),
@@ -3018,7 +3067,7 @@ class _FoodLogPageState extends State<_FoodLogPage> {
                 ),
               ),
               Text(
-                '${events.length} ${events.length == 1 ? 'entry' : 'entries'}',
+                '${collapsedEvents.length} ${collapsedEvents.length == 1 ? 'entry' : 'entries'}',
                 style: const TextStyle(
                   color: _faint,
                   fontFamily: 'monospace',
@@ -3034,12 +3083,16 @@ class _FoodLogPageState extends State<_FoodLogPage> {
               text: 'Nothing logged for this day yet.',
             )
           else
-            ...events.map(
+            ...collapsedEvents.map(
               (event) => Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: _FoodLogEventCard(
                   event: event,
-                  onUndo: () => store.undo(event.id),
+                  onUndo: () {
+                    for (final item in event.events) {
+                      store.undo(item.id);
+                    }
+                  },
                 ),
               ),
             ),
@@ -3057,7 +3110,7 @@ class _MealContributionChart extends StatelessWidget {
     required this.onEdit,
   });
 
-  final List<ConsumptionEvent> events;
+  final List<_CollapsedConsumption> events;
   final NutritionTotals nutrition;
   final NutritionTargets targets;
   final VoidCallback onEdit;
@@ -3130,7 +3183,7 @@ class _MealContributionChart extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Each color is one logged food or meal.',
+                        'Each color is one food or same-day repeat group.',
                         style: TextStyle(color: _muted, fontSize: 12),
                       ),
                     ],
@@ -3167,7 +3220,7 @@ class _MealContributionChart extends StatelessWidget {
                       ),
                       const SizedBox(width: 7),
                       Text(
-                        event.label,
+                        event.displayLabel,
                         style: const TextStyle(color: _muted, fontSize: 12),
                       ),
                     ],
@@ -3233,7 +3286,7 @@ class _ContributionRow extends StatelessWidget {
   });
 
   final _ContributionMetric metric;
-  final List<ConsumptionEvent> events;
+  final List<_CollapsedConsumption> events;
   final List<Color> colors;
 
   @override
@@ -3372,13 +3425,14 @@ class _ContributionBar extends StatelessWidget {
 class _FoodLogEventCard extends StatelessWidget {
   const _FoodLogEventCard({required this.event, required this.onUndo});
 
-  final ConsumptionEvent event;
+  final _CollapsedConsumption event;
   final VoidCallback onUndo;
 
   @override
   Widget build(BuildContext context) {
+    final representative = event.representative;
     final source =
-        '${_eventSource(event)}${event.note.isEmpty ? '' : ' · ${event.note}'}';
+        '${_eventSource(representative)}${representative.note.isEmpty ? '' : ' · ${representative.note}'}';
     final nutrition = event.nutrition == null
         ? 'No nutrition data'
         : _nutritionLabel(event.nutrition!);
@@ -3409,7 +3463,7 @@ class _FoodLogEventCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        event.label,
+                        event.displayLabel,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -3433,7 +3487,13 @@ class _FoodLogEventCard extends StatelessWidget {
                 foregroundColor: _faint,
                 minimumSize: const Size(64, 36),
               ),
-              child: Text(event.deductions.isEmpty ? 'Remove' : 'Undo'),
+              child: Text(
+                event.count > 1
+                    ? (event.events.any((item) => item.deductions.isNotEmpty)
+                          ? 'Undo all'
+                          : 'Remove all')
+                    : (representative.deductions.isEmpty ? 'Remove' : 'Undo'),
+              ),
             );
             if (constraints.maxWidth < 620) {
               return Column(

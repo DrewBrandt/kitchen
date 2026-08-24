@@ -72,6 +72,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('same-day repeat foods collapse in the graph and lists', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final now = DateTime.now();
+    for (var index = 0; index < 2; index++) {
+      store.logExternalMeal(
+        label: 'Repeat test yogurt',
+        timestamp: now.add(Duration(microseconds: index)),
+        nutrition: const NutritionTotals(calories: 140, proteinG: 15),
+      );
+    }
+
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('Food log').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2× Repeat test yogurt'), findsNWidgets(2));
+    expect(find.text('Repeat test yogurt'), findsNothing);
+    expect(find.text('Remove all'), findsOneWidget);
+
+    await tester.tap(find.text('History').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2× Repeat test yogurt'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('eating out groups saved foods by place or brand', (
     tester,
   ) async {
