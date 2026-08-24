@@ -4,10 +4,13 @@ param(
   [string]$Method,
 
   [Parameter(Mandatory)]
-  [ValidateSet('/v1/inventory', '/v1/foods', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/targets', '/v1/access')]
+  [ValidateSet('/v1/inventory', '/v1/history', '/v1/foods', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/targets', '/v1/access')]
   [string]$Path,
 
   [string]$BodyFile,
+
+  [ValidateRange(1, 365)]
+  [int]$Days = 30,
 
   [string]$BaseUrl = 'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/pantryApi'
 )
@@ -28,9 +31,10 @@ $token = $null
 
 try {
   $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+  $requestPath = if ($Path -eq '/v1/history') { "$Path`?days=$Days" } else { $Path }
   $request = @{
     Method = $Method
-    Uri = "$BaseUrl$Path"
+    Uri = "$BaseUrl$requestPath"
     Headers = @{ Authorization = "Bearer $token" }
   }
   if ($Method -eq 'POST') {
