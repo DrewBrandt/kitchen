@@ -2551,7 +2551,7 @@ Future<void> _openPlannedMealGroup(
     return;
   }
   if (recipes.length > 1) {
-    final selected = await showModalBottomSheet<Recipe>(
+    final selected = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -2606,17 +2606,27 @@ Future<void> _openPlannedMealGroup(
                 trailing: const Icon(Icons.arrow_forward_rounded),
                 onTap: () => Navigator.pop(context, recipe),
               ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: FilledButton.icon(
+                onPressed: () => Navigator.pop(context, _MealSheetAction.cook),
+                icon: const Icon(Icons.restaurant_menu),
+                label: const Text('Cook this meal'),
+              ),
+            ),
           ],
         ),
       ),
     );
-    if (selected != null && context.mounted) {
+    if (selected is Recipe && context.mounted) {
       await showRecipeDetails(
         context,
         store,
         selected,
         onMake: () => _showCookRecipe(context, store, selected),
       );
+    } else if (selected == _MealSheetAction.cook && context.mounted) {
+      await _showCookMeal(context, store, meals);
     }
     return;
   }
@@ -2641,32 +2651,495 @@ Future<void> _openPlannedMealGroup(
   );
 }
 
+enum _MealSheetAction { cook }
+
 List<Recipe> _recipesForPlannedMeals(
   PantryStore store,
   List<PlannedMeal> meals,
+) => _recipePlansForPlannedMeals(
+  store,
+  meals,
+).map((plan) => plan.recipe).toList();
+
+List<_MealRecipePlan> _recipePlansForPlannedMeals(
+  PantryStore store,
+  List<PlannedMeal> meals,
 ) {
-  final recipeIds = <String>[];
+  final servingsByRecipe = <String, double>{};
   for (final meal in meals) {
     if (meal.source == PlannedMealSource.recipe && meal.sourceId != null) {
-      recipeIds.add(meal.sourceId!);
+      servingsByRecipe.update(
+        meal.sourceId!,
+        (servings) => servings + meal.servings,
+        ifAbsent: () => meal.servings,
+      );
     } else if (meal.source == PlannedMealSource.meal && meal.sourceId != null) {
       final templates = store.mealTemplates.where(
         (template) => template.id == meal.sourceId,
       );
       if (templates.isNotEmpty) {
-        recipeIds.addAll(
-          templates.first.components.map((component) => component.recipeId),
-        );
+        final template = templates.first;
+        final factor = meal.servings / template.servings;
+        for (final component in template.components) {
+          servingsByRecipe.update(
+            component.recipeId,
+            (servings) => servings + component.servings * factor,
+            ifAbsent: () => component.servings * factor,
+          );
+        }
       }
     }
   }
-  final seen = <String>{};
-  return recipeIds
-      .where(seen.add)
-      .map((id) => store.recipes.where((recipe) => recipe.id == id))
-      .where((matches) => matches.isNotEmpty)
-      .map((matches) => matches.first)
+  return servingsByRecipe.entries
+      .map(
+        (entry) => (
+          entry: entry,
+          matches: store.recipes.where((recipe) => recipe.id == entry.key),
+        ),
+      )
+      .where((match) => match.matches.isNotEmpty)
+      .map(
+        (match) => _MealRecipePlan(
+          recipe: match.matches.first,
+          servings: match.entry.value,
+        ),
+      )
       .toList();
+}
+
+class _MealRecipePlan {
+  const _MealRecipePlan({required this.recipe, required this.servings});
+
+  final Recipe recipe;
+  final double servings;
+}
+
+Future<void> _showCookMeal(
+  BuildContext context,
+  PantryStore store,
+  List<PlannedMeal> meals,
+) async {
+  final preparedCount = await showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: const Color(0xFF101311),
+    builder: (context) => _MealCookingSheet(
+      store: store,
+      meals: meals,
+      plans: _recipePlansForPlannedMeals(store, meals),
+    ),
+  );
+  if (preparedCount == null || !context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        '$preparedCount ${preparedCount == 1 ? 'recipe is' : 'recipes are'} prepared and ready in the fridge.',
+      ),
+    ),
+  );
+}
+
+class _MealCookingSheet extends StatefulWidget {
+  const _MealCookingSheet({
+    required this.store,
+    required this.meals,
+    required this.plans,
+  });
+
+  final PantryStore store;
+  final List<PlannedMeal> meals;
+  final List<_MealRecipePlan> plans;
+
+  @override
+  State<_MealCookingSheet> createState() => _MealCookingSheetState();
+}
+
+class _MealCookingSheetState extends State<_MealCookingSheet> {
+  late final Map<String, bool> included = {
+    for (final plan in widget.plans) plan.recipe.id: true,
+  };
+  late final Map<String, TextEditingController> servings = {
+    for (final plan in widget.plans)
+      plan.recipe.id: TextEditingController(
+        text: widget.store.units.formatAmount(plan.servings),
+      ),
+  };
+  String? error;
+
+  @override
+  void dispose() {
+    for (final controller in servings.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _adjust(_MealRecipePlan plan, double amount) {
+    final current = double.tryParse(servings[plan.recipe.id]!.text) ?? 0;
+    final next = (current + amount).clamp(.5, 999.0);
+    setState(() {
+      servings[plan.recipe.id]!.text = widget.store.units.formatAmount(next);
+      error = null;
+    });
+  }
+
+  void _finish() {
+    final request = <String, double>{};
+    for (final plan in widget.plans) {
+      if (included[plan.recipe.id] != true) continue;
+      final amount = double.tryParse(servings[plan.recipe.id]!.text.trim());
+      if (amount == null || amount <= 0) {
+        setState(
+          () => error = 'Every included recipe needs positive servings.',
+        );
+        return;
+      }
+      request[plan.recipe.id] = amount;
+    }
+    if (request.isEmpty) {
+      setState(() => error = 'Choose at least one recipe to prepare.');
+      return;
+    }
+    try {
+      final batches = widget.store.prepareRecipeGroup(
+        request,
+        note:
+            'Prepared from ${widget.meals.map((meal) => meal.name).join(' + ')}',
+      );
+      for (final meal in widget.meals) {
+        widget.store.setPlannedMealCompleted(meal.id, true);
+      }
+      Navigator.pop(context, batches.length);
+    } on InsufficientInventoryException catch (exception) {
+      final details = exception.missing.entries
+          .map((entry) {
+            final food = widget.store.food(entry.key);
+            return '${food.name} (${widget.store.units.bestInventoryLabel(food, entry.value)} short)';
+          })
+          .join(', ');
+      setState(() => error = 'Not enough inventory: $details.');
+    } on ArgumentError catch (exception) {
+      setState(() => error = exception.message.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mealName = widget.meals.map((meal) => meal.name).join(' + ');
+    final selectedCount = included.values.where((value) => value).length;
+    return FractionallySizedBox(
+      heightFactor: .94,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 18, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'COOKING MODE',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: _amber,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        '${widget.meals.first.emoji} $mealName',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Follow every recipe here. Omit a component or change its batch size without affecting the others.',
+                        style: TextStyle(color: _muted, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close cooking mode',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              itemCount: widget.plans.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 14),
+              itemBuilder: (context, index) {
+                final plan = widget.plans[index];
+                return _CookingRecipeCard(
+                  store: widget.store,
+                  plan: plan,
+                  included: included[plan.recipe.id]!,
+                  controller: servings[plan.recipe.id]!,
+                  initiallyExpanded: index == 0,
+                  onIncludedChanged: (value) => setState(() {
+                    included[plan.recipe.id] = value;
+                    error = null;
+                  }),
+                  onDecrease: () => _adjust(plan, -.5),
+                  onIncrease: () => _adjust(plan, .5),
+                  onServingsChanged: (_) => setState(() => error = null),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            decoration: const BoxDecoration(
+              color: Color(0xFF171B19),
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x55000000),
+                  blurRadius: 20,
+                  offset: Offset(0, -6),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (error != null) ...[
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                FilledButton.icon(
+                  onPressed: selectedCount == 0 ? null : _finish,
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: Text(
+                    selectedCount == 1
+                        ? 'Mark selected recipe cooked'
+                        : 'Mark $selectedCount recipes cooked',
+                  ),
+                ),
+                const SizedBox(height: 7),
+                const Text(
+                  'This deducts ingredients and saves each component as prepared food. It does not log the meal as eaten.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CookingRecipeCard extends StatelessWidget {
+  const _CookingRecipeCard({
+    required this.store,
+    required this.plan,
+    required this.included,
+    required this.controller,
+    required this.initiallyExpanded,
+    required this.onIncludedChanged,
+    required this.onDecrease,
+    required this.onIncrease,
+    required this.onServingsChanged,
+  });
+
+  final PantryStore store;
+  final _MealRecipePlan plan;
+  final bool included;
+  final TextEditingController controller;
+  final bool initiallyExpanded;
+  final ValueChanged<bool> onIncludedChanged;
+  final VoidCallback onDecrease;
+  final VoidCallback onIncrease;
+  final ValueChanged<String> onServingsChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final recipe = plan.recipe;
+    final requested = double.tryParse(controller.text) ?? plan.servings;
+    final factor = requested / recipe.servings;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: included ? 1 : .55,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF202522),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: initiallyExpanded,
+            tilePadding: const EdgeInsets.fromLTRB(18, 8, 16, 8),
+            childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+            leading: Text(recipe.emoji, style: const TextStyle(fontSize: 28)),
+            title: Text(
+              recipe.name,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(
+              included
+                  ? '${store.units.formatAmount(requested)} servings selected'
+                  : 'Omitted from this cook',
+              style: TextStyle(
+                color: included ? _herb : _muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            trailing: Switch(value: included, onChanged: onIncludedChanged),
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'BATCH SIZE',
+                      style: TextStyle(
+                        color: _muted,
+                        fontSize: 11,
+                        letterSpacing: 1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton.outlined(
+                    tooltip: 'Decrease servings',
+                    onPressed: included ? onDecrease : null,
+                    icon: const Icon(Icons.remove, size: 18),
+                  ),
+                  SizedBox(
+                    width: 82,
+                    child: TextField(
+                      enabled: included,
+                      controller: controller,
+                      onChanged: onServingsChanged,
+                      textAlign: TextAlign.center,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        suffixText: 'srv',
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  IconButton.outlined(
+                    tooltip: 'Increase servings',
+                    onPressed: included ? onIncrease : null,
+                    icon: const Icon(Icons.add, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'INGREDIENTS',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: _amber,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final ingredient in recipe.ingredients)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.circle, size: 7, color: _herb),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(store.food(ingredient.foodId).name)),
+                      Text(
+                        store.units.formatUnitAmount(
+                          store.food(ingredient.foodId),
+                          ingredient.amount * factor,
+                          ingredient.unit,
+                        ),
+                        style: const TextStyle(
+                          color: _muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'METHOD',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: _amber,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (recipe.instructions.isEmpty)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'No method has been added yet.',
+                    style: TextStyle(color: _muted),
+                  ),
+                )
+              else
+                for (final step in recipe.instructions.indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 13),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 26,
+                          height: 26,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF343C36),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${step.$1 + 1}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            step.$2,
+                            style: const TextStyle(fontSize: 15, height: 1.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // Retained for legacy single-entry plans while grouped plans use the compact chip.

@@ -453,6 +453,58 @@ class PantryStore extends ChangeNotifier {
     return batch;
   }
 
+  /// Prepares several recipe components as one cooking session.
+  ///
+  /// Inventory is validated for the combined request before any component is
+  /// changed, so a shortage cannot leave half of a meal prepared.
+  List<PreparedBatch> prepareRecipeGroup(
+    Map<String, double> servingsByRecipe, {
+    StorageLocation location = StorageLocation.fridge,
+    DateTime? bestBy,
+    String note = '',
+  }) {
+    if (servingsByRecipe.isEmpty ||
+        servingsByRecipe.values.any(
+          (servings) => !servings.isFinite || servings <= 0,
+        )) {
+      throw ArgumentError('Choose at least one recipe with positive servings');
+    }
+    final requests = servingsByRecipe.entries.map((entry) {
+      final recipe = _recipes.where((item) => item.id == entry.key);
+      if (recipe.isEmpty) {
+        throw ArgumentError('Unknown recipe ${entry.key}');
+      }
+      return (recipe: recipe.first, servings: entry.value);
+    }).toList();
+    final combinedRequirements = <String, double>{};
+    for (final request in requests) {
+      final requirements = inventory.requirementsFor(
+        request.recipe,
+        request.servings,
+        _foods,
+      );
+      for (final entry in requirements.entries) {
+        combinedRequirements.update(
+          entry.key,
+          (amount) => amount + entry.value,
+          ifAbsent: () => entry.value,
+        );
+      }
+    }
+    inventory.planDeductions(combinedRequirements, _lots);
+    return requests
+        .map(
+          (request) => prepareRecipe(
+            request.recipe,
+            servings: request.servings,
+            location: location,
+            bestBy: bestBy,
+            note: note,
+          ),
+        )
+        .toList();
+  }
+
   PreparedBatch addPreparedBatch({
     required String name,
     required double servings,

@@ -507,6 +507,39 @@ void main() {
     );
   });
 
+  test('preparing a recipe group validates and creates every component', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final pancakes = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    final eggs = store.recipes.firstWhere(
+      (item) => item.id == 'scrambled-eggs',
+    );
+
+    final batches = store.prepareRecipeGroup({pancakes.id: 2, eggs.id: 1});
+
+    expect(batches, hasLength(2));
+    expect(
+      batches.map((batch) => batch.sourceId),
+      containsAll([pancakes.id, eggs.id]),
+    );
+    expect(store.history, isEmpty);
+  });
+
+  test('a recipe group shortage leaves every component unprepared', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final pancakes = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    final eggs = store.recipes.firstWhere(
+      (item) => item.id == 'scrambled-eggs',
+    );
+    final lotsBefore = store.lots;
+
+    expect(
+      () => store.prepareRecipeGroup({pancakes.id: 1000, eggs.id: 1000}),
+      throwsA(isA<InsufficientInventoryException>()),
+    );
+    expect(store.preparedBatches, isEmpty);
+    expect(store.lots, lotsBefore);
+  });
+
   test('recipe make feedback produces personal averages and make history', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 24));
     final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');

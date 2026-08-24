@@ -404,6 +404,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('meal cooking mode prepares selected recipe components', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final recipes = store.recipes.take(2).toList();
+    const mealName = 'Cookable brunch';
+    const mealId = 'cookable-brunch';
+    store.saveMealTemplate(
+      MealTemplate(
+        id: mealId,
+        name: mealName,
+        emoji: '🍽️',
+        servings: 2,
+        components: [
+          for (final recipe in recipes)
+            MealComponent(recipeId: recipe.id, servings: 1),
+        ],
+      ),
+    );
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'planned-cookable-brunch',
+        date: store.now,
+        slot: MealSlot.breakfast,
+        source: PlannedMealSource.meal,
+        sourceId: mealId,
+        name: mealName,
+        emoji: '🍽️',
+        servings: 2,
+      ),
+    );
+
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(mealName));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cook this meal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('COOKING MODE'), findsOneWidget);
+    expect(find.text('Mark 2 recipes cooked'), findsOneWidget);
+    await tester.tap(find.text('Mark 2 recipes cooked'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store.preparedBatches.map((batch) => batch.sourceId),
+      containsAll(recipes.map((recipe) => recipe.id)),
+    );
+    expect(store.plannedMeals.single.completedAt, isNotNull);
+    expect(store.history, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('planning exposes an editable food preference profile', (
     tester,
   ) async {
