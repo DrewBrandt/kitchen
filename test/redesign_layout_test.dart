@@ -40,6 +40,8 @@ void main() {
       'Food log',
       'History',
       'Trends',
+      'This week',
+      'Grocery list',
     ]) {
       await tester.tap(find.text(page).first);
       await tester.pumpAndSettle();
@@ -142,6 +144,38 @@ void main() {
 
     await tester.tap(find.text('Inventory').last);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('planning shows meals and generated grocery shortages', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'planned-pancakes',
+        date: DateTime.now(),
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: 20,
+      ),
+    );
+
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text(recipe.name), findsWidgets);
+    expect(find.text('Grocery list'), findsWidgets);
+    expect(find.textContaining('Built from unfinished'), findsOneWidget);
+
+    await tester.tap(find.text('Grocery list').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Add item'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

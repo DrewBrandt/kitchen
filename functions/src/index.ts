@@ -54,6 +54,18 @@ export const pantryApi = onRequest(
         await exportHistory(request.query.days, response);
         return;
       }
+      if (request.method === "GET" && path === "/v1/plans") {
+        await exportPlanning(response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/plans") {
+        await replacePlanning(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/grocery-items") {
+        await addManualGroceryItem(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/foods") {
         await createFood(asObject(request.body), response);
         return;
@@ -98,13 +110,15 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes, history, nutritionTargets, externalFoods] = await Promise.all([
+  const [foods, lots, recipes, history, nutritionTargets, externalFoods, plannedMeals, groceryItems] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
     db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
     db.collection("settings").doc("nutrition").get(),
     db.collection("external_foods").get(),
+    db.collection("meal_plan").get(),
+    db.collection("grocery_list").get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
@@ -113,8 +127,176 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     nutritionTargets: nutritionTargets.exists ? serialize(nutritionTargets.data() ?? {}) : null,
     externalFoods: externalFoods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    plannedMeals: plannedMeals.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    groceryItems: groceryItems.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     exportedAt: new Date().toISOString(),
   });
+}
+
+async function exportPlanning(response: ApiResponse): Promise<void> {
+  const [meals, groceries] = await Promise.all([
+    db.collection("meal_plan").orderBy("date").get(),
+    db.collection("grocery_list").get(),
+  ]);
+  response.status(200).json({
+    meals: meals.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    groceries: groceries.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    exportedAt: new Date().toISOString(),
+  });
+}
+
+async function replacePlanning(body: JsonObject, response: ApiResponse): Promise<void> {
+  const weekStart = dateOnly(requiredString(body.weekStart, "weekStart"), "weekStart");
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+  const [foods, recipeSnapshot, externalSnapshot, lotSnapshot, mealSnapshot, grocerySnapshot] =
+    await Promise.all([
+      loadFoods(),
+      db.collection("recipes").get(),
+      db.collection("external_foods").get(),
+      db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
+      db.collection("meal_plan").get(),
+      db.collection("grocery_list").get(),
+    ]);
+  const recipes = new Map(recipeSnapshot.docs.map((doc) => [doc.id, doc.data()]));
+  const externalFoods = new Map(externalSnapshot.docs.map((doc) => [doc.id, doc.data()]));
+  const requirements = new Map<string, number>();
+  const entries = asArray(body.entries, "entries").map((value, index) => {
+    const item = asObject(value);
+    const date = dateOnly(requiredString(item.date, `entries[${index}].date`), `entries[${index}].date`);
+    if (date < weekStart || date >= weekEnd) {
+      throw new ValidationError(`entries[${index}].date must be inside the requested week`);
+    }
+    const slot = requiredString(item.slot, `entries[${index}].slot`).toLowerCase();
+    if (!["breakfast", "lunch", "dinner", "snack"].includes(slot)) {
+      throw new ValidationError(`entries[${index}].slot is invalid`);
+    }
+    const source = requiredString(item.source, `entries[${index}].source`).toLowerCase();
+    if (!["recipe", "external", "custom"].includes(source)) {
+      throw new ValidationError(`entries[${index}].source is invalid`);
+    }
+    const sourceId = optionalString(item.sourceId);
+    const servings = item.servings == null ? 1 : positiveNumber(item.servings, `entries[${index}].servings`);
+    let name: string;
+    let emoji: string;
+    if (source === "recipe") {
+      if (sourceId == null || !recipes.has(sourceId)) {
+        throw new ValidationError(`entries[${index}] references an unknown recipe`);
+      }
+      const recipe = recipes.get(sourceId) ?? {};
+      name = optionalString(item.name) ?? String(recipe.name);
+      emoji = optionalString(item.emoji) ?? String(recipe.emoji ?? "🍽️");
+      const recipeServings = Number(recipe.servings);
+      for (const ingredientValue of recipe.ingredients as JsonObject[]) {
+        const ingredient = asObject(ingredientValue);
+        const foodId = String(ingredient.food_id);
+        const food = foods.find((candidate) => candidate.id === foodId);
+        if (!food) throw new ValidationError(`Recipe ${sourceId} references an unknown food`);
+        const unit = String(ingredient.unit).toLowerCase();
+        const conversion = food.conversions.find((candidate) => candidate.unit === unit);
+        if (!conversion) throw new ValidationError(`${food.name} does not support unit "${unit}"`);
+        const amountBase = Number(ingredient.amount) * conversion.baseAmount * servings / recipeServings;
+        requirements.set(foodId, (requirements.get(foodId) ?? 0) + amountBase);
+      }
+    } else if (source === "external") {
+      if (sourceId == null || !externalFoods.has(sourceId)) {
+        throw new ValidationError(`entries[${index}] references an unknown outside food`);
+      }
+      const food = externalFoods.get(sourceId) ?? {};
+      name = optionalString(item.name) ?? String(food.name);
+      emoji = optionalString(item.emoji) ?? String(food.emoji ?? "🍽️");
+    } else {
+      name = requiredString(item.name, `entries[${index}].name`);
+      emoji = optionalString(item.emoji) ?? "🍽️";
+    }
+    return {
+      id: optionalString(item.id) ?? `plan-${date.toISOString().slice(0, 10)}-${slot}-${slug(sourceId ?? name)}`,
+      data: {
+        date: Timestamp.fromDate(date),
+        slot,
+        source,
+        source_id: sourceId ?? null,
+        name,
+        emoji,
+        servings,
+        note: optionalString(item.note) ?? "",
+        completed_at: null,
+        updated_at: FieldValue.serverTimestamp(),
+      },
+    };
+  });
+  if (new Set(entries.map((entry) => entry.id)).size !== entries.length) {
+    throw new ValidationError("Plan entry IDs must be unique");
+  }
+
+  const available = new Map<string, number>();
+  for (const lot of lotSnapshot.docs) {
+    const data = lot.data();
+    const foodId = String(data.food_id);
+    available.set(foodId, (available.get(foodId) ?? 0) + Number(data.quantity_base));
+  }
+  const checked = new Map<string, boolean>();
+  for (const document of grocerySnapshot.docs) {
+    const data = document.data();
+    if (data.from_plan === true && typeof data.food_id === "string") {
+      checked.set(data.food_id, data.checked === true);
+    }
+  }
+
+  const batch = db.batch();
+  for (const document of mealSnapshot.docs) {
+    const timestamp = document.data().date;
+    if (timestamp instanceof Timestamp) {
+      const date = timestamp.toDate();
+      if (date >= weekStart && date < weekEnd) batch.delete(document.ref);
+    }
+  }
+  for (const document of grocerySnapshot.docs) {
+    if (document.data().from_plan === true) batch.delete(document.ref);
+  }
+  for (const entry of entries) {
+    batch.set(db.collection("meal_plan").doc(entry.id), entry.data);
+  }
+  let groceryCount = 0;
+  for (const [foodId, requiredBase] of requirements) {
+    const quantityBase = requiredBase - (available.get(foodId) ?? 0);
+    if (quantityBase <= 0.0001) continue;
+    const food = foods.find((candidate) => candidate.id === foodId)!;
+    batch.set(db.collection("grocery_list").doc(`plan-${foodId}`), {
+      name: food.name,
+      emoji: food.emoji,
+      checked: checked.get(foodId) ?? false,
+      from_plan: true,
+      food_id: foodId,
+      quantity_base: quantityBase,
+      quantity_label: "",
+      updated_at: FieldValue.serverTimestamp(),
+    });
+    groceryCount += 1;
+  }
+  await batch.commit();
+  response.status(200).json({
+    status: "planned",
+    weekStart: weekStart.toISOString().slice(0, 10),
+    meals: entries.length,
+    groceryItems: groceryCount,
+  });
+}
+
+async function addManualGroceryItem(body: JsonObject, response: ApiResponse): Promise<void> {
+  const name = requiredString(body.name, "name");
+  const reference = db.collection("grocery_list").doc();
+  await reference.set({
+    name,
+    emoji: optionalString(body.emoji) ?? "🛒",
+    checked: false,
+    from_plan: false,
+    food_id: null,
+    quantity_base: null,
+    quantity_label: optionalString(body.quantityLabel) ?? "",
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  response.status(201).json({ id: reference.id, status: "added" });
 }
 
 async function exportHistory(rawDays: unknown, response: ApiResponse): Promise<void> {
@@ -471,6 +653,16 @@ function parseTimestamp(value: string, name: string): Timestamp {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new ValidationError(`${name} must be an ISO date`);
   return Timestamp.fromDate(date);
+}
+function dateOnly(value: string, name: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new ValidationError(`${name} must use YYYY-MM-DD`);
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new ValidationError(`${name} is not a valid date`);
+  }
+  return date;
 }
 function isLocation(value: string): value is "pantry" | "fridge" | "freezer" {
   return value === "pantry" || value === "fridge" || value === "freezer";

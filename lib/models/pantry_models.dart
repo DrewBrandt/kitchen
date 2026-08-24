@@ -4,6 +4,10 @@ enum StorageLocation { pantry, fridge, freezer }
 
 enum ConsumptionKind { recipe, inventory, external }
 
+enum MealSlot { breakfast, lunch, dinner, snack }
+
+enum PlannedMealSource { recipe, external, custom }
+
 class NutritionTotals {
   const NutritionTotals({
     this.calories = 0,
@@ -251,6 +255,98 @@ class Recipe {
     ingredients: ingredients ?? this.ingredients,
     instructions: instructions ?? this.instructions,
     emoji: emoji ?? this.emoji,
+  );
+}
+
+class PlannedMeal {
+  const PlannedMeal({
+    required this.id,
+    required this.date,
+    required this.slot,
+    required this.source,
+    required this.name,
+    required this.emoji,
+    required this.servings,
+    this.sourceId,
+    this.note = '',
+    this.completedAt,
+  });
+
+  final String id;
+  final DateTime date;
+  final MealSlot slot;
+  final PlannedMealSource source;
+  final String? sourceId;
+  final String name;
+  final String emoji;
+  final double servings;
+  final String note;
+  final DateTime? completedAt;
+
+  PlannedMeal copyWith({
+    DateTime? date,
+    MealSlot? slot,
+    PlannedMealSource? source,
+    String? sourceId,
+    String? name,
+    String? emoji,
+    double? servings,
+    String? note,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
+  }) => PlannedMeal(
+    id: id,
+    date: date ?? this.date,
+    slot: slot ?? this.slot,
+    source: source ?? this.source,
+    sourceId: sourceId ?? this.sourceId,
+    name: name ?? this.name,
+    emoji: emoji ?? this.emoji,
+    servings: servings ?? this.servings,
+    note: note ?? this.note,
+    completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
+  );
+}
+
+extension MealSlotLabel on MealSlot {
+  String get label => switch (this) {
+    MealSlot.breakfast => 'Breakfast',
+    MealSlot.lunch => 'Lunch',
+    MealSlot.dinner => 'Dinner',
+    MealSlot.snack => 'Snack',
+  };
+}
+
+class GroceryListItem {
+  const GroceryListItem({
+    required this.id,
+    required this.name,
+    required this.emoji,
+    required this.checked,
+    required this.fromPlan,
+    this.foodId,
+    this.quantityBase,
+    this.quantityLabel = '',
+  });
+
+  final String id;
+  final String name;
+  final String emoji;
+  final bool checked;
+  final bool fromPlan;
+  final String? foodId;
+  final double? quantityBase;
+  final String quantityLabel;
+
+  GroceryListItem copyWith({bool? checked}) => GroceryListItem(
+    id: id,
+    name: name,
+    emoji: emoji,
+    checked: checked ?? this.checked,
+    fromPlan: fromPlan,
+    foodId: foodId,
+    quantityBase: quantityBase,
+    quantityLabel: quantityLabel,
   );
 }
 

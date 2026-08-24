@@ -10,6 +10,8 @@ class CloudPantryData {
     required this.history,
     required this.nutritionTargets,
     required this.externalFoods,
+    required this.plannedMeals,
+    required this.groceryItems,
   });
 
   final List<FoodDefinition> foods;
@@ -18,9 +20,15 @@ class CloudPantryData {
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
   final List<ExternalFood> externalFoods;
+  final List<PlannedMeal> plannedMeals;
+  final List<GroceryListItem> groceryItems;
 
   bool get isEmpty =>
-      foods.isEmpty && lots.isEmpty && recipes.isEmpty && externalFoods.isEmpty;
+      foods.isEmpty &&
+      lots.isEmpty &&
+      recipes.isEmpty &&
+      externalFoods.isEmpty &&
+      plannedMeals.isEmpty;
 }
 
 class FirestorePantry {
@@ -35,6 +43,8 @@ class FirestorePantry {
       db.collection('recipes').get(),
       db.collection('consumption_history').orderBy('timestamp').get(),
       db.collection('external_foods').get(),
+      db.collection('meal_plan').get(),
+      db.collection('grocery_list').get(),
     ]);
     final targets = await db.collection('settings').doc('nutrition').get();
     return CloudPantryData(
@@ -46,6 +56,8 @@ class FirestorePantry {
           ? _nutritionTargetsFromData(targets.data()!)
           : NutritionTargets.defaults,
       externalFoods: results[4].docs.map(_externalFoodFromDoc).toList(),
+      plannedMeals: results[5].docs.map(_plannedMealFromDoc).toList(),
+      groceryItems: results[6].docs.map(_groceryItemFromDoc).toList(),
     );
   }
 
@@ -64,6 +76,18 @@ class FirestorePantry {
       batch.set(
         db.collection('external_foods').doc(food.id),
         _externalFoodData(food),
+      );
+    }
+    for (final meal in data.plannedMeals) {
+      batch.set(
+        db.collection('meal_plan').doc(meal.id),
+        _plannedMealData(meal),
+      );
+    }
+    for (final item in data.groceryItems) {
+      batch.set(
+        db.collection('grocery_list').doc(item.id),
+        _groceryItemData(item),
       );
     }
     batch.set(
@@ -94,6 +118,33 @@ class FirestorePantry {
 
   Future<void> saveExternalFood(ExternalFood food) =>
       db.collection('external_foods').doc(food.id).set(_externalFoodData(food));
+
+  Future<void> replacePlanning(
+    Iterable<PlannedMeal> meals,
+    Iterable<GroceryListItem> groceries,
+  ) async {
+    final current = await Future.wait([
+      db.collection('meal_plan').get(),
+      db.collection('grocery_list').get(),
+    ]);
+    final batch = db.batch();
+    for (final document in [...current[0].docs, ...current[1].docs]) {
+      batch.delete(document.reference);
+    }
+    for (final meal in meals) {
+      batch.set(
+        db.collection('meal_plan').doc(meal.id),
+        _plannedMealData(meal),
+      );
+    }
+    for (final item in groceries) {
+      batch.set(
+        db.collection('grocery_list').doc(item.id),
+        _groceryItemData(item),
+      );
+    }
+    await batch.commit();
+  }
 
   Future<void> saveConsumption(
     ConsumptionEvent event,
@@ -246,6 +297,34 @@ class FirestorePantry {
     'updated_at': FieldValue.serverTimestamp(),
   };
 
+  Map<String, Object?> _plannedMealData(PlannedMeal meal) => {
+    'date': Timestamp.fromDate(
+      DateTime(meal.date.year, meal.date.month, meal.date.day),
+    ),
+    'slot': meal.slot.name,
+    'source': meal.source.name,
+    'source_id': meal.sourceId,
+    'name': meal.name,
+    'emoji': meal.emoji,
+    'servings': meal.servings,
+    'note': meal.note,
+    'completed_at': meal.completedAt == null
+        ? null
+        : Timestamp.fromDate(meal.completedAt!),
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  Map<String, Object?> _groceryItemData(GroceryListItem item) => {
+    'name': item.name,
+    'emoji': item.emoji,
+    'checked': item.checked,
+    'from_plan': item.fromPlan,
+    'food_id': item.foodId,
+    'quantity_base': item.quantityBase,
+    'quantity_label': item.quantityLabel,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
   ExternalFood _externalFoodFromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
@@ -261,6 +340,40 @@ class FirestorePantry {
       ),
       source: data['source'] as String? ?? '',
       estimated: data['estimated'] as bool? ?? false,
+    );
+  }
+
+  PlannedMeal _plannedMealFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return PlannedMeal(
+      id: doc.id,
+      date: (data['date'] as Timestamp).toDate(),
+      slot: MealSlot.values.byName(data['slot'] as String),
+      source: PlannedMealSource.values.byName(data['source'] as String),
+      sourceId: data['source_id'] as String?,
+      name: data['name'] as String,
+      emoji: data['emoji'] as String? ?? '🍽️',
+      servings: (data['servings'] as num? ?? 1).toDouble(),
+      note: data['note'] as String? ?? '',
+      completedAt: (data['completed_at'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  GroceryListItem _groceryItemFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return GroceryListItem(
+      id: doc.id,
+      name: data['name'] as String,
+      emoji: data['emoji'] as String? ?? '🛒',
+      checked: data['checked'] as bool? ?? false,
+      fromPlan: data['from_plan'] as bool? ?? false,
+      foodId: data['food_id'] as String?,
+      quantityBase: (data['quantity_base'] as num?)?.toDouble(),
+      quantityLabel: data['quantity_label'] as String? ?? '',
     );
   }
 

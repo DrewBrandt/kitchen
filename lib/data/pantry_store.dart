@@ -19,6 +19,8 @@ class PantryStore extends ChangeNotifier {
     _recipes = SeedData.recipes();
     _nutritionTargets = NutritionTargets.defaults;
     _externalFoods = [];
+    _plannedMeals = [];
+    _groceryItems = [];
   }
 
   PantryStore._cloud({
@@ -32,6 +34,8 @@ class PantryStore extends ChangeNotifier {
     _recipes = data.recipes;
     _nutritionTargets = data.nutritionTargets;
     _externalFoods = data.externalFoods;
+    _plannedMeals = data.plannedMeals;
+    _groceryItems = data.groceryItems;
     _history.addAll(data.history);
   }
 
@@ -54,6 +58,8 @@ class PantryStore extends ChangeNotifier {
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
         externalFoods: seeded.externalFoods,
+        plannedMeals: seeded.plannedMeals,
+        groceryItems: seeded.groceryItems,
       ),
     );
     seeded._cloud = cloud;
@@ -69,7 +75,10 @@ class PantryStore extends ChangeNotifier {
   late List<Recipe> _recipes;
   late NutritionTargets _nutritionTargets;
   late List<ExternalFood> _externalFoods;
+  late List<PlannedMeal> _plannedMeals;
+  late List<GroceryListItem> _groceryItems;
   final List<ConsumptionEvent> _history = [];
+  Future<void> _planningWrite = Future.value();
   int _pendingWrites = 0;
   Object? _syncError;
 
@@ -79,6 +88,13 @@ class PantryStore extends ChangeNotifier {
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
   List<ExternalFood> get externalFoods => List.unmodifiable(_externalFoods);
+  List<PlannedMeal> get plannedMeals => List.unmodifiable(
+    [..._plannedMeals]..sort((a, b) {
+      final date = a.date.compareTo(b.date);
+      return date != 0 ? date : a.slot.index.compareTo(b.slot.index);
+    }),
+  );
+  List<GroceryListItem> get groceryItems => List.unmodifiable(_groceryItems);
   DateTime get now => _now;
   bool get isSyncing => _pendingWrites > 0;
   Object? get syncError => _syncError;
@@ -194,6 +210,7 @@ class PantryStore extends ChangeNotifier {
         _lots.where((lot) => affectedIds.contains(lot.id)),
       ),
     );
+    _refreshPlannedGroceries();
     notifyListeners();
     return event;
   }
@@ -225,6 +242,7 @@ class PantryStore extends ChangeNotifier {
         _lots.where((lot) => affectedIds.contains(lot.id)),
       ),
     );
+    _refreshPlannedGroceries();
     notifyListeners();
     return event;
   }
@@ -310,6 +328,7 @@ class PantryStore extends ChangeNotifier {
     );
     _lots = [..._lots, lot];
     _queue(_cloud?.saveLot(lot));
+    _refreshPlannedGroceries();
     notifyListeners();
   }
 
@@ -366,6 +385,7 @@ class PantryStore extends ChangeNotifier {
       _recipes[index] = recipe;
     }
     _queue(_cloud?.saveRecipe(recipe));
+    _refreshPlannedGroceries();
     notifyListeners();
   }
 
@@ -413,9 +433,177 @@ class PantryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<PlannedMeal> plannedForDay(DateTime day) => plannedMeals
+      .where(
+        (meal) =>
+            meal.date.year == day.year &&
+            meal.date.month == day.month &&
+            meal.date.day == day.day,
+      )
+      .toList();
+
+  Map<String, double> get plannedRequirementsBase {
+    final requirements = <String, double>{};
+    for (final meal in _plannedMeals.where(
+      (item) => item.completedAt == null,
+    )) {
+      if (meal.source != PlannedMealSource.recipe || meal.sourceId == null) {
+        continue;
+      }
+      final recipeIndex = _recipes.indexWhere(
+        (item) => item.id == meal.sourceId,
+      );
+      if (recipeIndex < 0) continue;
+      final recipe = _recipes[recipeIndex];
+      final scale = meal.servings / recipe.servings;
+      for (final ingredient in recipe.ingredients) {
+        final definition = food(ingredient.foodId);
+        final amountBase = units.toBase(
+          definition,
+          ingredient.amount * scale,
+          ingredient.unit,
+        );
+        requirements[ingredient.foodId] =
+            (requirements[ingredient.foodId] ?? 0) + amountBase;
+      }
+    }
+    return requirements;
+  }
+
+  void savePlannedMeal(PlannedMeal meal) {
+    if (meal.name.trim().isEmpty || meal.servings <= 0) {
+      throw ArgumentError('Planned meals need a name and positive servings');
+    }
+    if (meal.source == PlannedMealSource.recipe &&
+        !_recipes.any((recipe) => recipe.id == meal.sourceId)) {
+      throw ArgumentError('Planned recipe does not exist');
+    }
+    final index = _plannedMeals.indexWhere((item) => item.id == meal.id);
+    if (index < 0) {
+      _plannedMeals = [..._plannedMeals, meal];
+    } else {
+      _plannedMeals[index] = meal;
+    }
+    _rebuildGroceryList();
+    _savePlanning();
+  }
+
+  void replacePlannedMeals(Iterable<PlannedMeal> meals) {
+    _plannedMeals = [...meals];
+    _rebuildGroceryList();
+    _savePlanning();
+  }
+
+  void deletePlannedMeal(String id) {
+    _plannedMeals = _plannedMeals.where((meal) => meal.id != id).toList();
+    _rebuildGroceryList();
+    _savePlanning();
+  }
+
+  void setPlannedMealCompleted(String id, bool completed) {
+    final index = _plannedMeals.indexWhere((meal) => meal.id == id);
+    if (index < 0) throw StateError('Unknown planned meal $id');
+    _plannedMeals[index] = _plannedMeals[index].copyWith(
+      completedAt: completed ? DateTime.now() : null,
+      clearCompletedAt: !completed,
+    );
+    _rebuildGroceryList();
+    _savePlanning();
+  }
+
+  void toggleGroceryItem(String id) {
+    final index = _groceryItems.indexWhere((item) => item.id == id);
+    if (index < 0) throw StateError('Unknown grocery item $id');
+    _groceryItems[index] = _groceryItems[index].copyWith(
+      checked: !_groceryItems[index].checked,
+    );
+    _savePlanning();
+  }
+
+  void addManualGroceryItem(String name, {String quantityLabel = ''}) {
+    if (name.trim().isEmpty) throw ArgumentError('Grocery name is required');
+    _groceryItems = [
+      ..._groceryItems,
+      GroceryListItem(
+        id: 'manual-${DateTime.now().microsecondsSinceEpoch}',
+        name: name.trim(),
+        emoji: '🛒',
+        checked: false,
+        fromPlan: false,
+        quantityLabel: quantityLabel.trim(),
+      ),
+    ];
+    _savePlanning();
+  }
+
+  void deleteGroceryItem(String id) {
+    final index = _groceryItems.indexWhere((entry) => entry.id == id);
+    if (index < 0) return;
+    final item = _groceryItems[index];
+    if (item.fromPlan) {
+      throw StateError(
+        'Planned grocery items are removed by changing the plan',
+      );
+    }
+    _groceryItems = _groceryItems.where((entry) => entry.id != id).toList();
+    _savePlanning();
+  }
+
+  void _rebuildGroceryList() {
+    final checkedByFood = {
+      for (final item in _groceryItems)
+        if (item.fromPlan && item.foodId != null) item.foodId!: item.checked,
+    };
+    final manual = _groceryItems.where((item) => !item.fromPlan).toList();
+    final planned = <GroceryListItem>[];
+    for (final requirement in plannedRequirementsBase.entries) {
+      final shortage = requirement.value - totalFor(requirement.key);
+      if (shortage <= 0.0001) continue;
+      final definition = food(requirement.key);
+      planned.add(
+        GroceryListItem(
+          id: 'plan-${requirement.key}',
+          name: definition.name,
+          emoji: definition.emoji,
+          checked: checkedByFood[requirement.key] ?? false,
+          fromPlan: true,
+          foodId: requirement.key,
+          quantityBase: shortage,
+        ),
+      );
+    }
+    planned.sort((a, b) => a.name.compareTo(b.name));
+    _groceryItems = [...planned, ...manual];
+  }
+
+  void _refreshPlannedGroceries() {
+    if (!_plannedMeals.any(
+      (meal) =>
+          meal.completedAt == null && meal.source == PlannedMealSource.recipe,
+    )) {
+      return;
+    }
+    _rebuildGroceryList();
+    _savePlanning(notify: false);
+  }
+
+  void _savePlanning({bool notify = true}) {
+    final cloud = _cloud;
+    if (cloud != null) {
+      final meals = [..._plannedMeals];
+      final groceries = [..._groceryItems];
+      _planningWrite = _planningWrite
+          .catchError((_) {})
+          .then((_) => cloud.replacePlanning(meals, groceries));
+      _queue(_planningWrite);
+    }
+    if (notify) notifyListeners();
+  }
+
   void deleteRecipe(String recipeId) {
     _recipes = _recipes.where((item) => item.id != recipeId).toList();
     _queue(_cloud?.deleteRecipe(recipeId));
+    _refreshPlannedGroceries();
     notifyListeners();
   }
 
@@ -444,6 +632,7 @@ class PantryStore extends ChangeNotifier {
         _lots.where((lot) => affectedIds.contains(lot.id)),
       ),
     );
+    _refreshPlannedGroceries();
     notifyListeners();
   }
 

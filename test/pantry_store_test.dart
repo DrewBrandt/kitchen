@@ -183,4 +183,51 @@ void main() {
     expect(event.deductions, isEmpty);
     expect(store.totalFor('egg'), eggsBefore);
   });
+
+  test('meal plans derive grocery shortages from recipes and inventory', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.firstWhere((item) => item.id == 'pancakes');
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'monday-pancakes',
+        date: DateTime(2026, 8, 24),
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: 20,
+      ),
+    );
+
+    expect(store.plannedMeals, hasLength(1));
+    expect(store.groceryItems, isNotEmpty);
+    for (final item in store.groceryItems) {
+      expect(item.fromPlan, isTrue);
+      expect(item.foodId, isNotNull);
+      final required = store.plannedRequirementsBase[item.foodId]!;
+      expect(
+        item.quantityBase,
+        closeTo(required - store.totalFor(item.foodId!), 0.0001),
+      );
+    }
+
+    store.setPlannedMealCompleted('monday-pancakes', true);
+
+    expect(store.groceryItems.where((item) => item.fromPlan), isEmpty);
+  });
+
+  test('manual grocery items can be checked and removed independently', () {
+    final store = PantryStore.demo();
+
+    store.addManualGroceryItem('Coffee filters', quantityLabel: '1 box');
+    final item = store.groceryItems.single;
+    store.toggleGroceryItem(item.id);
+
+    expect(store.groceryItems.single.checked, isTrue);
+    expect(store.groceryItems.single.quantityLabel, '1 box');
+
+    store.deleteGroceryItem(item.id);
+    expect(store.groceryItems, isEmpty);
+  });
 }

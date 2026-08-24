@@ -155,6 +155,67 @@ preferred context for requests such as “plan my week” because it lets Codex
 avoid recent defaults without downloading the entire pantry. Undone events are
 excluded.
 
+## Read the current plan and grocery list
+
+```http
+GET /v1/plans
+```
+
+Returns dated meal-plan entries and the current grocery list. This is the
+preferred read before changing a plan because manually added groceries and
+checked shopping state are durable.
+
+## Replace one week’s meal plan
+
+```http
+POST /v1/plans
+Content-Type: application/json
+
+{
+  "weekStart": "2026-08-24",
+  "entries": [
+    {
+      "date": "2026-08-24",
+      "slot": "dinner",
+      "source": "recipe",
+      "sourceId": "butter-chicken",
+      "servings": 4,
+      "note": "Use the naan"
+    },
+    {
+      "date": "2026-08-26",
+      "slot": "lunch",
+      "source": "custom",
+      "name": "Leftovers",
+      "emoji": "🥡",
+      "servings": 1
+    }
+  ]
+}
+```
+
+The route validates every entry, replaces only the requested seven-day range,
+totals ingredients from referenced recipes, scales them to planned servings,
+subtracts positive inventory lots, and rebuilds plan-generated grocery items.
+Manual grocery items and checked state for unchanged foods are preserved.
+
+`source` may be `recipe`, `external`, or `custom`. Recipe and external entries
+use `sourceId`; custom entries require `name`.
+
+## Add a manual grocery item
+
+```http
+POST /v1/grocery-items
+Content-Type: application/json
+
+{
+  "name": "Coffee filters",
+  "quantityLabel": "1 box"
+}
+```
+
+Manual items remain on the list independently of meal-plan recalculation.
+
 ## Define or update a food
 
 ```http
