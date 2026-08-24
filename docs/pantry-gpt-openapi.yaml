@@ -1,9 +1,10 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Drew's Pantry API
   version: 1.0.0
   license:
     name: Private personal use
+    identifier: LicenseRef-Proprietary
   description: >-
     Private live inventory, recipe, meal-history, nutrition, planning, and grocery
     operations for Drew's Pantry. Read current state before preparing mutations.
@@ -376,6 +377,17 @@ components:
   schemas:
     AnyObject:
       type: object
+      properties:
+        status:
+          type: string
+          description: Optional operation status for write responses.
+        id:
+          type: string
+          description: Optional identifier created or updated by a write.
+        exportedAt:
+          type: string
+          format: date-time
+          description: Optional snapshot generation time for read responses.
       additionalProperties: true
     Error:
       type: object
@@ -383,9 +395,14 @@ components:
       properties:
         error:
           type: string
-    NutritionTotals:
+    FoodNutrition:
       type: object
+      additionalProperties: false
+      required: [basisBaseAmount, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
       properties:
+        basisBaseAmount:
+          type: number
+          minimum: 0.000001
         calories: { type: number, minimum: 0 }
         proteinG: { type: number, minimum: 0 }
         carbsG: { type: number, minimum: 0 }
@@ -393,19 +410,10 @@ components:
         fiberG: { type: number, minimum: 0 }
         sugarG: { type: number, minimum: 0 }
         sodiumMg: { type: number, minimum: 0 }
-    FoodNutrition:
-      allOf:
-        - $ref: '#/components/schemas/NutritionTotals'
-        - type: object
-          required: [basisBaseAmount, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
-          properties:
-            basisBaseAmount:
-              type: number
-              minimum: 0.000001
-            source:
-              type: string
-            estimated:
-              type: boolean
+        source:
+          type: string
+        estimated:
+          type: boolean
     UnitConversion:
       type: object
       additionalProperties: false
@@ -506,6 +514,7 @@ components:
             $ref: '#/components/schemas/InventoryReplacement'
         displayUnits:
           type: object
+          properties: {}
           additionalProperties:
             type: string
         deleteFoodIds:
@@ -610,41 +619,53 @@ components:
           items:
             $ref: '#/components/schemas/MealPlanEntry'
     OutsideFood:
-      allOf:
-        - $ref: '#/components/schemas/NutritionTotals'
-        - type: object
-          required: [name, servingLabel, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
-          properties:
-            id:
-              type: string
-            name:
-              type: string
-            brand:
-              type: string
-            emoji:
-              type: string
-            servingLabel:
-              type: string
-            source:
-              type: string
-            estimated:
-              type: boolean
+      type: object
+      additionalProperties: false
+      required: [name, servingLabel, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        brand:
+          type: string
+        emoji:
+          type: string
+        servingLabel:
+          type: string
+        calories: { type: number, minimum: 0 }
+        proteinG: { type: number, minimum: 0 }
+        carbsG: { type: number, minimum: 0 }
+        fatG: { type: number, minimum: 0 }
+        fiberG: { type: number, minimum: 0 }
+        sugarG: { type: number, minimum: 0 }
+        sodiumMg: { type: number, minimum: 0 }
+        source:
+          type: string
+        estimated:
+          type: boolean
     MealLog:
-      allOf:
-        - $ref: '#/components/schemas/NutritionTotals'
-        - type: object
-          properties:
-            externalFoodId:
-              type: string
-            servings:
-              type: number
-              minimum: 0.000001
-            label:
-              type: string
-            note:
-              type: string
-            estimated:
-              type: boolean
-            timestamp:
-              type: string
-              format: date-time
+      type: object
+      additionalProperties: false
+      properties:
+        externalFoodId:
+          type: string
+        servings:
+          type: number
+          minimum: 0.000001
+        label:
+          type: string
+        calories: { type: number, minimum: 0 }
+        proteinG: { type: number, minimum: 0 }
+        carbsG: { type: number, minimum: 0 }
+        fatG: { type: number, minimum: 0 }
+        fiberG: { type: number, minimum: 0 }
+        sugarG: { type: number, minimum: 0 }
+        sodiumMg: { type: number, minimum: 0 }
+        note:
+          type: string
+        estimated:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
