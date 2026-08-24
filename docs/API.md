@@ -109,6 +109,46 @@ Content-Type: application/json
 
 Neither request reads or changes inventory lots.
 
+## Consume a saved recipe
+
+This route deducts the recipe ingredients from the earliest-expiring inventory
+lots and records one nutrition-history event in the same Firestore transaction:
+
+```http
+POST /v1/consume/recipe
+Content-Type: application/json
+
+{
+  "recipeId": "butter-chicken",
+  "servings": 1,
+  "timestamp": "2026-08-23T19:30:00-04:00",
+  "note": "Dinner"
+}
+```
+
+`timestamp`, `label`, and `note` are optional. The write fails without changing
+anything when a recipe is unknown or inventory is insufficient.
+
+## Consume an individual pantry item
+
+Use this for things such as one yogurt or a measured glass of milk. It deducts
+inventory and logs nutrition together:
+
+```http
+POST /v1/consume/inventory
+Content-Type: application/json
+
+{
+  "food": "Lucerne 2% milk",
+  "amount": 2.25,
+  "unit": "cup",
+  "label": "Tall glass of milk"
+}
+```
+
+`foodId` can be used instead of `food`. The requested unit must already exist
+in that food's conversion list.
+
 ## Save daily nutrition targets
 
 Targets are private, editable, and used by the Food Log percentage displays:
@@ -216,6 +256,47 @@ Content-Type: application/json
 
 Manual items remain on the list independently of meal-plan recalculation.
 
+## Reconcile existing inventory
+
+Use this route for corrections where the submitted lots replace all current
+lots for the named foods. The entire request is validated before the atomic
+write. An empty `lots` array removes an item from inventory, while
+`deleteFoodIds` also removes obsolete food definitions.
+
+```http
+POST /v1/inventory
+Content-Type: application/json
+
+{
+  "source": "Pantry photo reconciliation",
+  "displayUnits": {
+    "butter": "stick",
+    "baking-powder": "tablespoon"
+  },
+  "foods": [
+    {
+      "id": "egg",
+      "name": "Eggs",
+      "emoji": "🥚",
+      "quantityMode": "counted",
+      "baseUnit": "each",
+      "defaultLocation": "fridge",
+      "conversions": [{"unit": "each", "symbol": "eggs", "baseAmount": 1}]
+    }
+  ],
+  "replacements": [
+    {
+      "foodId": "egg",
+      "lots": [
+        {"amount": 10, "unit": "each", "location": "fridge", "bestBy": "2026-08-09"},
+        {"amount": 16, "unit": "each", "location": "fridge", "bestBy": "2026-09-20"}
+      ]
+    }
+  ],
+  "deleteFoodIds": ["obsolete-food"]
+}
+```
+
 ## Define or update a food
 
 ```http
@@ -234,7 +315,19 @@ Content-Type: application/json
     {"unit": "tablespoon", "symbol": "tbsp", "baseAmount": 14.175},
     {"unit": "cup", "symbol": "cups", "baseAmount": 226.8},
     {"unit": "stick", "symbol": "sticks", "baseAmount": 113.4}
-  ]
+  ],
+  "nutrition": {
+    "basisBaseAmount": 14.175,
+    "calories": 100,
+    "proteinG": 0,
+    "carbsG": 0,
+    "fatG": 11,
+    "fiberG": 0,
+    "sugarG": 0,
+    "sodiumMg": 90,
+    "source": "Package label",
+    "estimated": false
+  }
 }
 ```
 
@@ -267,6 +360,9 @@ Content-Type: application/json
   "name": "Soft Scrambled Eggs",
   "emoji": "🍳",
   "servings": 1,
+  "portions": [
+    {"name": "Large plate", "servings": 1.5}
+  ],
   "sourceUrl": "https://example.com/original-recipe",
   "ingredients": [
     {"food": "Eggs", "amount": 2, "unit": "each"},

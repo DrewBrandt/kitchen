@@ -164,6 +164,26 @@ class FirestorePantry {
     await batch.commit();
   }
 
+  Future<void> saveConsumptions(
+    Iterable<ConsumptionEvent> events,
+    Iterable<InventoryLot> updatedLots,
+  ) async {
+    final batch = db.batch();
+    for (final lot in updatedLots) {
+      batch.update(db.collection('inventory_lots').doc(lot.id), {
+        'quantity_base': lot.quantityBase,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+    }
+    for (final event in events) {
+      batch.set(
+        db.collection('consumption_history').doc(event.id),
+        _eventData(event),
+      );
+    }
+    await batch.commit();
+  }
+
   Future<void> saveUndo(
     ConsumptionEvent event,
     Iterable<InventoryLot> restoredLots,
@@ -196,6 +216,7 @@ class FirestorePantry {
           },
         )
         .toList(),
+    'display_unit': food.displayUnit,
     'nutrition': food.nutrition == null
         ? null
         : {
@@ -238,6 +259,9 @@ class FirestorePantry {
         )
         .toList(),
     'instructions': recipe.instructions,
+    'portions': recipe.portions
+        .map((portion) => {'name': portion.name, 'servings': portion.servings})
+        .toList(),
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -419,6 +443,7 @@ class FirestorePantry {
           baseAmount: (item['base_amount'] as num).toDouble(),
         );
       }).toList(),
+      displayUnit: data['display_unit'] as String?,
       nutrition: nutritionData == null
           ? null
           : NutritionFacts(
@@ -461,6 +486,13 @@ class FirestorePantry {
       instructions: List<String>.from(
         data['instructions'] as List<dynamic>? ?? const [],
       ),
+      portions: (data['portions'] as List<dynamic>? ?? const []).map((value) {
+        final portion = value as Map<String, dynamic>;
+        return RecipePortion(
+          name: portion['name'] as String,
+          servings: (portion['servings'] as num).toDouble(),
+        );
+      }).toList(),
     );
   }
 

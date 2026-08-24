@@ -24,6 +24,38 @@ void main() {
     expect(store.history.single.undoneAt, isNotNull);
   });
 
+  test('repeated recipe portions scale ingredients into separate entries', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final recipe = store.recipes.firstWhere(
+      (item) => item.id == 'scrambled-eggs',
+    );
+    final eggsBefore = store.totalFor('egg');
+
+    final events = store.cookPortions(
+      recipe,
+      servingsPerPortion: 0.5,
+      count: 3,
+      portionName: 'Half plate',
+    );
+
+    expect(events, hasLength(3));
+    expect(
+      events.map((event) => event.label),
+      everyElement('Half plate of ${recipe.name}'),
+    );
+    expect(events.map((event) => event.id).toSet(), hasLength(3));
+    expect(store.totalFor('egg'), eggsBefore - 3);
+    expect(
+      events,
+      everyElement(
+        predicate<ConsumptionEvent>((event) => event.deductions.isNotEmpty),
+      ),
+    );
+
+    store.undo(events[1].id);
+    expect(store.totalFor('egg'), eggsBefore - 2);
+  });
+
   test('fractional counted foods are supported', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final onion = store.food('onion');

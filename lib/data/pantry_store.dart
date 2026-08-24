@@ -183,36 +183,66 @@ class PantryStore extends ChangeNotifier {
     };
   }
 
-  ConsumptionEvent cook(Recipe recipe, {double? servings}) {
-    final servingCount = servings ?? recipe.servings;
-    final requirements = inventory.requirementsFor(
-      recipe,
-      servingCount,
-      _foods,
+  ConsumptionEvent cook(Recipe recipe, {double? servings}) => cookPortions(
+    recipe,
+    servingsPerPortion: servings ?? recipe.servings,
+  ).single;
+
+  List<ConsumptionEvent> cookPortions(
+    Recipe recipe, {
+    required double servingsPerPortion,
+    int count = 1,
+    String? portionName,
+  }) {
+    if (!servingsPerPortion.isFinite || servingsPerPortion <= 0) {
+      throw ArgumentError('The portion size must be positive');
+    }
+    if (count <= 0) throw ArgumentError('The portion count must be positive');
+
+    inventory.planDeductions(
+      inventory.requirementsFor(recipe, servingsPerPortion * count, _foods),
+      _lots,
     );
-    final deductions = inventory.planDeductions(requirements, _lots);
-    _applyDeductions(deductions);
-    final event = ConsumptionEvent(
-      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
-      label:
-          '${units.formatAmount(servingCount)} ${servingCount == 1 ? 'serving' : 'servings'} of ${recipe.name}',
-      timestamp: DateTime.now(),
-      kind: ConsumptionKind.recipe,
-      recipeId: recipe.id,
-      deductions: deductions,
-      nutrition: nutritionForRecipe(recipe, servings: servingCount),
-    );
-    _history.add(event);
-    final affectedIds = deductions.map((item) => item.lotId).toSet();
+    var workingLots = [..._lots];
+    final events = <ConsumptionEvent>[];
+    final now = DateTime.now();
+    final cleanName = portionName?.trim();
+    for (var index = 0; index < count; index++) {
+      final deductions = inventory.planDeductions(
+        inventory.requirementsFor(recipe, servingsPerPortion, _foods),
+        workingLots,
+      );
+      workingLots = _lotsAfterDeductions(workingLots, deductions);
+      final portionLabel = cleanName == null || cleanName.isEmpty
+          ? '${units.formatAmount(servingsPerPortion)} ${servingsPerPortion == 1 ? 'serving' : 'servings'}'
+          : cleanName;
+      events.add(
+        ConsumptionEvent(
+          id: 'event-${now.microsecondsSinceEpoch}-$index',
+          label: '$portionLabel of ${recipe.name}',
+          timestamp: now.add(Duration(microseconds: index)),
+          kind: ConsumptionKind.recipe,
+          recipeId: recipe.id,
+          deductions: deductions,
+          nutrition: nutritionForRecipe(recipe, servings: servingsPerPortion),
+        ),
+      );
+    }
+    _lots = workingLots;
+    _history.addAll(events);
+    final affectedIds = events
+        .expand((event) => event.deductions)
+        .map((deduction) => deduction.lotId)
+        .toSet();
     _queue(
-      _cloud?.saveConsumption(
-        event,
+      _cloud?.saveConsumptions(
+        events,
         _lots.where((lot) => affectedIds.contains(lot.id)),
       ),
     );
     _refreshPlannedGroceries();
     notifyListeners();
-    return event;
+    return events;
   }
 
   ConsumptionEvent consume(
@@ -228,7 +258,7 @@ class PantryStore extends ChangeNotifier {
       id: 'event-${DateTime.now().microsecondsSinceEpoch}',
       label:
           label ??
-          '${units.formatAmount(amount)} ${food.conversionFor(unit).symbol} ${food.name.toLowerCase()}',
+          '${units.formatUnitAmount(food, amount, unit)} ${food.name.toLowerCase()}',
       timestamp: DateTime.now(),
       kind: ConsumptionKind.inventory,
       deductions: deductions,
@@ -655,7 +685,14 @@ class PantryStore extends ChangeNotifier {
   }
 
   void _applyDeductions(List<LotDeduction> deductions) {
-    final next = [..._lots];
+    _lots = _lotsAfterDeductions(_lots, deductions);
+  }
+
+  List<InventoryLot> _lotsAfterDeductions(
+    List<InventoryLot> lots,
+    List<LotDeduction> deductions,
+  ) {
+    final next = [...lots];
     for (final deduction in deductions) {
       final index = next.indexWhere((lot) => lot.id == deduction.lotId);
       if (index < 0) throw StateError('Unknown lot ${deduction.lotId}');
@@ -663,6 +700,6 @@ class PantryStore extends ChangeNotifier {
         quantityBase: next[index].quantityBase - deduction.quantityBase,
       );
     }
-    _lots = next;
+    return next;
   }
 }

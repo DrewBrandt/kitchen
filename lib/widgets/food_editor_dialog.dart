@@ -32,6 +32,9 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
   late final conversions = TextEditingController(
     text: _conversionText(widget.existing),
   );
+  late final displayUnit = TextEditingController(
+    text: widget.existing?.displayUnit ?? '',
+  );
   late final nutrition = TextEditingController(
     text: _nutritionText(widget.existing),
   );
@@ -72,6 +75,7 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
     name.dispose();
     emoji.dispose();
     conversions.dispose();
+    displayUnit.dispose();
     nutrition.dispose();
     nutritionSource.dispose();
     super.dispose();
@@ -175,6 +179,15 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: displayUnit,
+              decoration: const InputDecoration(
+                labelText: 'Preferred inventory unit (optional)',
+                helperText:
+                    'Use a unit name from the conversions above, such as tablespoon, cup, stick, or milliliter.',
+              ),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: nutrition,
@@ -254,6 +267,13 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
           'Name and a first/base conversion of 1 are required',
         );
       }
+      final preferredUnit = displayUnit.text.trim().toLowerCase();
+      if (preferredUnit.isNotEmpty &&
+          !parsed.any((item) => item.unit == preferredUnit)) {
+        throw const FormatException(
+          'The preferred inventory unit must match a conversion unit',
+        );
+      }
       NutritionFacts? parsedNutrition;
       if (nutrition.text.trim().isNotEmpty) {
         final values = nutrition.text
@@ -290,6 +310,7 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
           mode: mode,
           baseUnit: parsed.first.unit,
           conversions: parsed,
+          displayUnit: preferredUnit.isEmpty ? null : preferredUnit,
           emoji: emoji.text.trim().isEmpty ? '🥫' : emoji.text.trim(),
           defaultLocation: location,
           nutrition: parsedNutrition,

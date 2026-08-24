@@ -144,6 +144,7 @@ class FoodDefinition {
     required this.mode,
     required this.baseUnit,
     required this.conversions,
+    this.displayUnit,
     this.emoji = '🥫',
     this.defaultLocation = StorageLocation.pantry,
     this.nutrition,
@@ -154,6 +155,7 @@ class FoodDefinition {
   final QuantityMode mode;
   final String baseUnit;
   final List<UnitConversion> conversions;
+  final String? displayUnit;
   final String emoji;
   final StorageLocation defaultLocation;
   final NutritionFacts? nutrition;
@@ -169,6 +171,8 @@ class FoodDefinition {
     QuantityMode? mode,
     String? baseUnit,
     List<UnitConversion>? conversions,
+    String? displayUnit,
+    bool clearDisplayUnit = false,
     String? emoji,
     StorageLocation? defaultLocation,
     NutritionFacts? nutrition,
@@ -179,6 +183,7 @@ class FoodDefinition {
     mode: mode ?? this.mode,
     baseUnit: baseUnit ?? this.baseUnit,
     conversions: conversions ?? this.conversions,
+    displayUnit: clearDisplayUnit ? null : displayUnit ?? this.displayUnit,
     emoji: emoji ?? this.emoji,
     defaultLocation: defaultLocation ?? this.defaultLocation,
     nutrition: clearNutrition ? null : nutrition ?? this.nutrition,
@@ -224,6 +229,13 @@ class RecipeIngredient {
   final String unit;
 }
 
+class RecipePortion {
+  const RecipePortion({required this.name, required this.servings});
+
+  final String name;
+  final double servings;
+}
+
 class Recipe {
   const Recipe({
     required this.id,
@@ -231,6 +243,7 @@ class Recipe {
     required this.servings,
     required this.ingredients,
     required this.instructions,
+    this.portions = const [],
     this.emoji = '🍽️',
   });
 
@@ -239,6 +252,7 @@ class Recipe {
   final double servings;
   final List<RecipeIngredient> ingredients;
   final List<String> instructions;
+  final List<RecipePortion> portions;
   final String emoji;
 
   Recipe copyWith({
@@ -247,6 +261,7 @@ class Recipe {
     double? servings,
     List<RecipeIngredient>? ingredients,
     List<String>? instructions,
+    List<RecipePortion>? portions,
     String? emoji,
   }) => Recipe(
     id: id ?? this.id,
@@ -254,6 +269,7 @@ class Recipe {
     servings: servings ?? this.servings,
     ingredients: ingredients ?? this.ingredients,
     instructions: instructions ?? this.instructions,
+    portions: portions ?? this.portions,
     emoji: emoji ?? this.emoji,
   );
 }

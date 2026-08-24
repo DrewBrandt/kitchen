@@ -49,6 +49,11 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
   late final instructions = TextEditingController(
     text: widget.existing?.instructions.join('\n') ?? '',
   );
+  late final portions = TextEditingController(
+    text: widget.existing?.portions
+        .map((portion) => '${portion.name} = ${portion.servings}')
+        .join('\n'),
+  );
   late final List<_IngredientDraft> ingredients = widget.existing == null
       ? [_newIngredient()]
       : widget.existing!.ingredients
@@ -77,6 +82,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     emoji.dispose();
     servings.dispose();
     instructions.dispose();
+    portions.dispose();
     for (final ingredient in ingredients) {
       ingredient.dispose();
     }
@@ -140,6 +146,18 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
                     setState(() => ingredients.add(_newIngredient())),
                 icon: const Icon(Icons.add),
                 label: const Text('Add ingredient'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: portions,
+              minLines: 2,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Named portions (optional)',
+                helperText:
+                    'One per line, such as “Tall glass = 2.25” or “Half glass = 1.25”.',
+                alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 10),
@@ -241,6 +259,28 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
   void _save() {
     final servingCount = double.tryParse(servings.text);
     final parsedIngredients = <RecipeIngredient>[];
+    final parsedPortions = <RecipePortion>[];
+    for (final line in portions.text.split(RegExp(r'\r?\n'))) {
+      if (line.trim().isEmpty) continue;
+      final separator = line.lastIndexOf('=');
+      final portionName = separator < 0
+          ? ''
+          : line.substring(0, separator).trim();
+      final portionServings = separator < 0
+          ? null
+          : double.tryParse(line.substring(separator + 1).trim());
+      if (portionName.isEmpty ||
+          portionServings == null ||
+          portionServings <= 0) {
+        setState(
+          () => error = 'Named portions must use “Name = positive number”.',
+        );
+        return;
+      }
+      parsedPortions.add(
+        RecipePortion(name: portionName, servings: portionServings),
+      );
+    }
     for (final draft in ingredients) {
       final amount = double.tryParse(draft.amount.text);
       if (amount == null || amount <= 0) {
@@ -271,6 +311,7 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
             .map((line) => line.trim())
             .where((line) => line.isNotEmpty)
             .toList(),
+        portions: parsedPortions,
         emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
       ),
     );

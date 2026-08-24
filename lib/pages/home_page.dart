@@ -6,6 +6,7 @@ import '../widgets/food_editor_dialog.dart';
 import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
+import '../widgets/recipe_portion_dialog.dart';
 
 const _ink = Color(0xFFECF1EE);
 const _muted = Color(0xFF97A29B);
@@ -1403,16 +1404,21 @@ class _RecipeCard extends StatelessWidget {
                 ],
               ),
             ],
+            if (recipe.portions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Portions: ${recipe.portions.map((portion) => '${portion.name} (${store.units.formatAmount(portion.servings)} servings)').join(' · ')}',
+                style: const TextStyle(color: _muted, fontSize: 12),
+              ),
+            ],
             const Spacer(),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
-                onPressed: missing.isEmpty
-                    ? () => _cook(context, store, recipe)
-                    : null,
+                onPressed: () => _showCookRecipe(context, store, recipe),
                 icon: const Icon(Icons.soup_kitchen),
-                label: const Text('Cook recipe'),
+                label: const Text('Make / log'),
               ),
             ),
           ],
@@ -1447,7 +1453,7 @@ class _EatingOutPage extends StatelessWidget {
           '${store.externalFoods.length} saved items · ${places.length} ${places.length == 1 ? 'place' : 'places'}',
       title: 'Eating out',
       subtitle:
-          'Restaurant and packaged foods that never touch inventory — saved once, logged in a tap.',
+          'Restaurant orders and one-off foods you are not tracking in the pantry. Logging these never changes inventory.',
       action: FilledButton.icon(
         onPressed: () => showExternalFoodEditor(context, store),
         icon: const Icon(Icons.add),
@@ -3427,9 +3433,7 @@ class _FoodLogEventCard extends StatelessWidget {
                 foregroundColor: _faint,
                 minimumSize: const Size(64, 36),
               ),
-              child: Text(
-                event.kind == ConsumptionKind.external ? 'Remove' : 'Undo',
-              ),
+              child: Text(event.deductions.isEmpty ? 'Remove' : 'Undo'),
             );
             if (constraints.maxWidth < 620) {
               return Column(
@@ -4055,12 +4059,18 @@ IconData _eventIcon(ConsumptionKind kind) => switch (kind) {
 };
 
 String _eventSource(ConsumptionEvent event) => switch (event.kind) {
-  ConsumptionKind.recipe => 'Recipe · inventory deducted',
-  ConsumptionKind.inventory => 'Pantry item · inventory deducted',
+  ConsumptionKind.recipe =>
+    event.deductions.isEmpty
+        ? 'Recipe · recorded before inventory snapshot'
+        : 'Recipe · inventory deducted',
+  ConsumptionKind.inventory =>
+    event.deductions.isEmpty
+        ? 'Pantry item · recorded before inventory snapshot'
+        : 'Pantry item · inventory deducted',
   ConsumptionKind.external =>
     event.nutritionEstimated
-        ? 'Outside food · estimated'
-        : 'Outside food · label data',
+        ? 'No inventory change · estimated'
+        : 'No inventory change · label data',
 };
 
 String _calendarDate(DateTime date) {
@@ -4634,7 +4644,7 @@ Future<void> _showConsume(
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Used ${store.units.formatAmount(amount)} ${food.conversionFor(unit).symbol} ${food.name.toLowerCase()}',
+          'Used ${store.units.formatUnitAmount(food, amount, unit)} ${food.name.toLowerCase()}',
         ),
         action: SnackBarAction(
           label: 'Undo',
@@ -4646,6 +4656,38 @@ Future<void> _showConsume(
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('There is not enough in inventory.')),
     );
+  }
+}
+
+Future<void> _showCookRecipe(
+  BuildContext context,
+  PantryStore store,
+  Recipe recipe,
+) async {
+  final request = await showRecipePortionDialog(context, store, recipe);
+  if (request == null || !context.mounted) return;
+  try {
+    final events = store.cookPortions(
+      recipe,
+      servingsPerPortion: request.servingsPerPortion,
+      count: request.count,
+      portionName: request.portionName,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${events.length} ${events.length == 1 ? 'entry' : 'separate entries'} logged from the recipe and deducted from inventory.',
+        ),
+        action: events.length == 1
+            ? SnackBarAction(
+                label: 'Undo',
+                onPressed: () => store.undo(events.single.id),
+              )
+            : null,
+      ),
+    );
+  } on InsufficientInventoryException catch (exception) {
+    _showMissingInventory(context, store, exception.missing);
   }
 }
 
@@ -4691,8 +4733,7 @@ void _showMissingInventory(
   final details = missing.entries
       .map((entry) {
         final food = store.food(entry.key);
-        final unit = food.conversionFor(food.baseUnit).symbol;
-        return '${food.name} (${store.units.formatAmount(entry.value)} $unit short)';
+        return '${food.name} (${store.units.formatUnitAmount(food, entry.value, food.baseUnit)} short)';
       })
       .join(', ');
   ScaffoldMessenger.of(

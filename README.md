@@ -85,6 +85,19 @@ After deploying the function, make an authenticated request with:
 .\tools\pantry_api.ps1 -Method GET -Path /v1/inventory
 ```
 
+## Private ChatGPT access
+
+To use the live pantry from new ChatGPT conversations without embedding an
+OpenAI API in the app, create a private Custom GPT using the checked-in operator
+pack:
+
+- [Setup guide](docs/PANTRY_GPT_SETUP.md)
+- [GPT instructions](docs/PANTRY_GPT_INSTRUCTIONS.md)
+- [Action OpenAPI schema](docs/pantry-gpt-openapi.yaml)
+
+The bearer credential stays out of Git and is pasted only into the private GPT
+Action authentication field.
+
 ## Verify
 
 ```sh
