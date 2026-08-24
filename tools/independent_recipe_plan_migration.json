@@ -1,0 +1,181 @@
+{
+  "recipes": [
+    {
+      "id": "butter-chicken",
+      "name": "Butter chicken",
+      "emoji": "🥘",
+      "servings": 4,
+      "sourceUrl": "https://www.pataksusa.com/recipes/butter-chicken",
+      "sourceNote": "Split from the legacy complete-dinner recipe; adapted for chicken thighs and jarred simmer sauce.",
+      "ingredients": [
+        {"foodId": "signature-chicken-thighs", "amount": 1.5, "unit": "pound"},
+        {"foodId": "butter-chicken-sauce", "amount": 1, "unit": "jar"},
+        {"foodId": "vegetable-oil", "amount": 1, "unit": "tablespoon"}
+      ],
+      "instructions": [
+        "Cut the thawed chicken thighs into bite-size pieces.",
+        "Heat the oil in a skillet and brown the chicken.",
+        "Add the simmer sauce and cook gently until the chicken is fully cooked, about 15 minutes."
+      ]
+    },
+    {
+      "id": "steamed-white-rice",
+      "name": "Steamed white rice",
+      "emoji": "🍚",
+      "servings": 4,
+      "sourceNote": "Split from the legacy butter-chicken complete dinner.",
+      "ingredients": [
+        {"foodId": "white-rice", "amount": 1, "unit": "cup"}
+      ],
+      "instructions": ["Cook the rice according to its package directions and fluff before serving."]
+    },
+    {
+      "id": "roasted-broccoli",
+      "name": "Roasted broccoli",
+      "emoji": "🥦",
+      "servings": 4,
+      "sourceNote": "Split from the legacy butter-chicken complete dinner.",
+      "ingredients": [
+        {"foodId": "broccoli", "amount": 1, "unit": "pound"},
+        {"foodId": "vegetable-oil", "amount": 1, "unit": "tablespoon"},
+        {"foodId": "garlic-powder", "amount": 0.5, "unit": "teaspoon"},
+        {"foodId": "salt", "amount": 0.5, "unit": "teaspoon"}
+      ],
+      "instructions": ["Toss with oil, garlic powder, and salt, then roast or air-fry until browned and tender."]
+    },
+    {
+      "id": "brown-sugar-pork-loin",
+      "name": "Brown-sugar pork loin",
+      "emoji": "🐖",
+      "servings": 3,
+      "sourceUrl": "https://www.budgetbytes.com/brown-sugar-roasted-pork-loin/",
+      "sourceNote": "Split from the legacy complete dinner and scaled for the smaller pork loin.",
+      "ingredients": [
+        {"foodId": "pork-loin", "amount": 1.1875, "unit": "pound"},
+        {"foodId": "dark-brown-sugar", "amount": 7.5, "unit": "teaspoon"},
+        {"foodId": "garlic-powder", "amount": 0.25, "unit": "teaspoon"},
+        {"foodId": "chili-powder", "amount": 0.75, "unit": "teaspoon"},
+        {"foodId": "vegetable-oil", "amount": 1, "unit": "tablespoon"},
+        {"foodId": "salt", "amount": 0.5, "unit": "teaspoon"}
+      ],
+      "instructions": [
+        "Heat the oven to 400°F and coat the pork with the sugar, seasonings, and oil.",
+        "Roast for 10 minutes, reduce the oven to 350°F, and continue until the center reaches 145°F.",
+        "Rest for 10 minutes before slicing."
+      ]
+    },
+    {
+      "id": "crispy-roasted-potatoes",
+      "name": "Crispy roasted potatoes",
+      "emoji": "🥔",
+      "servings": 1,
+      "sourceUrl": "https://www.budgetbytes.com/oven-roasted-potatoes/",
+      "sourceNote": "Reusable side split from the pork and cheeseburger complete dinners.",
+      "ingredients": [
+        {"foodId": "russet-potatoes", "amount": 0.5, "unit": "pound"},
+        {"foodId": "vegetable-oil", "amount": 0.5, "unit": "tablespoon"},
+        {"foodId": "baking-soda", "amount": 0.125, "unit": "teaspoon"},
+        {"foodId": "garlic-powder", "amount": 0.0833333333, "unit": "teaspoon"},
+        {"foodId": "salt", "amount": 0.3333333333, "unit": "teaspoon"}
+      ],
+      "instructions": [
+        "Cut the potato into chunks and parboil in salted water with the baking soda for about 8 minutes.",
+        "Drain, rough up the edges, toss with oil and seasonings, and roast at 425°F until crisp."
+      ]
+    },
+    {
+      "id": "roasted-carrots",
+      "name": "Roasted carrots",
+      "emoji": "🥕",
+      "servings": 1,
+      "sourceNote": "Split from the legacy pork complete dinner.",
+      "ingredients": [
+        {"foodId": "carrots", "amount": 0.25, "unit": "pound"},
+        {"foodId": "vegetable-oil", "amount": 0.1666666667, "unit": "tablespoon"},
+        {"foodId": "salt", "amount": 0.1666666667, "unit": "teaspoon"}
+      ],
+      "instructions": ["Cut into even pieces, toss with oil and salt, and roast until browned and tender."]
+    },
+    {
+      "id": "roasted-asparagus",
+      "name": "Roasted asparagus",
+      "emoji": "🌱",
+      "servings": 1,
+      "sourceNote": "Split from the legacy cheeseburger complete dinner.",
+      "ingredients": [
+        {"foodId": "asparagus", "amount": 0.33, "unit": "pound"},
+        {"foodId": "vegetable-oil", "amount": 1, "unit": "tablespoon"},
+        {"foodId": "garlic-powder", "amount": 0.1666666667, "unit": "teaspoon"},
+        {"foodId": "salt", "amount": 0.4166666667, "unit": "teaspoon"}
+      ],
+      "instructions": ["Trim, toss with oil and seasonings, and roast until tender and lightly browned."]
+    },
+    {
+      "id": "weeknight-meat-sauce",
+      "name": "Weeknight meat sauce",
+      "emoji": "🍅",
+      "servings": 2,
+      "sourceUrl": "https://www.budgetbytes.com/the-best-weeknight-pasta-sauce/",
+      "sourceNote": "Split from the legacy beef-rotini complete dinner.",
+      "ingredients": [
+        {"foodId": "ground-beef", "amount": 0.5, "unit": "pound"},
+        {"foodId": "tomato-sauce-no-salt", "amount": 1, "unit": "cup"},
+        {"foodId": "onion", "amount": 0.25, "unit": "each"},
+        {"foodId": "butter", "amount": 1, "unit": "tablespoon"},
+        {"foodId": "vegetable-oil", "amount": 1, "unit": "teaspoon"},
+        {"foodId": "dried-basil", "amount": 0.5, "unit": "teaspoon"},
+        {"foodId": "dried-oregano", "amount": 0.5, "unit": "teaspoon"},
+        {"foodId": "salt", "amount": 0.25, "unit": "teaspoon"}
+      ],
+      "instructions": [
+        "Brown the beef in the oil, then add the onion and butter and cook until softened.",
+        "Stir in the tomato sauce and seasonings and simmer gently for 20 to 30 minutes."
+      ]
+    },
+    {
+      "id": "cooked-rotini",
+      "name": "Cooked rotini",
+      "emoji": "🍝",
+      "servings": 2,
+      "sourceNote": "Split from the legacy beef-rotini complete dinner.",
+      "ingredients": [
+        {"foodId": "barilla-rotini", "amount": 4, "unit": "ounce"}
+      ],
+      "instructions": ["Cook until just tender, reserve a splash of pasta water, and drain."]
+    }
+  ],
+  "plan": {
+    "weekStart": "2026-08-24",
+    "entries": [
+      {"id":"plan-0824-butter-chicken","date":"2026-08-24","slot":"dinner","source":"recipe","sourceId":"butter-chicken","groupId":"2026-08-24-dinner","intent":"prepare","servings":4,"note":"Eat one portion tonight, refrigerate one for Tuesday, and freeze the other two promptly."},
+      {"id":"plan-0824-white-rice","date":"2026-08-24","slot":"dinner","source":"recipe","sourceId":"steamed-white-rice","groupId":"2026-08-24-dinner","intent":"prepare","servings":4},
+      {"id":"plan-0824-broccoli","date":"2026-08-24","slot":"dinner","source":"recipe","sourceId":"roasted-broccoli","groupId":"2026-08-24-dinner","intent":"prepare","servings":4},
+
+      {"id":"plan-0825-butter-chicken","date":"2026-08-25","slot":"dinner","source":"recipe","sourceId":"butter-chicken","groupId":"2026-08-25-dinner","intent":"leftover","servings":1,"note":"Reheat the refrigerated portion from Monday."},
+      {"id":"plan-0825-white-rice","date":"2026-08-25","slot":"dinner","source":"recipe","sourceId":"steamed-white-rice","groupId":"2026-08-25-dinner","intent":"leftover","servings":1},
+      {"id":"plan-0825-broccoli","date":"2026-08-25","slot":"dinner","source":"recipe","sourceId":"roasted-broccoli","groupId":"2026-08-25-dinner","intent":"leftover","servings":1},
+
+      {"id":"plan-0826-pork","date":"2026-08-26","slot":"dinner","source":"recipe","sourceId":"brown-sugar-pork-loin","groupId":"2026-08-26-dinner","intent":"prepare","servings":3,"note":"Eat one portion Wednesday, refrigerate portions for Thursday dinner and Friday lunch."},
+      {"id":"plan-0826-potatoes","date":"2026-08-26","slot":"dinner","source":"recipe","sourceId":"crispy-roasted-potatoes","groupId":"2026-08-26-dinner","intent":"prepare","servings":3},
+      {"id":"plan-0826-carrots","date":"2026-08-26","slot":"dinner","source":"recipe","sourceId":"roasted-carrots","groupId":"2026-08-26-dinner","intent":"prepare","servings":3},
+
+      {"id":"plan-0827-pork","date":"2026-08-27","slot":"dinner","source":"recipe","sourceId":"brown-sugar-pork-loin","groupId":"2026-08-27-dinner","intent":"leftover","servings":1,"note":"Reheat Wednesday's leftovers; air fryer is good for re-crisping potatoes."},
+      {"id":"plan-0827-potatoes","date":"2026-08-27","slot":"dinner","source":"recipe","sourceId":"crispy-roasted-potatoes","groupId":"2026-08-27-dinner","intent":"leftover","servings":1},
+      {"id":"plan-0827-carrots","date":"2026-08-27","slot":"dinner","source":"recipe","sourceId":"roasted-carrots","groupId":"2026-08-27-dinner","intent":"leftover","servings":1},
+
+      {"id":"plan-0828-lunch-pork","date":"2026-08-28","slot":"lunch","source":"recipe","sourceId":"brown-sugar-pork-loin","groupId":"2026-08-28-lunch","intent":"leftover","servings":1,"note":"Finish the remaining Wednesday portion."},
+      {"id":"plan-0828-lunch-potatoes","date":"2026-08-28","slot":"lunch","source":"recipe","sourceId":"crispy-roasted-potatoes","groupId":"2026-08-28-lunch","intent":"leftover","servings":1},
+      {"id":"plan-0828-lunch-carrots","date":"2026-08-28","slot":"lunch","source":"recipe","sourceId":"roasted-carrots","groupId":"2026-08-28-lunch","intent":"leftover","servings":1},
+
+      {"id":"plan-0828-burger","date":"2026-08-28","slot":"dinner","source":"recipe","sourceId":"plain-cheeseburger","groupId":"2026-08-28-dinner","intent":"prepare","servings":1,"note":"Use the same crispy-potato method as Wednesday."},
+      {"id":"plan-0828-potatoes","date":"2026-08-28","slot":"dinner","source":"recipe","sourceId":"crispy-roasted-potatoes","groupId":"2026-08-28-dinner","intent":"prepare","servings":1},
+      {"id":"plan-0828-asparagus","date":"2026-08-28","slot":"dinner","source":"recipe","sourceId":"roasted-asparagus","groupId":"2026-08-28-dinner","intent":"prepare","servings":1},
+
+      {"id":"plan-0829-sauce","date":"2026-08-29","slot":"dinner","source":"recipe","sourceId":"weeknight-meat-sauce","groupId":"2026-08-29-dinner","intent":"prepare","servings":2,"note":"Eat one portion Saturday and refrigerate Sunday's portion."},
+      {"id":"plan-0829-rotini","date":"2026-08-29","slot":"dinner","source":"recipe","sourceId":"cooked-rotini","groupId":"2026-08-29-dinner","intent":"prepare","servings":2},
+
+      {"id":"plan-0830-sauce","date":"2026-08-30","slot":"dinner","source":"recipe","sourceId":"weeknight-meat-sauce","groupId":"2026-08-30-dinner","intent":"leftover","servings":1,"note":"Reheat Saturday's pasta."},
+      {"id":"plan-0830-rotini","date":"2026-08-30","slot":"dinner","source":"recipe","sourceId":"cooked-rotini","groupId":"2026-08-30-dinner","intent":"leftover","servings":1}
+    ]
+  }
+}

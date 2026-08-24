@@ -295,6 +295,67 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('planned recipe chips open recipe details', (tester) async {
+    final store = PantryStore.demo();
+    final recipe = store.recipes.first;
+    store.savePlannedMeal(
+      PlannedMeal(
+        id: 'clickable-plan',
+        groupId: 'clickable-dinner',
+        date: store.now,
+        slot: MealSlot.dinner,
+        source: PlannedMealSource.recipe,
+        sourceId: recipe.id,
+        name: recipe.name,
+        emoji: recipe.emoji,
+        servings: recipe.servings,
+      ),
+    );
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(recipe.name).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('INGREDIENTS'), findsOneWidget);
+    expect(find.text('METHOD'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('grouped plan chips let you choose a component recipe', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    final recipes = store.recipes.take(2).toList();
+    for (final recipe in recipes) {
+      store.savePlannedMeal(
+        PlannedMeal(
+          id: 'click-group-${recipe.id}',
+          groupId: 'click-group',
+          date: store.now,
+          slot: MealSlot.dinner,
+          source: PlannedMealSource.recipe,
+          sourceId: recipe.id,
+          name: recipe.name,
+          emoji: recipe.emoji,
+          servings: recipe.servings,
+        ),
+      );
+    }
+    await pumpPantry(tester, const Size(1440, 980), store: store);
+    await tester.tap(find.text('This week').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('${recipes[0].name} + ${recipes[1].name}'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recipes in this meal'), findsOneWidget);
+    expect(find.text(recipes[0].name), findsOneWidget);
+    expect(find.text(recipes[1].name), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('planning exposes an editable food preference profile', (
     tester,
   ) async {

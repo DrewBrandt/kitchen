@@ -2414,65 +2414,159 @@ class _PlannedMealGroupChip extends StatelessWidget {
     final leftover = meals.every(
       (meal) => meal.intent == PlannedMealIntent.leftover,
     );
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 440, minHeight: 42),
-      padding: const EdgeInsets.fromLTRB(11, 7, 7, 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B201D),
-        border: Border.all(color: const Color(0xFF262D29)),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openPlannedMealGroup(context, store, meals),
         borderRadius: BorderRadius.circular(13),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(meals.length == 1 ? first.emoji : '🍽️'),
-          const SizedBox(width: 9),
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${first.slot.label}${leftover ? ' · leftovers' : ''}'
-                      .toUpperCase(),
-                  style: const TextStyle(
-                    color: _faint,
-                    fontSize: 9,
-                    letterSpacing: 1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: first.completedAt == null ? _ink : _faint,
-                    fontSize: 12.5,
-                    height: 1.25,
-                    decoration: first.completedAt == null
-                        ? null
-                        : TextDecoration.lineThrough,
-                  ),
-                ),
-              ],
-            ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 440, minHeight: 42),
+          padding: const EdgeInsets.fromLTRB(11, 7, 7, 7),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B201D),
+            border: Border.all(color: const Color(0xFF262D29)),
+            borderRadius: BorderRadius.circular(13),
           ),
-          const SizedBox(width: 5),
-          IconButton(
-            tooltip: 'Remove from plan',
-            onPressed: () => groupId == null
-                ? store.deletePlannedMeal(first.id)
-                : store.deletePlannedMealGroup(groupId),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            icon: const Icon(Icons.close, size: 15, color: _faint),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(meals.length == 1 ? first.emoji : '🍽️'),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${first.slot.label}${leftover ? ' · leftovers' : ''}'
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        color: _faint,
+                        fontSize: 9,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: first.completedAt == null ? _ink : _faint,
+                        fontSize: 12.5,
+                        height: 1.25,
+                        decoration: first.completedAt == null
+                            ? null
+                            : TextDecoration.lineThrough,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              IconButton(
+                tooltip: 'Remove from plan',
+                onPressed: () => groupId == null
+                    ? store.deletePlannedMeal(first.id)
+                    : store.deletePlannedMealGroup(groupId),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
+                icon: const Icon(Icons.close, size: 15, color: _faint),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
+}
+
+Future<void> _openPlannedMealGroup(
+  BuildContext context,
+  PantryStore store,
+  List<PlannedMeal> meals,
+) async {
+  final recipes = meals
+      .where(
+        (meal) =>
+            meal.source == PlannedMealSource.recipe && meal.sourceId != null,
+      )
+      .map(
+        (meal) => store.recipes.where((recipe) => recipe.id == meal.sourceId),
+      )
+      .expand((matches) => matches)
+      .toList();
+  if (recipes.length == 1) {
+    final recipe = recipes.single;
+    await showRecipeDetails(
+      context,
+      store,
+      recipe,
+      onMake: () => _showCookRecipe(context, store, recipe),
+    );
+    return;
+  }
+  if (recipes.length > 1) {
+    final selected = await showModalBottomSheet<Recipe>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ListTile(
+              title: Text('Recipes in this meal'),
+              subtitle: Text('Choose a component to view its full recipe.'),
+            ),
+            for (final recipe in recipes)
+              ListTile(
+                leading: Text(
+                  recipe.emoji,
+                  style: const TextStyle(fontSize: 24),
+                ),
+                title: Text(recipe.name),
+                subtitle: Text('${_compactNumber(recipe.servings)} servings'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pop(context, recipe),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && context.mounted) {
+      await showRecipeDetails(
+        context,
+        store,
+        selected,
+        onMake: () => _showCookRecipe(context, store, selected),
+      );
+    }
+    return;
+  }
+  final first = meals.first;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('${first.emoji} ${first.name}'),
+      content: Text(
+        [
+          '${first.slot.label} · ${_compactNumber(first.servings)} servings',
+          if (first.note.isNotEmpty) first.note,
+        ].join('\n\n'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
 }
 
 // Retained for legacy single-entry plans while grouped plans use the compact chip.

@@ -9,6 +9,8 @@ param(
 
   [string]$BodyFile,
 
+  [string]$Body,
+
   [ValidateRange(1, 365)]
   [int]$Days = 30,
 
@@ -21,8 +23,14 @@ $encryptedTokenPath = Join-Path $env:APPDATA 'PantryInventory\api-token.dpapi'
 if (-not (Test-Path -LiteralPath $encryptedTokenPath)) {
   throw "No local pantry credential was found. Run tools/setup_api_secret.ps1 first."
 }
-if ($Method -eq 'POST' -and [string]::IsNullOrWhiteSpace($BodyFile)) {
-  throw 'POST requests require -BodyFile.'
+if ($Method -eq 'POST' -and
+    [string]::IsNullOrWhiteSpace($BodyFile) -and
+    [string]::IsNullOrWhiteSpace($Body)) {
+  throw 'POST requests require -BodyFile or -Body.'
+}
+if (-not [string]::IsNullOrWhiteSpace($BodyFile) -and
+    -not [string]::IsNullOrWhiteSpace($Body)) {
+  throw 'Use either -BodyFile or -Body, not both.'
 }
 
 $secureToken = ConvertTo-SecureString (Get-Content -LiteralPath $encryptedTokenPath -Raw)
@@ -39,7 +47,11 @@ try {
   }
   if ($Method -eq 'POST') {
     $request.ContentType = 'application/json'
-    $request.Body = Get-Content -LiteralPath $BodyFile -Raw
+    $request.Body = if ([string]::IsNullOrWhiteSpace($Body)) {
+      Get-Content -LiteralPath $BodyFile -Raw
+    } else {
+      $Body
+    }
   }
   Invoke-RestMethod @request
 }
