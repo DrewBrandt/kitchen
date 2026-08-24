@@ -7,6 +7,8 @@ import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
 import '../widgets/product_editor_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
+import '../widgets/recipe_detail_dialog.dart';
+import '../widgets/recipe_feedback_dialog.dart';
 import '../widgets/recipe_portion_dialog.dart';
 
 const _ink = Color(0xFFECF1EE);
@@ -1621,6 +1623,9 @@ class _RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final missing = store.missingFor(recipe);
     final recipeNutrition = store.nutritionForRecipe(recipe);
+    final averageEase = store.averageEaseForRecipe(recipe.id);
+    final averageTaste = store.averageTasteForRecipe(recipe.id);
+    final averageMinutes = store.averageMinutesForRecipe(recipe.id);
     final compact = MediaQuery.sizeOf(context).width < 600;
     final availabilityChip = Chip(
       backgroundColor: (missing.isEmpty ? _herb : _amber).withValues(
@@ -1658,7 +1663,23 @@ class _RecipeCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${store.units.formatAmount(recipe.servings)} ${recipe.servings == 1 ? 'serving' : 'servings'}',
+                        '${store.units.formatAmount(recipe.servings)} ${recipe.servings == 1 ? 'serving' : 'servings'}${averageMinutes == null ? '' : ' · ${averageMinutes.round()} min avg'}',
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          _CompactRating(
+                            label: 'Ease',
+                            value: averageEase,
+                            color: _herb,
+                          ),
+                          const SizedBox(width: 12),
+                          _CompactRating(
+                            label: 'Taste',
+                            value: averageTaste,
+                            color: _amber,
+                          ),
+                        ],
                       ),
                       if (compact) ...[
                         const SizedBox(height: 8),
@@ -1765,19 +1786,62 @@ class _RecipeCard extends StatelessWidget {
             ],
             const Spacer(),
             const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: () => _showCookRecipe(context, store, recipe),
-                icon: const Icon(Icons.soup_kitchen),
-                label: const Text('Make batch'),
-              ),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => showRecipeDetails(
+                    context,
+                    store,
+                    recipe,
+                    onMake: () => _showCookRecipe(context, store, recipe),
+                  ),
+                  child: const Text('View recipe'),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () => _showCookRecipe(context, store, recipe),
+                  icon: const Icon(Icons.soup_kitchen),
+                  label: const Text('Make batch'),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _CompactRating extends StatelessWidget {
+  const _CompactRating({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final double? value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: const TextStyle(color: _faint, fontSize: 11)),
+      const SizedBox(width: 5),
+      ...List.generate(
+        5,
+        (index) => Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Icon(
+            Icons.circle,
+            size: 7,
+            color: index < (value?.round() ?? 0) ? color : _border,
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _EatingOutPage extends StatelessWidget {
@@ -5852,6 +5916,29 @@ Future<void> _showCookRecipe(
         ),
       ),
     );
+    if (recipe.promptForFeedback && context.mounted) {
+      final feedback = await showRecipeFeedbackDialog(context, recipe);
+      if (feedback == null || !context.mounted) return;
+      if (feedback.dontAskAgain) {
+        store.saveRecipe(recipe.copyWith(promptForFeedback: false));
+      }
+      if (feedback.tasteRating != null ||
+          feedback.easeRating != null ||
+          feedback.actualMinutes != null) {
+        final now = DateTime.now();
+        store.saveRecipeMakeFeedback(
+          RecipeMakeFeedback(
+            id: 'feedback-${now.microsecondsSinceEpoch}',
+            recipeId: recipe.id,
+            preparedBatchId: batch.id,
+            createdAt: now,
+            tasteRating: feedback.tasteRating,
+            easeRating: feedback.easeRating,
+            actualMinutes: feedback.actualMinutes,
+          ),
+        );
+      }
+    }
   } on InsufficientInventoryException catch (exception) {
     _showMissingInventory(context, store, exception.missing);
   }

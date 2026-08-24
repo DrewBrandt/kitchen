@@ -316,6 +316,9 @@ class Recipe {
     this.portions = const [],
     this.emoji = '🍽️',
     this.nutritionOverride,
+    this.sourceUrl = '',
+    this.sourceNote = '',
+    this.promptForFeedback = true,
   });
 
   final String id;
@@ -326,6 +329,9 @@ class Recipe {
   final List<RecipePortion> portions;
   final String emoji;
   final NutritionTotals? nutritionOverride;
+  final String sourceUrl;
+  final String sourceNote;
+  final bool promptForFeedback;
 
   Recipe copyWith({
     String? id,
@@ -337,6 +343,9 @@ class Recipe {
     String? emoji,
     NutritionTotals? nutritionOverride,
     bool clearNutritionOverride = false,
+    String? sourceUrl,
+    String? sourceNote,
+    bool? promptForFeedback,
   }) => Recipe(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -348,7 +357,30 @@ class Recipe {
     nutritionOverride: clearNutritionOverride
         ? null
         : nutritionOverride ?? this.nutritionOverride,
+    sourceUrl: sourceUrl ?? this.sourceUrl,
+    sourceNote: sourceNote ?? this.sourceNote,
+    promptForFeedback: promptForFeedback ?? this.promptForFeedback,
   );
+}
+
+class RecipeMakeFeedback {
+  const RecipeMakeFeedback({
+    required this.id,
+    required this.recipeId,
+    required this.preparedBatchId,
+    required this.createdAt,
+    this.tasteRating,
+    this.easeRating,
+    this.actualMinutes,
+  });
+
+  final String id;
+  final String recipeId;
+  final String preparedBatchId;
+  final DateTime createdAt;
+  final int? tasteRating;
+  final int? easeRating;
+  final int? actualMinutes;
 }
 
 class MealComponent {

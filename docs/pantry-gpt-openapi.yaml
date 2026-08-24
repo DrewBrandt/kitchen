@@ -899,6 +899,10 @@ components:
           format: uri
         sourceNote:
           type: string
+        promptForFeedback:
+          type: boolean
+          default: true
+          description: Ask for taste, ease, and actual time after making this recipe.
         nutritionOverride:
           $ref: '#/components/schemas/RecipeNutrition'
         ingredients:

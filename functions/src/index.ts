@@ -171,7 +171,7 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, products, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates] = await Promise.all([
+  const [foods, products, lots, recipes, history, nutritionTargets, foodPreferences, externalFoods, plannedMeals, groceryItems, preparedBatches, mealTemplates, recipeFeedback] = await Promise.all([
     db.collection("foods").get(),
     db.collection("products").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
@@ -184,6 +184,7 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     db.collection("grocery_list").get(),
     db.collection("prepared_batches").where("remaining_servings", ">", 0).get(),
     db.collection("meal_templates").get(),
+    db.collection("recipe_feedback").get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
@@ -198,6 +199,7 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     groceryItems: groceryItems.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     preparedBatches: preparedBatches.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     mealTemplates: mealTemplates.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
+    recipeFeedback: recipeFeedback.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     exportedAt: new Date().toISOString(),
   });
 }
@@ -1048,6 +1050,9 @@ async function createRecipe(body: JsonObject, response: ApiResponse): Promise<vo
     portions,
     source_url: optionalString(body.sourceUrl) ?? null,
     source_note: optionalString(body.sourceNote) ?? null,
+    ...(body.promptForFeedback == null
+      ? {}
+      : { prompt_for_feedback: requiredBoolean(body.promptForFeedback, "promptForFeedback") }),
     updated_at: FieldValue.serverTimestamp(),
   }, { merge: true });
   response.status(200).json({ id, status: "saved" });
@@ -1713,6 +1718,10 @@ function requiredString(value: unknown, name: string): string {
 }
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+function requiredBoolean(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") throw new ValidationError(`${name} must be true or false`);
+  return value;
 }
 function positiveNumber(value: unknown, name: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new ValidationError(`${name} must be a positive number`);

@@ -12,6 +12,7 @@ class CloudPantryData {
     required this.recipes,
     required this.mealTemplates,
     required this.preparedBatches,
+    required this.recipeFeedback,
     required this.history,
     required this.nutritionTargets,
     required this.foodPreferences,
@@ -26,6 +27,7 @@ class CloudPantryData {
   final List<Recipe> recipes;
   final List<MealTemplate> mealTemplates;
   final List<PreparedBatch> preparedBatches;
+  final List<RecipeMakeFeedback> recipeFeedback;
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
   final FoodPreferences foodPreferences;
@@ -70,6 +72,7 @@ class FirestorePantry {
     QuerySnapshot<Map<String, dynamic>>? groceryItems;
     QuerySnapshot<Map<String, dynamic>>? mealTemplates;
     QuerySnapshot<Map<String, dynamic>>? preparedBatches;
+    QuerySnapshot<Map<String, dynamic>>? recipeFeedback;
     DocumentSnapshot<Map<String, dynamic>>? targets;
     DocumentSnapshot<Map<String, dynamic>>? profile;
 
@@ -84,6 +87,7 @@ class FirestorePantry {
           groceryItems == null ||
           mealTemplates == null ||
           preparedBatches == null ||
+          recipeFeedback == null ||
           targets == null ||
           profile == null) {
         return;
@@ -97,6 +101,9 @@ class FirestorePantry {
           mealTemplates: mealTemplates!.docs.map(_mealTemplateFromDoc).toList(),
           preparedBatches: preparedBatches!.docs
               .map(_preparedBatchFromDoc)
+              .toList(),
+          recipeFeedback: recipeFeedback!.docs
+              .map(_recipeFeedbackFromDoc)
               .toList(),
           history: history!.docs.map(_eventFromDoc).toList(),
           nutritionTargets: targets!.exists
@@ -162,6 +169,10 @@ class FirestorePantry {
           preparedBatches = value;
           emitIfReady();
         }, onError: reportError),
+        db.collection('recipe_feedback').snapshots().listen((value) {
+          recipeFeedback = value;
+          emitIfReady();
+        }, onError: reportError),
         db.collection('settings').doc('nutrition').snapshots().listen((value) {
           targets = value;
           emitIfReady();
@@ -198,6 +209,7 @@ class FirestorePantry {
       db.collection('meal_templates').get(),
       db.collection('prepared_batches').get(),
       db.collection('products').get(),
+      db.collection('recipe_feedback').get(),
     ]);
     final settings = await Future.wait([
       db.collection('settings').doc('nutrition').get(),
@@ -212,6 +224,7 @@ class FirestorePantry {
       recipes: results[2].docs.map(_recipeFromDoc).toList(),
       mealTemplates: results[7].docs.map(_mealTemplateFromDoc).toList(),
       preparedBatches: results[8].docs.map(_preparedBatchFromDoc).toList(),
+      recipeFeedback: results[10].docs.map(_recipeFeedbackFromDoc).toList(),
       history: results[3].docs.map(_eventFromDoc).toList(),
       nutritionTargets: targets.exists
           ? _nutritionTargetsFromData(targets.data()!)
@@ -252,6 +265,12 @@ class FirestorePantry {
       batch.set(
         db.collection('prepared_batches').doc(prepared.id),
         _preparedBatchData(prepared),
+      );
+    }
+    for (final feedback in data.recipeFeedback) {
+      batch.set(
+        db.collection('recipe_feedback').doc(feedback.id),
+        _recipeFeedbackData(feedback),
       );
     }
     for (final food in data.externalFoods) {
@@ -299,6 +318,11 @@ class FirestorePantry {
 
   Future<void> saveRecipe(Recipe recipe) =>
       db.collection('recipes').doc(recipe.id).set(_recipeData(recipe));
+
+  Future<void> saveRecipeFeedback(RecipeMakeFeedback feedback) => db
+      .collection('recipe_feedback')
+      .doc(feedback.id)
+      .set(_recipeFeedbackData(feedback));
 
   Future<void> deleteRecipe(String id) =>
       db.collection('recipes').doc(id).delete();
@@ -560,7 +584,23 @@ class FirestorePantry {
     'portions': recipe.portions
         .map((portion) => {'name': portion.name, 'servings': portion.servings})
         .toList(),
+    'source_url': recipe.sourceUrl.trim().isEmpty
+        ? null
+        : recipe.sourceUrl.trim(),
+    'source_note': recipe.sourceNote.trim().isEmpty
+        ? null
+        : recipe.sourceNote.trim(),
+    'prompt_for_feedback': recipe.promptForFeedback,
     'updated_at': FieldValue.serverTimestamp(),
+  };
+
+  Map<String, Object?> _recipeFeedbackData(RecipeMakeFeedback feedback) => {
+    'recipe_id': feedback.recipeId,
+    'prepared_batch_id': feedback.preparedBatchId,
+    'created_at': Timestamp.fromDate(feedback.createdAt),
+    'taste_rating': feedback.tasteRating,
+    'ease_rating': feedback.easeRating,
+    'actual_minutes': feedback.actualMinutes,
   };
 
   Map<String, Object?> _mealTemplateData(MealTemplate meal) => {
@@ -911,6 +951,24 @@ class FirestorePantry {
           servings: (portion['servings'] as num).toDouble(),
         );
       }).toList(),
+      sourceUrl: data['source_url'] as String? ?? '',
+      sourceNote: data['source_note'] as String? ?? '',
+      promptForFeedback: data['prompt_for_feedback'] as bool? ?? true,
+    );
+  }
+
+  RecipeMakeFeedback _recipeFeedbackFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return RecipeMakeFeedback(
+      id: doc.id,
+      recipeId: data['recipe_id'] as String,
+      preparedBatchId: data['prepared_batch_id'] as String,
+      createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      tasteRating: (data['taste_rating'] as num?)?.toInt(),
+      easeRating: (data['ease_rating'] as num?)?.toInt(),
+      actualMinutes: (data['actual_minutes'] as num?)?.toInt(),
     );
   }
 

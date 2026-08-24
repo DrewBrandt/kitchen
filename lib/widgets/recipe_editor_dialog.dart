@@ -51,6 +51,13 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
   late final instructions = TextEditingController(
     text: widget.existing?.instructions.join('\n') ?? '',
   );
+  late final sourceUrl = TextEditingController(
+    text: widget.existing?.sourceUrl ?? '',
+  );
+  late final sourceNote = TextEditingController(
+    text: widget.existing?.sourceNote ?? '',
+  );
+  late bool promptForFeedback = widget.existing?.promptForFeedback ?? true;
   late final portions = TextEditingController(
     text: widget.existing?.portions
         .map((portion) => '${portion.name} = ${portion.servings}')
@@ -106,6 +113,8 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
     emoji.dispose();
     servings.dispose();
     instructions.dispose();
+    sourceUrl.dispose();
+    sourceNote.dispose();
     portions.dispose();
     for (final controller in [
       calories,
@@ -236,6 +245,30 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
                 helperText: 'One step per line',
                 alignLabelWithHint: true,
               ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sourceUrl,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Source website (optional)',
+                hintText: 'https://example.com/recipe',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sourceNote,
+              decoration: const InputDecoration(
+                labelText: 'Source note (optional)',
+                hintText: 'Adapted from…',
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Ask how it went after making'),
+              subtitle: const Text('Taste, ease, and actual cooking time'),
+              value: promptForFeedback,
+              onChanged: (value) => setState(() => promptForFeedback = value),
             ),
             if (error != null) ...[
               const SizedBox(height: 10),
@@ -423,6 +456,9 @@ class _RecipeEditorDialogState extends State<_RecipeEditorDialog> {
         portions: parsedPortions,
         emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
         nutritionOverride: nutritionOverride,
+        sourceUrl: sourceUrl.text.trim(),
+        sourceNote: sourceNote.text.trim(),
+        promptForFeedback: promptForFeedback,
       ),
     );
   }
