@@ -33,7 +33,15 @@ jobs:
       - name: Verify
         run: |
           flutter analyze
-          flutter test
+          set +e
+          flutter test --reporter expanded 2>&1 | tee flutter-test.log
+          test_status=${PIPESTATUS[0]}
+          set -e
+          if [[ $test_status -ne 0 ]]; then
+            failing_test="$(grep -E ' \[E\]$' flutter-test.log | tail -n 1 || true)"
+            echo "::error title=Flutter test failure::${failing_test:-Flutter tests failed; inspect the job log.}"
+            exit "$test_status"
+          fi
 
       - name: Build web app
         shell: bash
