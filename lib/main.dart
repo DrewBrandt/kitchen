@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'app.dart';
-import 'data/pantry_store.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -12,11 +11,10 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
+    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
+      await FirebaseAuth.instance.signOut();
     }
-    final store = await PantryStore.loadCloud();
-    runApp(PantryApp(store: store));
+    runApp(const PantryApp());
   } catch (error) {
     runApp(_StartupErrorApp(error: error));
   }
@@ -49,7 +47,7 @@ class _StartupErrorApp extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Enable Anonymous sign-in in Firebase Authentication, then restart the app.',
+                  'Check your connection and Firebase web configuration, then restart the app.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),

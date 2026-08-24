@@ -1,8 +1,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function hasPantryAccess() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/app_access/$(request.auth.uid));
+    }
+
+    match /app_access/{userId} {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if hasPantryAccess();
     }
   }
 }

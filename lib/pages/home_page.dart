@@ -7,9 +7,14 @@ import '../widgets/grocery_import_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 
 class PantryHomePage extends StatefulWidget {
-  const PantryHomePage({super.key, required this.store});
+  const PantryHomePage({
+    super.key,
+    required this.store,
+    required this.onSignOut,
+  });
 
   final PantryStore store;
+  final VoidCallback onSignOut;
 
   @override
   State<PantryHomePage> createState() => _PantryHomePageState();
@@ -71,7 +76,16 @@ class _PantryHomePageState extends State<PantryHomePage> {
         );
         if (!wide) {
           return Scaffold(
-            appBar: AppBar(title: Text(destinations[selectedIndex].label)),
+            appBar: AppBar(
+              title: Text(destinations[selectedIndex].label),
+              actions: [
+                IconButton(
+                  tooltip: 'Sign out',
+                  onPressed: widget.onSignOut,
+                  icon: const Icon(Icons.logout),
+                ),
+              ],
+            ),
             body: content,
             bottomNavigationBar: NavigationBar(
               selectedIndex: selectedIndex,
@@ -115,6 +129,11 @@ class _PantryHomePageState extends State<PantryHomePage> {
                         ),
                       )
                       .toList(),
+                  trailing: IconButton(
+                    tooltip: 'Sign out',
+                    onPressed: widget.onSignOut,
+                    icon: const Icon(Icons.logout),
+                  ),
                 ),
               ),
               const VerticalDivider(width: 1),
