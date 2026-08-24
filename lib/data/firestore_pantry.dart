@@ -163,6 +163,7 @@ class FirestorePantry {
 
   Map<String, Object?> _eventData(ConsumptionEvent event) => {
     'label': event.label,
+    'kind': event.kind.name,
     'recipe_id': event.recipeId,
     'timestamp': Timestamp.fromDate(event.timestamp),
     'deductions': event.deductions
@@ -180,6 +181,8 @@ class FirestorePantry {
     'nutrition': event.nutrition == null
         ? null
         : _nutritionTotalsData(event.nutrition!),
+    'nutrition_estimated': event.nutritionEstimated,
+    'note': event.note,
   };
 
   Map<String, Object?> _nutritionTotalsData(NutritionTotals totals) => {
@@ -273,23 +276,33 @@ class FirestorePantry {
   ) {
     final data = doc.data();
     final nutritionData = data['nutrition'] as Map<String, dynamic>?;
+    final deductions = (data['deductions'] as List<dynamic>).map((value) {
+      final item = value as Map<String, dynamic>;
+      return LotDeduction(
+        lotId: item['lot_id'] as String,
+        foodId: item['food_id'] as String,
+        quantityBase: (item['quantity_base'] as num).toDouble(),
+      );
+    }).toList();
+    final recipeId = data['recipe_id'] as String?;
+    final kindName = data['kind'] as String?;
     return ConsumptionEvent(
       id: doc.id,
       label: data['label'] as String,
-      recipeId: data['recipe_id'] as String?,
+      kind: kindName == null
+          ? (recipeId == null
+                ? ConsumptionKind.inventory
+                : ConsumptionKind.recipe)
+          : ConsumptionKind.values.byName(kindName),
+      recipeId: recipeId,
       timestamp: (data['timestamp'] as Timestamp).toDate(),
-      deductions: (data['deductions'] as List<dynamic>).map((value) {
-        final item = value as Map<String, dynamic>;
-        return LotDeduction(
-          lotId: item['lot_id'] as String,
-          foodId: item['food_id'] as String,
-          quantityBase: (item['quantity_base'] as num).toDouble(),
-        );
-      }).toList(),
+      deductions: deductions,
       undoneAt: (data['undone_at'] as Timestamp?)?.toDate(),
       nutrition: nutritionData == null
           ? null
           : _nutritionTotalsFromData(nutritionData),
+      nutritionEstimated: data['nutrition_estimated'] as bool? ?? false,
+      note: data['note'] as String? ?? '',
     );
   }
 }

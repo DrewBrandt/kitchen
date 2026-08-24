@@ -2,6 +2,8 @@ enum QuantityMode { counted, measured }
 
 enum StorageLocation { pantry, fridge, freezer }
 
+enum ConsumptionKind { recipe, inventory, external }
+
 class NutritionTotals {
   const NutritionTotals({
     this.calories = 0,
@@ -218,27 +220,36 @@ class ConsumptionEvent {
     required this.label,
     required this.timestamp,
     required this.deductions,
+    required this.kind,
     this.recipeId,
     this.undoneAt,
     this.nutrition,
+    this.nutritionEstimated = false,
+    this.note = '',
   });
 
   final String id;
   final String label;
   final DateTime timestamp;
+  final ConsumptionKind kind;
   final String? recipeId;
   final List<LotDeduction> deductions;
   final DateTime? undoneAt;
   final NutritionTotals? nutrition;
+  final bool nutritionEstimated;
+  final String note;
 
   ConsumptionEvent markUndone(DateTime at) => ConsumptionEvent(
     id: id,
     label: label,
     timestamp: timestamp,
+    kind: kind,
     recipeId: recipeId,
     deductions: deductions,
     undoneAt: at,
     nutrition: nutrition,
+    nutritionEstimated: nutritionEstimated,
+    note: note,
   );
 }
 

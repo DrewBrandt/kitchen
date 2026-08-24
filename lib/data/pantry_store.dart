@@ -122,6 +122,24 @@ class PantryStore extends ChangeNotifier {
     return found ? total : null;
   }
 
+  List<ConsumptionEvent> eventsForDay(DateTime day) {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    return history
+        .where(
+          (event) =>
+              event.undoneAt == null &&
+              !event.timestamp.isBefore(start) &&
+              event.timestamp.isBefore(end),
+        )
+        .toList();
+  }
+
+  NutritionTotals nutritionForDay(DateTime day) => eventsForDay(day).fold(
+    const NutritionTotals(),
+    (total, event) => total + (event.nutrition ?? const NutritionTotals()),
+  );
+
   List<InventoryLot> lotsFor(String foodId) =>
       _lots.where((lot) => lot.foodId == foodId).toList();
 
@@ -152,6 +170,7 @@ class PantryStore extends ChangeNotifier {
       label:
           '${units.formatAmount(servingCount)} ${servingCount == 1 ? 'serving' : 'servings'} of ${recipe.name}',
       timestamp: DateTime.now(),
+      kind: ConsumptionKind.recipe,
       recipeId: recipe.id,
       deductions: deductions,
       nutrition: nutritionForRecipe(recipe, servings: servingCount),
@@ -183,6 +202,7 @@ class PantryStore extends ChangeNotifier {
           label ??
           '${units.formatAmount(amount)} ${food.conversionFor(unit).symbol} ${food.name.toLowerCase()}',
       timestamp: DateTime.now(),
+      kind: ConsumptionKind.inventory,
       deductions: deductions,
       nutrition: nutritionForAmount(food, amount, unit),
     );
@@ -194,6 +214,43 @@ class PantryStore extends ChangeNotifier {
         _lots.where((lot) => affectedIds.contains(lot.id)),
       ),
     );
+    notifyListeners();
+    return event;
+  }
+
+  ConsumptionEvent logExternalMeal({
+    required String label,
+    required NutritionTotals nutrition,
+    DateTime? timestamp,
+    bool estimated = true,
+    String note = '',
+  }) {
+    if (label.trim().isEmpty) throw ArgumentError('Meal name is required');
+    final values = [
+      nutrition.calories,
+      nutrition.proteinG,
+      nutrition.carbsG,
+      nutrition.fatG,
+      nutrition.fiberG,
+      nutrition.sugarG,
+      nutrition.sodiumMg,
+    ];
+    if (values.any((value) => !value.isFinite || value < 0) ||
+        !values.any((value) => value > 0)) {
+      throw ArgumentError('Enter at least one non-negative nutrition value');
+    }
+    final event = ConsumptionEvent(
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      label: label.trim(),
+      timestamp: timestamp ?? DateTime.now(),
+      kind: ConsumptionKind.external,
+      deductions: const [],
+      nutrition: nutrition,
+      nutritionEstimated: estimated,
+      note: note.trim(),
+    );
+    _history.add(event);
+    _queue(_cloud?.saveConsumption(event, const []));
     notifyListeners();
     return event;
   }

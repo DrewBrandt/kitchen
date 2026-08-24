@@ -62,6 +62,10 @@ export const pantryApi = onRequest(
         await createRecipe(asObject(request.body), response);
         return;
       }
+      if (request.method === "POST" && path === "/v1/meals") {
+        await logExternalMeal(asObject(request.body), response);
+        return;
+      }
       if (request.method === "POST" && path === "/v1/access") {
         await grantAccess(asObject(request.body), response);
         return;
@@ -82,15 +86,17 @@ function authorized(header: string | undefined, secret: string): boolean {
 }
 
 async function exportInventory(response: ApiResponse): Promise<void> {
-  const [foods, lots, recipes] = await Promise.all([
+  const [foods, lots, recipes, history] = await Promise.all([
     db.collection("foods").get(),
     db.collection("inventory_lots").where("quantity_base", ">", 0).get(),
     db.collection("recipes").get(),
+    db.collection("consumption_history").orderBy("timestamp", "desc").limit(500).get(),
   ]);
   response.status(200).json({
     foods: foods.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     lots: lots.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     recipes: recipes.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    history: history.docs.map((doc) => ({ id: doc.id, ...serialize(doc.data()) })),
     exportedAt: new Date().toISOString(),
   });
 }
@@ -194,6 +200,35 @@ async function grantAccess(body: JsonObject, response: ApiResponse): Promise<voi
   response.status(200).json({ uid, status: "allowed" });
 }
 
+async function logExternalMeal(body: JsonObject, response: ApiResponse): Promise<void> {
+  const nutrition = {
+    calories: nonNegativeNumber(body.calories, "calories"),
+    protein_g: nonNegativeNumber(body.proteinG, "proteinG"),
+    carbs_g: nonNegativeNumber(body.carbsG, "carbsG"),
+    fat_g: nonNegativeNumber(body.fatG, "fatG"),
+    fiber_g: nonNegativeNumber(body.fiberG, "fiberG"),
+    sugar_g: nonNegativeNumber(body.sugarG, "sugarG"),
+    sodium_mg: nonNegativeNumber(body.sodiumMg, "sodiumMg"),
+  };
+  if (!Object.values(nutrition).some((value) => value > 0)) {
+    throw new ValidationError("At least one nutrition value must be positive");
+  }
+  const timestamp = optionalString(body.timestamp);
+  const reference = db.collection("consumption_history").doc();
+  await reference.set({
+    label: requiredString(body.label, "label"),
+    kind: "external",
+    recipe_id: null,
+    timestamp: timestamp == null ? FieldValue.serverTimestamp() : parseTimestamp(timestamp, "timestamp"),
+    deductions: [],
+    undone_at: null,
+    nutrition,
+    nutrition_estimated: body.estimated !== false,
+    note: optionalString(body.note) ?? "",
+  });
+  response.status(201).json({ id: reference.id, status: "logged" });
+}
+
 async function loadFoods(): Promise<FoodRecord[]> {
   const snapshot = await db.collection("foods").get();
   return snapshot.docs.map((doc) => {
@@ -272,6 +307,13 @@ function optionalString(value: unknown): string | undefined {
 }
 function positiveNumber(value: unknown, name: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new ValidationError(`${name} must be a positive number`);
+  return value;
+}
+function nonNegativeNumber(value: unknown, name: string): number {
+  if (value == null) return 0;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new ValidationError(`${name} must be a non-negative number`);
+  }
   return value;
 }
 function asOptionalStringArray(value: unknown): string[] {

@@ -40,13 +40,42 @@ Content-Type: application/json
 This route is protected by the same private bearer token. A UID identifies an
 account but is not itself a credential.
 
+## Log food that does not use inventory
+
+Restaurant meals, takeout, drinks, and packaged snacks can be added directly to
+the nutrition log without changing any inventory lots:
+
+```http
+POST /v1/meals
+Content-Type: application/json
+
+{
+  "label": "Restaurant cheeseburger",
+  "note": "Estimated from the restaurant menu",
+  "calories": 720,
+  "proteinG": 38,
+  "carbsG": 45,
+  "fatG": 42,
+  "fiberG": 3,
+  "sugarG": 9,
+  "sodiumMg": 1280,
+  "estimated": true,
+  "timestamp": "2026-08-23T19:30:00-04:00"
+}
+```
+
+Only `label` and at least one positive nutrition value are required. If
+`timestamp` is omitted, Firebase records the current time.
+
 ## Read current inventory
 
 ```http
 GET /v1/inventory
 ```
 
-Returns food definitions, positive inventory lots, and recipes. Codex can use this to answer “what can I make?” before writing anything.
+Returns food definitions, positive inventory lots, recipes, and the 500 most
+recent food-log events. Codex can use this to answer “what can I make?” and
+“what have I eaten today?” before writing anything.
 
 ## Define or update a food
 

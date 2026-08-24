@@ -39,7 +39,11 @@ class _PantryHomePageState extends State<PantryHomePage> {
       selectedIcon: Icon(Icons.menu_book),
       label: 'Recipes',
     ),
-    NavigationDestination(icon: Icon(Icons.history), label: 'History'),
+    NavigationDestination(
+      icon: Icon(Icons.monitor_heart_outlined),
+      selectedIcon: Icon(Icons.monitor_heart),
+      label: 'Food log',
+    ),
   ];
 
   @override
@@ -52,7 +56,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
       ),
       _InventoryPage(store: widget.store),
       _RecipesPage(store: widget.store),
-      _HistoryPage(store: widget.store),
+      _FoodLogPage(store: widget.store),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -804,56 +808,186 @@ class _RecipeCard extends StatelessWidget {
   }
 }
 
-class _HistoryPage extends StatelessWidget {
-  const _HistoryPage({required this.store});
+class _FoodLogPage extends StatefulWidget {
+  const _FoodLogPage({required this.store});
   final PantryStore store;
 
   @override
-  Widget build(BuildContext context) => _PageShell(
-    title: 'History',
-    subtitle: 'Every deduction is recorded and reversible.',
-    child: store.history.isEmpty
-        ? const _EmptyCard(
-            icon: Icons.history,
-            text: 'Cook something or use an item to see it here.',
-          )
-        : Column(
-            children: store.history
-                .map(
-                  (event) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          child: Icon(
-                            event.recipeId == null
-                                ? Icons.remove
-                                : Icons.restaurant,
-                          ),
-                        ),
-                        title: Text(
-                          event.label,
-                          style: TextStyle(
-                            decoration: event.undoneAt == null
-                                ? null
-                                : TextDecoration.lineThrough,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${event.deductions.length} lot ${event.deductions.length == 1 ? 'change' : 'changes'}${event.nutrition == null ? '' : ' · ${_nutritionLabel(event.nutrition!)}'}${event.undoneAt == null ? '' : ' · Undone'}',
-                        ),
-                        trailing: event.undoneAt == null
-                            ? TextButton(
-                                onPressed: () => store.undo(event.id),
-                                child: const Text('Undo'),
-                              )
-                            : const Icon(Icons.undo),
+  State<_FoodLogPage> createState() => _FoodLogPageState();
+}
+
+class _FoodLogPageState extends State<_FoodLogPage> {
+  DateTime selectedDay = DateTime.now();
+
+  void _moveDay(int days) => setState(
+    () => selectedDay = DateTime(
+      selectedDay.year,
+      selectedDay.month,
+      selectedDay.day + days,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
+    final events = store.eventsForDay(selectedDay);
+    final nutrition = store.nutritionForDay(selectedDay);
+    final today = DateTime.now();
+    final isToday = DateUtils.isSameDay(selectedDay, today);
+    return _PageShell(
+      title: 'Food log',
+      subtitle:
+          'Calories and nutrients from recipes, pantry items, and food away from home.',
+      action: FilledButton.icon(
+        onPressed: () => _showExternalMeal(context, store, selectedDay),
+        icon: const Icon(Icons.add),
+        label: const Text('Log food'),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Previous day',
+                onPressed: () => _moveDay(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  isToday ? 'Today' : _calendarDate(selectedDay),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next day',
+                onPressed: isToday ? null : () => _moveDay(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _NutritionSummary(nutrition: nutrition),
+          const SizedBox(height: 20),
+          Text(
+            'Meals and snacks',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 10),
+          if (events.isEmpty)
+            const _EmptyCard(
+              icon: Icons.restaurant_outlined,
+              text: 'Nothing logged for this day yet.',
+            )
+          else
+            ...events.map(
+              (event) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  child: ListTile(
+                    leading: CircleAvatar(child: Icon(_eventIcon(event.kind))),
+                    title: Text(event.label),
+                    subtitle: Text(
+                      '${_eventSource(event)}${event.nutrition == null ? '' : ' · ${_nutritionLabel(event.nutrition!)}'}${event.note.isEmpty ? '' : '\n${event.note}'}',
+                    ),
+                    isThreeLine: event.note.isNotEmpty,
+                    trailing: TextButton(
+                      onPressed: () => store.undo(event.id),
+                      child: Text(
+                        event.kind == ConsumptionKind.external
+                            ? 'Remove'
+                            : 'Undo',
                       ),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutritionSummary extends StatelessWidget {
+  const _NutritionSummary({required this.nutrition});
+  final NutritionTotals nutrition;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Daily nutrition',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _NutrientTile(
+                label: 'Calories',
+                value: nutrition.calories,
+                unit: 'cal',
+              ),
+              _NutrientTile(
+                label: 'Protein',
+                value: nutrition.proteinG,
+                unit: 'g',
+              ),
+              _NutrientTile(label: 'Carbs', value: nutrition.carbsG, unit: 'g'),
+              _NutrientTile(label: 'Fat', value: nutrition.fatG, unit: 'g'),
+              _NutrientTile(label: 'Fiber', value: nutrition.fiberG, unit: 'g'),
+              _NutrientTile(label: 'Sugar', value: nutrition.sugarG, unit: 'g'),
+              _NutrientTile(
+                label: 'Sodium',
+                value: nutrition.sodiumMg,
+                unit: 'mg',
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _NutrientTile extends StatelessWidget {
+  const _NutrientTile({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+  final String label;
+  final double value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 132,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 3),
+        Text(
+          '${_compactNumber(value)} $unit',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
+    ),
   );
 }
 
@@ -875,6 +1009,214 @@ class _EmptyCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+Future<void> _showExternalMeal(
+  BuildContext context,
+  PantryStore store,
+  DateTime day,
+) async {
+  final name = TextEditingController();
+  final note = TextEditingController();
+  final calories = TextEditingController();
+  final protein = TextEditingController();
+  final carbs = TextEditingController();
+  final fat = TextEditingController();
+  final fiber = TextEditingController();
+  final sugar = TextEditingController();
+  final sodium = TextEditingController();
+  final nutrientFields = <(String, TextEditingController, String)>[
+    ('Calories', calories, 'cal'),
+    ('Protein', protein, 'g'),
+    ('Carbs', carbs, 'g'),
+    ('Fat', fat, 'g'),
+    ('Fiber', fiber, 'g'),
+    ('Sugar', sugar, 'g'),
+    ('Sodium', sodium, 'mg'),
+  ];
+  var estimated = true;
+  String? error;
+  double number(TextEditingController controller) =>
+      double.tryParse(controller.text.trim()) ?? 0;
+
+  final submitted = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Log food away from home'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Meal or snack',
+                    hintText: 'Cheeseburger, coffee, granola bar…',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: note,
+                  decoration: const InputDecoration(
+                    labelText: 'Restaurant, brand, or note',
+                    hintText: 'Optional',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Nutrition for what you ate',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: nutrientFields
+                      .map(
+                        (field) => SizedBox(
+                          width: 150,
+                          child: TextField(
+                            controller: field.$2,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: field.$1,
+                              suffixText: field.$3,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Nutrition is estimated'),
+                  subtitle: const Text(
+                    'Useful for restaurant meals or approximate portions.',
+                  ),
+                  value: estimated,
+                  onChanged: (value) => setDialogState(() => estimated = value),
+                ),
+                if (error != null)
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final values = nutrientFields.map((field) => number(field.$2));
+              if (name.text.trim().isEmpty) {
+                setDialogState(() => error = 'Enter a meal or snack name.');
+              } else if (values.any((value) => value < 0) ||
+                  !values.any((value) => value > 0)) {
+                setDialogState(
+                  () => error = 'Enter at least one positive nutrition value.',
+                );
+              } else {
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text('Add to log'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  if (submitted == true && context.mounted) {
+    final today = DateTime.now();
+    final timestamp = DateUtils.isSameDay(day, today)
+        ? today
+        : DateTime(day.year, day.month, day.day, 12);
+    final event = store.logExternalMeal(
+      label: name.text,
+      note: note.text,
+      estimated: estimated,
+      timestamp: timestamp,
+      nutrition: NutritionTotals(
+        calories: number(calories),
+        proteinG: number(protein),
+        carbsG: number(carbs),
+        fatG: number(fat),
+        fiberG: number(fiber),
+        sugarG: number(sugar),
+        sodiumMg: number(sodium),
+      ),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${event.label} added to the food log.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => store.undo(event.id),
+        ),
+      ),
+    );
+  }
+  for (final controller in [
+    name,
+    note,
+    calories,
+    protein,
+    carbs,
+    fat,
+    fiber,
+    sugar,
+    sodium,
+  ]) {
+    controller.dispose();
+  }
+}
+
+IconData _eventIcon(ConsumptionKind kind) => switch (kind) {
+  ConsumptionKind.recipe => Icons.soup_kitchen,
+  ConsumptionKind.inventory => Icons.kitchen_outlined,
+  ConsumptionKind.external => Icons.storefront_outlined,
+};
+
+String _eventSource(ConsumptionEvent event) => switch (event.kind) {
+  ConsumptionKind.recipe => 'Recipe · inventory deducted',
+  ConsumptionKind.inventory => 'Pantry item · inventory deducted',
+  ConsumptionKind.external =>
+    event.nutritionEstimated
+        ? 'Outside food · estimated'
+        : 'Outside food · label data',
+};
+
+String _calendarDate(DateTime date) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
 Future<void> _showAddLot(BuildContext context, PantryStore store) async {

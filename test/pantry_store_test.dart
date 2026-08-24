@@ -116,4 +116,32 @@ void main() {
     expect(total.proteinG, closeTo(12, 0.001));
     expect(total.fatG, closeTo(5.5, 0.001));
   });
+
+  test('outside meals add daily nutrition without changing inventory', () {
+    final store = PantryStore.demo(now: DateTime(2026, 8, 23));
+    final eggsBefore = store.totalFor('egg');
+    final meal = store.logExternalMeal(
+      label: 'Restaurant cheeseburger',
+      note: 'Estimated from the menu',
+      timestamp: DateTime(2026, 8, 23, 19, 30),
+      nutrition: const NutritionTotals(
+        calories: 720,
+        proteinG: 38,
+        carbsG: 45,
+        fatG: 42,
+        sodiumMg: 1280,
+      ),
+    );
+
+    expect(meal.kind, ConsumptionKind.external);
+    expect(meal.deductions, isEmpty);
+    expect(store.totalFor('egg'), eggsBefore);
+    expect(store.nutritionForDay(DateTime(2026, 8, 23)).calories, 720);
+    expect(store.nutritionForDay(DateTime(2026, 8, 23)).proteinG, 38);
+
+    store.undo(meal.id);
+
+    expect(store.nutritionForDay(DateTime(2026, 8, 23)).calories, 0);
+    expect(store.totalFor('egg'), eggsBefore);
+  });
 }

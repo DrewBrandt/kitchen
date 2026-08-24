@@ -12,6 +12,8 @@ The current vertical slice includes:
 - recipe availability
 - earliest-expiry-first recipe deductions
 - quick consumption
+- daily calorie, macro, fiber, sugar, and sodium totals
+- outside meal, takeout, drink, and snack logging without inventory changes
 - reversible history
 - responsive desktop and mobile navigation
 - food-definition and conversion editing
