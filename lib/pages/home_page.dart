@@ -2976,11 +2976,9 @@ class _CookingRecipeCard extends StatelessWidget {
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 180),
       opacity: included ? 1 : .55,
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF202522),
-          borderRadius: BorderRadius.circular(20),
-        ),
+      child: Material(
+        color: const Color(0xFF202522),
+        borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
