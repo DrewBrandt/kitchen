@@ -61,6 +61,19 @@ void main() {
     expect(find.text('Add one lot'), findsOneWidget);
   });
 
+  testWidgets('dashboard and food log expose consumption scanning', (
+    tester,
+  ) async {
+    await pumpPantry(tester, const Size(1440, 980));
+
+    expect(find.text('Scan food'), findsOneWidget);
+
+    await tester.tap(find.text('Food log').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan food'), findsOneWidget);
+  });
+
   testWidgets('food log graph identifies each food contribution', (
     tester,
   ) async {

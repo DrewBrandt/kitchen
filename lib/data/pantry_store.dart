@@ -202,6 +202,17 @@ class PantryStore extends ChangeNotifier {
     return null;
   }
 
+  ExternalFood? externalFoodForBarcode(String barcode) {
+    final normalized = normalizeBarcode(barcode);
+    for (final food in _externalFoods) {
+      final candidate = food.barcode;
+      if (candidate != null && normalizeBarcode(candidate) == normalized) {
+        return food;
+      }
+    }
+    return null;
+  }
+
   List<ProductDefinition> productsFor(String foodId) => _products.values
       .where((product) => product.foodId == foodId)
       .toList(growable: false);
@@ -225,6 +236,23 @@ class PantryStore extends ChangeNotifier {
   }
 
   double totalFor(String foodId) => inventory.totalFor(foodId, _lots);
+
+  double productInventoryBase(String productId) => _lots
+      .where((lot) => lot.productId == productId && lot.quantityBase > 0)
+      .fold(0, (total, lot) => total + lot.quantityBase);
+
+  double? productPackageBaseAmount(ProductDefinition product) {
+    final conversion = product.conversionFor('package');
+    if (conversion != null) return conversion.baseAmount;
+    final definition = food(product.foodId);
+    return definition.baseUnit == 'each' ? 1 : null;
+  }
+
+  double productPackagesAvailable(ProductDefinition product) {
+    final packageBase = productPackageBaseAmount(product);
+    if (packageBase == null || packageBase <= 0) return 0;
+    return productInventoryBase(product.id) / packageBase;
+  }
 
   NutritionTotals? nutritionForBaseAmount(
     FoodDefinition food,
@@ -781,6 +809,95 @@ class PantryStore extends ChangeNotifier {
     return event;
   }
 
+  ConsumptionEvent consumeProduct(ProductDefinition product, double packages) {
+    if (!packages.isFinite || packages <= 0) {
+      throw ArgumentError('Packages must be positive');
+    }
+    final packageBase = productPackageBaseAmount(product);
+    if (packageBase == null || packageBase <= 0) {
+      throw ArgumentError('This product needs a package conversion');
+    }
+    final definition = food(product.foodId);
+    final requirement = packageBase * packages;
+    final productLots = _lots
+        .where((lot) => lot.productId == product.id && lot.quantityBase > 0)
+        .toList();
+    final deductions = inventory.planDeductions({
+      definition.id: requirement,
+    }, productLots);
+    return _recordProductConsumption(
+      product,
+      packages,
+      packageBase: packageBase,
+      deductions: deductions,
+    );
+  }
+
+  ConsumptionEvent logProductOutside(
+    ProductDefinition product,
+    double packages,
+  ) {
+    if (!packages.isFinite || packages <= 0) {
+      throw ArgumentError('Packages must be positive');
+    }
+    return _recordProductConsumption(
+      product,
+      packages,
+      packageBase: productPackageBaseAmount(product),
+      deductions: const [],
+      outside: true,
+    );
+  }
+
+  ConsumptionEvent _recordProductConsumption(
+    ProductDefinition product,
+    double packages, {
+    required double? packageBase,
+    required List<LotDeduction> deductions,
+    bool outside = false,
+  }) {
+    if (!outside) _applyDeductions(deductions);
+    final definition = food(product.foodId);
+    final nutrition = packageBase == null
+        ? null
+        : (product.nutrition ?? definition.nutrition)?.forBaseAmount(
+            packageBase * packages,
+          );
+    final productName = product.brand.trim().isEmpty
+        ? product.name
+        : '${product.brand} ${product.name}';
+    final amountLabel = packages == 1
+        ? productName
+        : '${units.formatAmount(packages)} packages of $productName';
+    final event = ConsumptionEvent(
+      id: 'event-${DateTime.now().microsecondsSinceEpoch}',
+      label: amountLabel,
+      timestamp: DateTime.now(),
+      kind: outside ? ConsumptionKind.external : ConsumptionKind.inventory,
+      productId: product.id,
+      deductions: deductions,
+      nutrition: nutrition,
+      nutritionEstimated:
+          product.nutrition?.estimated ??
+          definition.nutrition?.estimated ??
+          false,
+      note: outside
+          ? 'Scanned product · not deducted from inventory'
+          : 'Scanned product · exact product inventory deducted',
+    );
+    _history.add(event);
+    final affectedIds = deductions.map((item) => item.lotId).toSet();
+    _queue(
+      _cloud?.saveConsumption(
+        event,
+        _lots.where((lot) => affectedIds.contains(lot.id)),
+      ),
+    );
+    if (!outside) _refreshPlannedGroceries();
+    notifyListeners();
+    return event;
+  }
+
   ConsumptionEvent logExternalMeal({
     required String label,
     required NutritionTotals nutrition,
@@ -1061,6 +1178,19 @@ class PantryStore extends ChangeNotifier {
     if (values.any((value) => !value.isFinite || value < 0) ||
         !values.any((value) => value > 0)) {
       throw ArgumentError('Enter at least one nutrition value');
+    }
+    final barcode = food.barcode?.trim();
+    if (barcode != null &&
+        barcode.isNotEmpty &&
+        _externalFoods.any(
+          (item) =>
+              item.id != food.id &&
+              item.barcode != null &&
+              normalizeBarcode(item.barcode!) == normalizeBarcode(barcode),
+        )) {
+      throw ArgumentError(
+        'Barcode is already assigned to another outside food',
+      );
     }
     final index = _externalFoods.indexWhere((item) => item.id == food.id);
     if (index < 0) {

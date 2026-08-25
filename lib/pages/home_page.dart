@@ -12,6 +12,7 @@ import '../widgets/recipe_editor_dialog.dart';
 import '../widgets/recipe_detail_dialog.dart';
 import '../widgets/recipe_feedback_dialog.dart';
 import '../widgets/recipe_portion_dialog.dart';
+import '../widgets/scanned_consumption_dialog.dart';
 
 const _ink = Color(0xFFECF1EE);
 const _muted = Color(0xFF97A29B);
@@ -647,6 +648,11 @@ class _Dashboard extends StatelessWidget {
         spacing: 10,
         runSpacing: 10,
         children: [
+          OutlinedButton.icon(
+            onPressed: () => scanConsumption(context, store),
+            icon: const Icon(Icons.barcode_reader),
+            label: const Text('Scan food'),
+          ),
           OutlinedButton(
             onPressed: onOpenFoodLog,
             child: const Text('Log food'),
@@ -4705,6 +4711,12 @@ class _FoodLogPageState extends State<_FoodLogPage> {
         spacing: 8,
         runSpacing: 8,
         children: [
+          if (isToday)
+            OutlinedButton.icon(
+              onPressed: () => scanConsumption(context, store),
+              icon: const Icon(Icons.barcode_reader),
+              label: const Text('Scan food'),
+            ),
           FilledButton.icon(
             onPressed: () => _showExternalMeal(context, store, selectedDay),
             icon: const Icon(Icons.add),

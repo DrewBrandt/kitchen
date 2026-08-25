@@ -13,6 +13,8 @@ class ProductEditorSeed {
     this.packageAmount,
     this.packageUnit,
     this.quantityLabel = '',
+    this.nutritionPerPackage,
+    this.nutritionServingLabel = '',
   });
 
   factory ProductEditorSeed.fromSuggestion(BarcodeProductSuggestion value) =>
@@ -24,6 +26,8 @@ class ProductEditorSeed {
         packageAmount: value.packageAmount,
         packageUnit: value.packageUnit,
         quantityLabel: value.quantityLabel,
+        nutritionPerPackage: value.nutritionPerPackage,
+        nutritionServingLabel: value.nutritionServingLabel,
       );
 
   final String barcode;
@@ -33,6 +37,8 @@ class ProductEditorSeed {
   final double? packageAmount;
   final String? packageUnit;
   final String quantityLabel;
+  final NutritionTotals? nutritionPerPackage;
+  final String nutritionServingLabel;
 
   BarcodeProductSuggestion get suggestion => BarcodeProductSuggestion(
     barcode: barcode,
@@ -42,6 +48,8 @@ class ProductEditorSeed {
     packageAmount: packageAmount,
     packageUnit: packageUnit,
     quantityLabel: quantityLabel,
+    nutritionPerPackage: nutritionPerPackage,
+    nutritionServingLabel: nutritionServingLabel,
   );
 }
 

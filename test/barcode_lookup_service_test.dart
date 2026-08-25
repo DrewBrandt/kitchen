@@ -25,7 +25,16 @@ void main() {
               "brands": "Example Foods",
               "quantity": "200 g",
               "product_quantity": 200,
-              "product_quantity_unit": "g"
+              "product_quantity_unit": "g",
+              "nutriments": {
+                "energy-kcal_100g": 250,
+                "proteins_100g": 5,
+                "carbohydrates_100g": 30,
+                "fat_100g": 10,
+                "fiber_100g": 2,
+                "sugars_100g": 18,
+                "sodium_100g": 0.15
+              }
             }
           }
         ''', 200);
@@ -40,6 +49,10 @@ void main() {
     expect(result.barcode, '0034000470693');
     expect(result.packageAmount, 200);
     expect(result.packageUnit, 'g');
+    expect(result.nutritionServingLabel, '200 g');
+    expect(result.nutritionPerPackage!.calories, 500);
+    expect(result.nutritionPerPackage!.proteinG, 10);
+    expect(result.nutritionPerPackage!.sodiumMg, 300);
   });
 
   test('returns null when Open Food Facts does not know the barcode', () async {

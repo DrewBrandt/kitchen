@@ -11,10 +11,7 @@ Future<ProductDefinition?> scanProductBarcode(
   PantryStore store, {
   OpenFoodFactsBarcodeLookup? lookup,
 }) async {
-  final scanned = await showDialog<String>(
-    context: context,
-    builder: (context) => const _BarcodeScannerDialog(),
-  );
+  final scanned = await scanBarcodeValue(context);
   if (scanned == null || !context.mounted) return null;
 
   final barcode = normalizeBarcode(scanned);
@@ -59,6 +56,11 @@ Future<ProductDefinition?> scanProductBarcode(
         : ProductEditorSeed.fromSuggestion(suggestion),
   );
 }
+
+Future<String?> scanBarcodeValue(BuildContext context) => showDialog<String>(
+  context: context,
+  builder: (context) => const _BarcodeScannerDialog(),
+);
 
 class _BarcodeScannerDialog extends StatefulWidget {
   const _BarcodeScannerDialog();
