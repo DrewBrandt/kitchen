@@ -83,7 +83,8 @@ class FoodMatchService {
     for (final product in products) {
       final food = byFood[product.foodId];
       if (food == null) continue;
-      if (product.barcode != null && product.barcode == query) {
+      if (product.barcode != null &&
+          normalizeBarcode(product.barcode!) == normalizeBarcode(query)) {
         consider(food, product.barcode!, product: product, barcode: true);
       }
       consider(food, product.name, product: product);

@@ -6,6 +6,7 @@ import '../widgets/food_editor_dialog.dart';
 import '../widgets/external_food_editor_dialog.dart';
 import '../widgets/grocery_import_dialog.dart';
 import '../widgets/calendar_sync_card.dart';
+import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/product_editor_dialog.dart';
 import '../widgets/recipe_editor_dialog.dart';
 import '../widgets/recipe_detail_dialog.dart';
@@ -1191,9 +1192,14 @@ class _InventoryPage extends StatelessWidget {
           label: const Text('Define food'),
         ),
         OutlinedButton.icon(
-          onPressed: () => showProductEditor(context, store),
-          icon: const Icon(Icons.qr_code_2),
-          label: const Text('Define product'),
+          onPressed: () async {
+            final product = await scanProductBarcode(context, store);
+            if (product != null && context.mounted) {
+              await _showAddLot(context, store, initialProduct: product);
+            }
+          },
+          icon: const Icon(Icons.barcode_reader),
+          label: const Text('Scan barcode'),
         ),
         OutlinedButton.icon(
           onPressed: () => _showAddLot(context, store),
@@ -6332,10 +6338,15 @@ Future<void> _showManualGroceryEditor(
   quantity.dispose();
 }
 
-Future<void> _showAddLot(BuildContext context, PantryStore store) async {
-  var food = store.foods.first;
-  ProductDefinition? product;
-  var unit = food.conversions.first.unit;
+Future<void> _showAddLot(
+  BuildContext context,
+  PantryStore store, {
+  ProductDefinition? initialProduct,
+}) async {
+  var product = initialProduct;
+  var food = product == null ? store.foods.first : store.food(product.foodId);
+  var unit =
+      product?.conversions.firstOrNull?.unit ?? food.conversions.first.unit;
   var location = food.defaultLocation;
   final amountController = TextEditingController(text: '1');
   final daysController = TextEditingController();

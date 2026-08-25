@@ -185,6 +185,17 @@ class PantryStore extends ChangeNotifier {
   ProductDefinition? productOrNull(String? id) =>
       id == null ? null : _products[id];
 
+  ProductDefinition? productForBarcode(String barcode) {
+    final normalized = normalizeBarcode(barcode);
+    for (final product in _products.values) {
+      final candidate = product.barcode;
+      if (candidate != null && normalizeBarcode(candidate) == normalized) {
+        return product;
+      }
+    }
+    return null;
+  }
+
   List<ProductDefinition> productsFor(String foodId) => _products.values
       .where((product) => product.foodId == foodId)
       .toList(growable: false);
@@ -889,7 +900,10 @@ class PantryStore extends ChangeNotifier {
     if (barcode != null &&
         barcode.isNotEmpty &&
         _products.values.any(
-          (item) => item.id != product.id && item.barcode == barcode,
+          (item) =>
+              item.id != product.id &&
+              item.barcode != null &&
+              normalizeBarcode(item.barcode!) == normalizeBarcode(barcode),
         )) {
       throw ArgumentError('Barcode is already assigned to another product');
     }
