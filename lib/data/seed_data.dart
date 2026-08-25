@@ -12,6 +12,8 @@ class SeedData {
       ],
       emoji: '🥚',
       defaultLocation: StorageLocation.fridge,
+      grocerySection: GrocerySection.eggsCheeseDough,
+      ingredientRole: IngredientRole.main,
     ),
     FoodDefinition(
       id: 'onion',
@@ -22,6 +24,7 @@ class SeedData {
         UnitConversion(unit: 'each', symbol: 'onions', baseAmount: 1),
       ],
       emoji: '🧅',
+      grocerySection: GrocerySection.produceDeli,
     ),
     FoodDefinition(
       id: 'butter',
@@ -38,6 +41,8 @@ class SeedData {
       ],
       emoji: '🧈',
       defaultLocation: StorageLocation.fridge,
+      grocerySection: GrocerySection.dairyFrozenMeals,
+      ingredientRole: IngredientRole.staple,
     ),
     FoodDefinition(
       id: 'milk',
@@ -52,6 +57,7 @@ class SeedData {
       ],
       emoji: '🥛',
       defaultLocation: StorageLocation.fridge,
+      grocerySection: GrocerySection.dairyFrozenMeals,
     ),
     FoodDefinition(
       id: 'flour',
@@ -66,6 +72,8 @@ class SeedData {
         UnitConversion(unit: 'tablespoon', symbol: 'tbsp', baseAmount: 7.5),
       ],
       emoji: '🌾',
+      grocerySection: GrocerySection.bakingMeat,
+      ingredientRole: IngredientRole.staple,
     ),
     FoodDefinition(
       id: 'salt',
@@ -78,6 +86,7 @@ class SeedData {
         UnitConversion(unit: 'tablespoon', symbol: 'tbsp', baseAmount: 18),
       ],
       emoji: '🧂',
+      ingredientRole: IngredientRole.staple,
     ),
   ];
 

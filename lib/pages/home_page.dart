@@ -53,21 +53,22 @@ class _PantryHomePageState extends State<PantryHomePage> {
       label: 'Inventory',
     ),
     NavigationDestination(
+      icon: Icon(Icons.shopping_cart_outlined),
+      selectedIcon: Icon(Icons.shopping_cart),
+      label: 'Grocery',
+    ),
+    NavigationDestination(
       icon: Icon(Icons.menu_book_outlined),
       selectedIcon: Icon(Icons.menu_book),
       label: 'Recipes',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.monitor_heart_outlined),
-      selectedIcon: Icon(Icons.monitor_heart),
-      label: 'Food log',
     ),
     NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
   ];
 
   int get _mobileIndex => switch (selectedIndex) {
-    0 || 1 || 2 => selectedIndex,
-    4 => 3,
+    0 || 1 => selectedIndex,
+    8 => 2,
+    2 => 3,
     _ => 4,
   };
 
@@ -81,7 +82,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
           children: [
             const ListTile(
               title: Text('More'),
-              subtitle: Text('Planning, shopping, dining, and meal history'),
+              subtitle: Text('Planning, dining, food log, and history'),
             ),
             ListTile(
               leading: const Icon(Icons.calendar_month_outlined),
@@ -89,9 +90,9 @@ class _PantryHomePageState extends State<PantryHomePage> {
               onTap: () => Navigator.pop(context, 7),
             ),
             ListTile(
-              leading: const Icon(Icons.shopping_cart_outlined),
-              title: const Text('Grocery list'),
-              onTap: () => Navigator.pop(context, 8),
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Food log'),
+              onTap: () => Navigator.pop(context, 4),
             ),
             ListTile(
               leading: const Icon(Icons.storefront_outlined),
@@ -207,10 +208,12 @@ class _PantryHomePageState extends State<PantryHomePage> {
               selectedIndex: _mobileIndex,
               destinations: mobileDestinations,
               onDestinationSelected: (value) {
-                if (value <= 2) {
+                if (value <= 1) {
                   setState(() => selectedIndex = value);
+                } else if (value == 2) {
+                  setState(() => selectedIndex = 8);
                 } else if (value == 3) {
-                  setState(() => selectedIndex = 4);
+                  setState(() => selectedIndex = 2);
                 } else {
                   _openMobileMore(context);
                 }
@@ -1180,7 +1183,7 @@ class _InventoryPage extends StatelessWidget {
         '${store.foods.length} foods · ${store.lots.where((lot) => lot.quantityBase > 0).length} lots',
     title: 'Inventory',
     subtitle:
-        'Counted and measured ingredients, organized by storage location.',
+        'Ingredients grouped in Waugh Chapel Safeway walking order, with meal-planning roles.',
     action: Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -1220,21 +1223,69 @@ class _InventoryPage extends StatelessWidget {
             : constraints.maxWidth >= 560
             ? (constraints.maxWidth - 12) / 2
             : constraints.maxWidth;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: store.foods
-              .map(
-                (food) => SizedBox(
-                  width: width,
-                  height: 340,
-                  child: _FoodCard(store: store, food: food),
+        final grouped = <GrocerySection, List<FoodDefinition>>{};
+        for (final food in store.foods) {
+          grouped.putIfAbsent(food.grocerySection, () => []).add(food);
+        }
+        for (final foods in grouped.values) {
+          foods.sort((a, b) => a.name.compareTo(b.name));
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final section in GrocerySection.values)
+              if (grouped[section]?.isNotEmpty == true) ...[
+                _InventorySectionHeading(
+                  section: section,
+                  count: grouped[section]!.length,
                 ),
-              )
-              .toList(),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: grouped[section]!
+                      .map(
+                        (food) => SizedBox(
+                          width: width,
+                          height: 340,
+                          child: _FoodCard(store: store, food: food),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 28),
+              ],
+          ],
         );
       },
     ),
+  );
+}
+
+class _InventorySectionHeading extends StatelessWidget {
+  const _InventorySectionHeading({required this.section, required this.count});
+
+  final GrocerySection section;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Text(section.emoji, style: const TextStyle(fontSize: 20)),
+      const SizedBox(width: 9),
+      Expanded(
+        child: Text(
+          section.label,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+      Text(
+        '$count',
+        style: const TextStyle(color: _faint, fontFamily: 'monospace'),
+      ),
+    ],
   );
 }
 
@@ -1363,6 +1414,16 @@ class _FoodCard extends StatelessWidget {
               '$lots ${lots == 1 ? 'lot' : 'lots'} · ${food.defaultLocation.label}',
               style: const TextStyle(color: _muted, fontSize: 12),
             ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 5,
+              children: [
+                _InventoryTag(label: food.ingredientRole.label),
+                if (food.storeAisle.isNotEmpty)
+                  _InventoryTag(label: food.storeAisle),
+              ],
+            ),
             if (activeLots.any((lot) => lot.productId != null))
               Text(
                 activeLots
@@ -1409,6 +1470,21 @@ class _FoodCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _InventoryTag extends StatelessWidget {
+  const _InventoryTag({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: _amber.withValues(alpha: .10),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(label, style: const TextStyle(color: _amber, fontSize: 10)),
+  );
 }
 
 class _RecipesPage extends StatelessWidget {
@@ -3267,7 +3343,7 @@ class _GroceryListPage extends StatelessWidget {
       eyebrow: '${_monthDay(weekStart)} – ${_monthDay(weekEnd)}',
       title: 'Grocery list',
       subtitle:
-          'Grouped by aisle, shared ingredients merged into one entry · $done of ${store.groceryItems.length} checked',
+          'Waugh Chapel Safeway walking order · shared ingredients merged · $done of ${store.groceryItems.length} checked',
       action: Wrap(
         spacing: 10,
         runSpacing: 8,
@@ -3283,7 +3359,102 @@ class _GroceryListPage extends StatelessWidget {
           ),
         ],
       ),
-      child: _GroceryListCard(store: store),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ShoppingProgressCard(store: store),
+          const SizedBox(height: 18),
+          _GroceryListCard(store: store),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoppingProgressCard extends StatelessWidget {
+  const _ShoppingProgressCard({required this.store});
+  final PantryStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = store.groceryItems.length;
+    final done = store.groceryItems.where((item) => item.checked).length;
+    final remaining = total - done;
+    final nextSection = GrocerySection.values
+        .cast<GrocerySection?>()
+        .firstWhere(
+          (section) => store.groceryItems.any(
+            (item) => !item.checked && item.grocerySection == section,
+          ),
+          orElse: () => null,
+        );
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _amber.withValues(alpha: .10),
+        border: Border.all(color: _amber.withValues(alpha: .28)),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _amber,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.storefront, color: Color(0xFF171B19)),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      remaining == 0 && total > 0
+                          ? 'Shopping complete'
+                          : '$remaining ${remaining == 1 ? 'item' : 'items'} left',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      nextSection == null
+                          ? 'Waugh Chapel Safeway'
+                          : 'Next: ${nextSection.label}',
+                      style: const TextStyle(color: _muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '$done / $total',
+                style: const TextStyle(
+                  color: _amber,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          LinearProgressIndicator(
+            value: total == 0 ? 0 : done / total,
+            minHeight: 7,
+            borderRadius: BorderRadius.circular(6),
+            backgroundColor: _border,
+            color: _amber,
+          ),
+          const SizedBox(height: 9),
+          const Text(
+            '2644 Chapel Lake Dr · ordered from the produce-side entrance',
+            style: TextStyle(color: _faint, fontSize: 10.5),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3300,19 +3471,18 @@ class _GroceryListCard extends StatelessWidget {
         .where((entry) => store.totalFor(entry.key) >= entry.value)
         .map((entry) => store.food(entry.key))
         .toList();
-    final grouped = <String, List<GroceryListItem>>{};
+    final grouped = <GrocerySection, List<GroceryListItem>>{};
     for (final item in items) {
-      grouped.putIfAbsent(_grocerySection(store, item), () => []).add(item);
+      grouped.putIfAbsent(item.grocerySection, () => []).add(item);
     }
-    const order = [
-      'Produce',
-      'Meat & seafood',
-      'Dairy & eggs',
-      'Pantry',
-      'Other',
-    ];
-    final sections = order
-        .where((name) => grouped[name]?.isNotEmpty == true)
+    for (final sectionItems in grouped.values) {
+      sectionItems.sort((a, b) {
+        if (a.checked != b.checked) return a.checked ? 1 : -1;
+        return a.name.compareTo(b.name);
+      });
+    }
+    final sections = GrocerySection.values
+        .where((section) => grouped[section]?.isNotEmpty == true)
         .toList();
     if (items.isEmpty) {
       return const _EmptyCard(
@@ -3340,7 +3510,7 @@ class _GroceryListCard extends StatelessWidget {
                     width: width,
                     child: _GrocerySectionCard(
                       store: store,
-                      title: section,
+                      section: section,
                       items: grouped[section]!,
                     ),
                   ),
@@ -3393,20 +3563,12 @@ class _GroceryListCard extends StatelessWidget {
 class _GrocerySectionCard extends StatelessWidget {
   const _GrocerySectionCard({
     required this.store,
-    required this.title,
+    required this.section,
     required this.items,
   });
   final PantryStore store;
-  final String title;
+  final GrocerySection section;
   final List<GroceryListItem> items;
-
-  String get emoji => switch (title) {
-    'Produce' => '🥬',
-    'Meat & seafood' => '🥩',
-    'Dairy & eggs' => '🥛',
-    'Pantry' => '🫙',
-    _ => '🛒',
-  };
 
   @override
   Widget build(BuildContext context) => Container(
@@ -3421,21 +3583,34 @@ class _GrocerySectionCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
+            Text(section.emoji, style: const TextStyle(fontSize: 18)),
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                title,
+                section.label,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-            Text(
-              '${items.length}',
-              style: const TextStyle(
-                color: _faint,
-                fontFamily: 'monospace',
-                fontSize: 11,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'STOP ${section.storeOrder + 1}',
+                  style: const TextStyle(
+                    color: _amber,
+                    fontSize: 9,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Text(
+                  '${items.where((item) => !item.checked).length} left',
+                  style: const TextStyle(
+                    color: _faint,
+                    fontFamily: 'monospace',
+                    fontSize: 10,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -3444,27 +3619,6 @@ class _GrocerySectionCard extends StatelessWidget {
       ],
     ),
   );
-}
-
-String _grocerySection(PantryStore store, GroceryListItem item) {
-  if (item.foodId == null) return 'Other';
-  final food = store.food(item.foodId!);
-  final text = '${food.name} ${food.aliases.join(' ')}'.toLowerCase();
-  if (RegExp(
-    r'chicken|beef|pork|turkey|fish|salmon|shrimp|burger|steak',
-  ).hasMatch(text)) {
-    return 'Meat & seafood';
-  }
-  if (RegExp(r'milk|cheese|egg|butter|yogurt|cream').hasMatch(text)) {
-    return 'Dairy & eggs';
-  }
-  if (food.defaultLocation == StorageLocation.fridge ||
-      RegExp(
-        r'broccoli|carrot|potato|garlic|lemon|onion|asparagus|pepper|lettuce|tomato',
-      ).hasMatch(text)) {
-    return 'Produce';
-  }
-  return 'Pantry';
 }
 
 class _GroceryItemRow extends StatelessWidget {
@@ -3504,61 +3658,101 @@ class _GroceryItemRow extends StatelessWidget {
               .toSet()
               .take(2)
               .toList();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Checkbox(
-            value: item.checked,
-            onChanged: (_) => store.toggleGroceryItem(item.id),
-            visualDensity: VisualDensity.compact,
+    final aisle = item.foodId == null
+        ? ''
+        : store.food(item.foodId!).storeAisle;
+    return Semantics(
+      button: true,
+      checked: item.checked,
+      label: '${item.checked ? 'Uncheck' : 'Check off'} ${item.name}',
+      child: InkWell(
+        onTap: () => store.toggleGroceryItem(item.id),
+        borderRadius: BorderRadius.circular(13),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          constraints: const BoxConstraints(minHeight: 64),
+          margin: const EdgeInsets.only(bottom: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: item.checked ? Colors.transparent : const Color(0xFF202622),
+            border: Border.all(
+              color: item.checked ? _border : const Color(0xFF343D37),
+            ),
+            borderRadius: BorderRadius.circular(13),
           ),
-          const SizedBox(width: 4),
-          Text(item.emoji),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: item.checked ? _herb : Colors.transparent,
+                  border: Border.all(
+                    color: item.checked ? _herb : _muted,
+                    width: 2,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: item.checked
+                    ? const Icon(
+                        Icons.check,
+                        size: 20,
+                        color: Color(0xFF102016),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 11),
+              Text(item.emoji),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        color: item.checked ? _faint : _ink,
+                        decoration: item.checked
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    if (aisle.isNotEmpty || usedBy.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          if (aisle.isNotEmpty) aisle,
+                          if (usedBy.isNotEmpty) 'For ${usedBy.join(' + ')}',
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _faint, fontSize: 10.5),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (amount.isNotEmpty)
                 Text(
-                  item.name,
-                  style: TextStyle(
-                    color: item.checked ? _faint : _ink,
-                    decoration: item.checked
-                        ? TextDecoration.lineThrough
-                        : null,
+                  amount,
+                  style: const TextStyle(
+                    color: _faint,
+                    fontFamily: 'monospace',
+                    fontSize: 11,
                   ),
                 ),
-                if (usedBy.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'For ${usedBy.join(' + ')}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _faint, fontSize: 10.5),
-                  ),
-                ],
-              ],
-            ),
+              if (!item.fromPlan)
+                IconButton(
+                  tooltip: 'Remove ${item.name}',
+                  onPressed: () => store.deleteGroceryItem(item.id),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.close, size: 16),
+                  color: _faint,
+                ),
+            ],
           ),
-          if (amount.isNotEmpty)
-            Text(
-              amount,
-              style: const TextStyle(
-                color: _faint,
-                fontFamily: 'monospace',
-                fontSize: 11,
-              ),
-            ),
-          if (!item.fromPlan)
-            IconButton(
-              tooltip: 'Remove ${item.name}',
-              onPressed: () => store.deleteGroceryItem(item.id),
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close, size: 16),
-              color: _faint,
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -6526,45 +6720,83 @@ Future<void> _showManualGroceryEditor(
 ) async {
   final name = TextEditingController();
   final quantity = TextEditingController();
+  var grocerySection = GrocerySection.pantryOther;
+  var sectionWasSelected = false;
   final submitted = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Add grocery item'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Item'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: quantity,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                hintText: 'Optional, e.g. 2 bottles',
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Add grocery item'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                autofocus: true,
+                onChanged: (value) {
+                  if (!sectionWasSelected) {
+                    setDialogState(
+                      () => grocerySection = inferGrocerySection(value),
+                    );
+                  }
+                },
+                decoration: const InputDecoration(labelText: 'Item'),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: quantity,
+                decoration: const InputDecoration(
+                  labelText: 'Quantity',
+                  hintText: 'Optional, e.g. 2 bottles',
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<GrocerySection>(
+                key: ValueKey(grocerySection),
+                initialValue: grocerySection,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Store section'),
+                items: GrocerySection.values
+                    .map(
+                      (section) => DropdownMenuItem(
+                        value: section,
+                        child: Text(
+                          '${section.emoji} ${section.label}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => setDialogState(() {
+                  grocerySection = value!;
+                  sectionWasSelected = true;
+                }),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(context, name.text.trim().isNotEmpty),
+            child: const Text('Add item'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, name.text.trim().isNotEmpty),
-          child: const Text('Add item'),
-        ),
-      ],
     ),
   );
   if (submitted == true) {
-    store.addManualGroceryItem(name.text, quantityLabel: quantity.text);
+    store.addManualGroceryItem(
+      name.text,
+      quantityLabel: quantity.text,
+      grocerySection: grocerySection,
+    );
   }
   name.dispose();
   quantity.dispose();

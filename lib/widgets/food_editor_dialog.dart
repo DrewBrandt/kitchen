@@ -44,10 +44,17 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
   late final nutritionSource = TextEditingController(
     text: widget.existing?.nutrition?.source ?? '',
   );
+  late final storeAisle = TextEditingController(
+    text: widget.existing?.storeAisle ?? '',
+  );
   late bool nutritionEstimated = widget.existing?.nutrition?.estimated ?? false;
   late QuantityMode mode = widget.existing?.mode ?? QuantityMode.counted;
   late StorageLocation location =
       widget.existing?.defaultLocation ?? StorageLocation.pantry;
+  late GrocerySection grocerySection =
+      widget.existing?.grocerySection ?? GrocerySection.pantryOther;
+  late IngredientRole ingredientRole =
+      widget.existing?.ingredientRole ?? IngredientRole.supporting;
   String? error;
 
   static String _conversionText(FoodDefinition? food) {
@@ -82,6 +89,7 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
     displayUnit.dispose();
     nutrition.dispose();
     nutritionSource.dispose();
+    storeAisle.dispose();
     super.dispose();
   }
 
@@ -128,6 +136,61 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
                     'One reviewed generic or former name per line. Product and brand names belong on products.',
                 alignLabelWithHint: true,
               ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<GrocerySection>(
+              initialValue: grocerySection,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Waugh Chapel Safeway section',
+                helperText:
+                    'Sections follow your usual path through the store.',
+              ),
+              items: GrocerySection.values
+                  .map(
+                    (section) => DropdownMenuItem(
+                      value: section,
+                      child: Text(
+                        '${section.emoji} ${section.label}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => grocerySection = value!),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<IngredientRole>(
+                    initialValue: ingredientRole,
+                    decoration: const InputDecoration(
+                      labelText: 'Meal-planning role',
+                    ),
+                    items: IngredientRole.values
+                        .map(
+                          (role) => DropdownMenuItem(
+                            value: role,
+                            child: Text(role.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => ingredientRole = value!),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: storeAisle,
+                    decoration: const InputDecoration(
+                      labelText: 'Aisle / area (optional)',
+                      hintText: 'e.g. Aisle 7, left side',
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
@@ -336,6 +399,9 @@ class _FoodEditorDialogState extends State<_FoodEditorDialog> {
               .where((value) => value.isNotEmpty)
               .toSet()
               .toList(),
+          grocerySection: grocerySection,
+          ingredientRole: ingredientRole,
+          storeAisle: storeAisle.text.trim(),
         ),
       );
     } on FormatException catch (exception) {

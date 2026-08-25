@@ -533,6 +533,17 @@ void main() {
     expect(store.groceryItems, isEmpty);
   });
 
+  test('manual groceries infer and retain their Safeway section', () {
+    final store = PantryStore.demo();
+
+    store.addManualGroceryItem('Dog treats');
+
+    expect(
+      store.groceryItems.single.grocerySection,
+      GrocerySection.householdPets,
+    );
+  });
+
   test('product lots contribute to their canonical recipe ingredient', () {
     final store = PantryStore.demo();
     final rice = store.foods.firstWhere((food) => food.id == 'flour');

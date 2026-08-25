@@ -523,6 +523,9 @@ class FirestorePantry {
     'quantity_mode': food.mode.name,
     'base_unit': food.baseUnit,
     'default_location': food.defaultLocation.name,
+    'grocery_section': food.grocerySection.name,
+    'ingredient_role': food.ingredientRole.name,
+    'store_aisle': food.storeAisle,
     'emoji': food.emoji,
     'conversions': food.conversions
         .map(
@@ -823,6 +826,7 @@ class FirestorePantry {
     'first_needed_date': item.firstNeededDate == null
         ? null
         : Timestamp.fromDate(item.firstNeededDate!),
+    'grocery_section': item.grocerySection.name,
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -896,6 +900,10 @@ class FirestorePantry {
       quantityBase: (data['quantity_base'] as num?)?.toDouble(),
       quantityLabel: data['quantity_label'] as String? ?? '',
       firstNeededDate: (data['first_needed_date'] as Timestamp?)?.toDate(),
+      grocerySection: GrocerySection.values.byName(
+        data['grocery_section'] as String? ??
+            inferGrocerySection(data['name'] as String).name,
+      ),
     );
   }
 
@@ -969,6 +977,11 @@ class FirestorePantry {
   FoodDefinition _foodFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
     final nutritionData = data['nutrition'] as Map<String, dynamic>?;
+    final aliases = List<String>.from(
+      data['aliases'] as List<dynamic>? ?? const [],
+    );
+    final descriptor = '${data['name']} ${aliases.join(' ')}';
+    final inferredSection = inferGrocerySection(descriptor);
     return FoodDefinition(
       id: doc.id,
       name: data['name'] as String,
@@ -977,6 +990,14 @@ class FirestorePantry {
       defaultLocation: StorageLocation.values.byName(
         data['default_location'] as String,
       ),
+      grocerySection: GrocerySection.values.byName(
+        data['grocery_section'] as String? ?? inferredSection.name,
+      ),
+      ingredientRole: IngredientRole.values.byName(
+        data['ingredient_role'] as String? ??
+            inferIngredientRole(descriptor, inferredSection).name,
+      ),
+      storeAisle: data['store_aisle'] as String? ?? '',
       emoji: data['emoji'] as String? ?? '🥫',
       conversions: (data['conversions'] as List<dynamic>).map((value) {
         final item = value as Map<String, dynamic>;
@@ -996,7 +1017,7 @@ class FirestorePantry {
               source: nutritionData['source'] as String? ?? '',
               estimated: nutritionData['estimated'] as bool? ?? false,
             ),
-      aliases: List<String>.from(data['aliases'] as List<dynamic>? ?? const []),
+      aliases: aliases,
     );
   }
 
