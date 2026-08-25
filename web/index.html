@@ -33,6 +33,43 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Older Flutter builds registered an offline-first service worker. Retire
+    // it before loading the current app so a Firefox home-screen shortcut
+    // cannot keep serving an obsolete main.dart.js from its private cache.
+    (async () => {
+      const marker = '_pantry_sw_retired';
+      const currentUrl = new URL(location.href);
+      const alreadyRetired = currentUrl.searchParams.get(marker) === '1';
+      if (alreadyRetired) {
+        currentUrl.searchParams.delete(marker);
+        history.replaceState(null, '', currentUrl);
+      }
+
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((item) => item.unregister()));
+          if (
+            registrations.length > 0 &&
+            navigator.serviceWorker.controller &&
+            !alreadyRetired
+          ) {
+            const reloadUrl = new URL(location.href);
+            reloadUrl.searchParams.set(marker, '1');
+            location.replace(reloadUrl);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('Unable to retire the legacy service worker.', error);
+      }
+
+      const bootstrap = document.createElement('script');
+      bootstrap.src = 'flutter_bootstrap.js';
+      bootstrap.async = true;
+      document.body.appendChild(bootstrap);
+    })();
+  </script>
 </body>
 </html>
