@@ -125,6 +125,33 @@ void main() {
     expect(() => store.saveFood(food), throwsA(isA<ArgumentError>()));
   });
 
+  test('product lookup treats UPC-A and EAN-13 barcodes as equivalent', () {
+    final store = PantryStore.demo();
+    final food = store.foods.first;
+    const upc = '034000470693';
+    store.saveProduct(
+      ProductDefinition(
+        id: 'barcode-product',
+        foodId: food.id,
+        name: 'Barcode product',
+        barcode: upc,
+      ),
+    );
+
+    expect(store.productForBarcode('0034000470693')?.id, 'barcode-product');
+    expect(
+      () => store.saveProduct(
+        ProductDefinition(
+          id: 'duplicate-barcode-product',
+          foodId: food.id,
+          name: 'Duplicate barcode product',
+          barcode: '0034000470693',
+        ),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('nutrition scales with food units and recipe servings', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final eggs = store

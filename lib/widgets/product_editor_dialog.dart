@@ -2,12 +2,55 @@ import 'package:flutter/material.dart';
 
 import '../data/pantry_store.dart';
 import '../models/pantry_models.dart';
+import '../services/barcode_lookup_service.dart';
 
-Future<void> showProductEditor(
+class ProductEditorSeed {
+  const ProductEditorSeed({
+    required this.barcode,
+    this.name = '',
+    this.brand = '',
+    this.source = '',
+    this.packageAmount,
+    this.packageUnit,
+    this.quantityLabel = '',
+  });
+
+  factory ProductEditorSeed.fromSuggestion(BarcodeProductSuggestion value) =>
+      ProductEditorSeed(
+        barcode: value.barcode,
+        name: value.name,
+        brand: value.brand,
+        source: value.source,
+        packageAmount: value.packageAmount,
+        packageUnit: value.packageUnit,
+        quantityLabel: value.quantityLabel,
+      );
+
+  final String barcode;
+  final String name;
+  final String brand;
+  final String source;
+  final double? packageAmount;
+  final String? packageUnit;
+  final String quantityLabel;
+
+  BarcodeProductSuggestion get suggestion => BarcodeProductSuggestion(
+    barcode: barcode,
+    name: name,
+    brand: brand,
+    source: source,
+    packageAmount: packageAmount,
+    packageUnit: packageUnit,
+    quantityLabel: quantityLabel,
+  );
+}
+
+Future<ProductDefinition?> showProductEditor(
   BuildContext context,
   PantryStore store, {
   ProductDefinition? existing,
   FoodDefinition? initialFood,
+  ProductEditorSeed? seed,
 }) async {
   final result = await showDialog<ProductDefinition>(
     context: context,
@@ -15,9 +58,11 @@ Future<void> showProductEditor(
       store: store,
       existing: existing,
       initialFood: initialFood,
+      seed: seed,
     ),
   );
   if (result != null) store.saveProduct(result);
+  return result;
 }
 
 class _ProductEditorDialog extends StatefulWidget {
@@ -25,11 +70,13 @@ class _ProductEditorDialog extends StatefulWidget {
     required this.store,
     this.existing,
     this.initialFood,
+    this.seed,
   });
 
   final PantryStore store;
   final ProductDefinition? existing;
   final FoodDefinition? initialFood;
+  final ProductEditorSeed? seed;
 
   @override
   State<_ProductEditorDialog> createState() => _ProductEditorDialogState();
@@ -40,21 +87,19 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
       widget.existing?.foodId ??
       widget.initialFood?.id ??
       widget.store.foods.first.id;
-  late final name = TextEditingController(text: widget.existing?.name ?? '');
-  late final brand = TextEditingController(text: widget.existing?.brand ?? '');
+  late final name = TextEditingController(
+    text: widget.existing?.name ?? widget.seed?.name ?? '',
+  );
+  late final brand = TextEditingController(
+    text: widget.existing?.brand ?? widget.seed?.brand ?? '',
+  );
   late final barcode = TextEditingController(
-    text: widget.existing?.barcode ?? '',
+    text: widget.existing?.barcode ?? widget.seed?.barcode ?? '',
   );
   late final aliases = TextEditingController(
     text: widget.existing?.aliases.join('\n') ?? '',
   );
-  late final conversions = TextEditingController(
-    text:
-        widget.existing?.conversions
-            .map((item) => '${item.unit}, ${item.symbol}, ${item.baseAmount}')
-            .join('\n') ??
-        '',
-  );
+  late final conversions = TextEditingController(text: _initialConversions());
   String? error;
 
   @override
@@ -89,8 +134,23 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
                     ),
                   )
                   .toList(),
-              onChanged: (value) => setState(() => foodId = value!),
+              onChanged: (value) => setState(() {
+                foodId = value!;
+                if (widget.existing == null && widget.seed != null) {
+                  conversions.text = _suggestedConversion();
+                }
+              }),
             ),
+            if (widget.seed?.source.isNotEmpty ?? false) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Suggested from ${widget.seed!.source}. Review the ingredient, package size, and product details before saving.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: name,
@@ -217,5 +277,25 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
     } on FormatException catch (exception) {
       setState(() => error = exception.message);
     }
+  }
+
+  String _initialConversions() {
+    final existing = widget.existing;
+    if (existing != null) {
+      return existing.conversions
+          .map((item) => '${item.unit}, ${item.symbol}, ${item.baseAmount}')
+          .join('\n');
+    }
+    return _suggestedConversion();
+  }
+
+  String _suggestedConversion() {
+    final seed = widget.seed;
+    if (seed == null) return '';
+    final conversion = seed.suggestion.packageConversionFor(
+      widget.store.food(foodId),
+    );
+    if (conversion == null) return '';
+    return '${conversion.unit}, ${conversion.symbol}, ${conversion.baseAmount}';
   }
 }

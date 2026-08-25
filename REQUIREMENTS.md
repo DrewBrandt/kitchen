@@ -109,4 +109,5 @@ The eventual Firestore implementation must perform validation, deductions, and h
 2. Replace the Flutter in-memory store with Firestore repositories.
 3. Add API consumption-history endpoints so conversational quick-use and cooking can be recorded remotely.
 4. Add shopping-list generation and recipe suggestions.
-5. Add nutrition, barcode lookup, receipt capture, and opened-item shelf life.
+5. Add receipt capture and opened-item shelf life. Nutrition and reviewed
+   barcode lookup are implemented.

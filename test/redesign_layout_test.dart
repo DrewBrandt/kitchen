@@ -49,6 +49,18 @@ void main() {
     }
   });
 
+  testWidgets('inventory exposes barcode scanning as a primary action', (
+    tester,
+  ) async {
+    await pumpPantry(tester, const Size(1440, 980));
+
+    await tester.tap(find.text('Inventory').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan barcode'), findsOneWidget);
+    expect(find.text('Add one lot'), findsOneWidget);
+  });
+
   testWidgets('food log graph identifies each food contribution', (
     tester,
   ) async {

@@ -20,6 +20,7 @@ The current vertical slice includes:
 - food-definition and conversion editing
 - recipe creation and editing
 - reviewed bulk grocery import
+- on-device UPC/EAN scanning with reviewed Open Food Facts suggestions
 - authenticated Firebase API scaffold for Codex-driven updates
 - Google sign-in with a Firestore access allowlist
 - automatic GitHub Pages deployment
@@ -110,6 +111,18 @@ pack:
 
 The bearer credential stays out of Git and is pasted only into the private GPT
 Action authentication field.
+
+## Barcode scanning
+
+From **Inventory**, choose **Scan barcode** on a phone or computer with a
+camera. UPC and EAN recognition runs on the device. A saved barcode opens the
+normal put-away dialog immediately. An unknown barcode is looked up once in
+Open Food Facts and its product name, brand, and compatible package quantity
+are presented for review before anything is saved.
+
+Open Food Facts data is community-contributed and is used under its open-data
+license; scanned suggestions should be reviewed against the package. A barcode
+identifies a product, but it does not contain the package's best-by date.
 
 ## Verify
 
