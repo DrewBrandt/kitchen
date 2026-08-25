@@ -23,6 +23,9 @@ class _CalendarSyncCardState extends State<CalendarSyncCard> {
   static final _connectEndpoint = Uri.parse(
     'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/calendarAuth?mode=start',
   );
+  static final _calendarsEndpoint = Uri.parse(
+    'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/calendarAuth?mode=calendars',
+  );
 
   bool working = false;
   String? localError;
@@ -72,6 +75,90 @@ class _CalendarSyncCardState extends State<CalendarSyncCard> {
     await batch.commit();
   });
 
+  Future<void> _showReadableCalendars() => _run(() async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null) throw StateError('Sign in to choose calendars.');
+    final headers = {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+    final response = await http.get(_calendarsEndpoint, headers: headers);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 200) {
+      throw StateError(
+        '${body['error'] ?? 'Could not read calendars.'} Reconnect Google Calendar if access has changed.',
+      );
+    }
+    final calendars = (body['calendars'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    final selected = calendars
+        .where((item) => item['selected'] == true)
+        .map((item) => item['id'] as String)
+        .toSet();
+    if (!mounted) return;
+    final saved = await showDialog<Set<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Calendars Pantry can read'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Selected calendars are available to Pantry GPT for schedule-aware meal planning. Pantry cannot edit them.',
+                  ),
+                  const SizedBox(height: 12),
+                  for (final calendar in calendars)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: selected.contains(calendar['id']),
+                      title: Text(calendar['name'] as String? ?? 'Calendar'),
+                      subtitle: calendar['primary'] == true
+                          ? const Text('Primary calendar')
+                          : null,
+                      onChanged: (checked) => setDialogState(() {
+                        final id = calendar['id'] as String;
+                        checked == true
+                            ? selected.add(id)
+                            : selected.remove(id);
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, selected),
+              child: const Text('Save calendars'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == null) return;
+    final saveResponse = await http.post(
+      _calendarsEndpoint,
+      headers: headers,
+      body: jsonEncode({'calendarIds': saved.toList()}),
+    );
+    if (saveResponse.statusCode != 200) {
+      final saveBody = jsonDecode(saveResponse.body) as Map<String, dynamic>;
+      throw StateError(
+        saveBody['error'] as String? ?? 'Could not save calendars.',
+      );
+    }
+  });
+
   Future<void> _run(Future<void> Function() action) async {
     if (working) return;
     setState(() {
@@ -100,6 +187,7 @@ class _CalendarSyncCardState extends State<CalendarSyncCard> {
       final data = snapshot.data?.data() ?? const <String, dynamic>{};
       final connected = (data['calendar_id'] as String?)?.isNotEmpty ?? false;
       final enabled = data['enabled'] as bool? ?? false;
+      final agendaAccess = data['agenda_access'] as bool? ?? false;
       final serverError = data['last_error'] as String?;
       final lastSuccess = (data['last_success_at'] as Timestamp?)?.toDate();
       return Card(
@@ -162,6 +250,13 @@ class _CalendarSyncCardState extends State<CalendarSyncCard> {
                   ),
                 ),
               ],
+              if (connected && !agendaAccess) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'Reconnect once to let Pantry read your selected calendars for schedule-aware planning.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
               const SizedBox(height: 14),
               Wrap(
                 spacing: 8,
@@ -180,6 +275,13 @@ class _CalendarSyncCardState extends State<CalendarSyncCard> {
                     ),
                   ),
                   if (connected) ...[
+                    OutlinedButton.icon(
+                      onPressed: working || !agendaAccess
+                          ? null
+                          : _showReadableCalendars,
+                      icon: const Icon(Icons.event_available_outlined),
+                      label: const Text('Calendars to read'),
+                    ),
                     OutlinedButton.icon(
                       onPressed: working
                           ? null

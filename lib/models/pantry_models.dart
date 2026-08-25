@@ -275,6 +275,57 @@ class FoodPreferences {
       planningNotes.trim().isEmpty;
 }
 
+class DailyRoutine {
+  const DailyRoutine({required this.wakeTime, required this.bedTime});
+
+  final String wakeTime;
+  final String bedTime;
+}
+
+class PersonalRoutine {
+  const PersonalRoutine({
+    this.timeZone = 'America/New_York',
+    this.days = defaultDays,
+    this.dinnerStart = '18:00',
+    this.dinnerEnd = '20:30',
+    this.commuteMinutes = 0,
+    this.preparationBufferMinutes = 30,
+    this.defaultThawHours = 24,
+    this.notes = '',
+  });
+
+  static const dayNames = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+  ];
+
+  static const defaultDays = <String, DailyRoutine>{
+    'monday': DailyRoutine(wakeTime: '07:00', bedTime: '23:00'),
+    'tuesday': DailyRoutine(wakeTime: '07:00', bedTime: '23:00'),
+    'wednesday': DailyRoutine(wakeTime: '07:00', bedTime: '23:00'),
+    'thursday': DailyRoutine(wakeTime: '07:00', bedTime: '23:00'),
+    'friday': DailyRoutine(wakeTime: '07:00', bedTime: '23:30'),
+    'saturday': DailyRoutine(wakeTime: '08:00', bedTime: '23:30'),
+    'sunday': DailyRoutine(wakeTime: '08:00', bedTime: '23:00'),
+  };
+
+  static const defaults = PersonalRoutine();
+
+  final String timeZone;
+  final Map<String, DailyRoutine> days;
+  final String dinnerStart;
+  final String dinnerEnd;
+  final int commuteMinutes;
+  final int preparationBufferMinutes;
+  final int defaultThawHours;
+  final String notes;
+}
+
 class ExternalFood {
   const ExternalFood({
     required this.id,
@@ -656,6 +707,22 @@ class PreparedBatch {
   );
 }
 
+class PlannedPreparationTask {
+  const PlannedPreparationTask({
+    required this.id,
+    required this.kind,
+    required this.label,
+    this.leadHours = 24,
+    this.durationMinutes = 5,
+  });
+
+  final String id;
+  final String kind;
+  final String label;
+  final double leadHours;
+  final int durationMinutes;
+}
+
 class PlannedMeal {
   const PlannedMeal({
     required this.id,
@@ -670,6 +737,8 @@ class PlannedMeal {
     this.leftoverOfGroupId,
     this.intent = PlannedMealIntent.prepare,
     this.note = '',
+    this.scheduledTime,
+    this.preparationTasks = const [],
     this.completedAt,
   });
 
@@ -690,6 +759,8 @@ class PlannedMeal {
   final String emoji;
   final double servings;
   final String note;
+  final String? scheduledTime;
+  final List<PlannedPreparationTask> preparationTasks;
   final DateTime? completedAt;
 
   PlannedMeal copyWith({
@@ -704,6 +775,9 @@ class PlannedMeal {
     String? emoji,
     double? servings,
     String? note,
+    String? scheduledTime,
+    bool clearScheduledTime = false,
+    List<PlannedPreparationTask>? preparationTasks,
     DateTime? completedAt,
     bool clearCompletedAt = false,
   }) => PlannedMeal(
@@ -719,6 +793,10 @@ class PlannedMeal {
     emoji: emoji ?? this.emoji,
     servings: servings ?? this.servings,
     note: note ?? this.note,
+    scheduledTime: clearScheduledTime
+        ? null
+        : scheduledTime ?? this.scheduledTime,
+    preparationTasks: preparationTasks ?? this.preparationTasks,
     completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
   );
 }

@@ -82,6 +82,43 @@ test("derives explicit preparation rules for recipes and combined meals", () => 
   assert.equal(events[0].extendedProperties.private.pantryManaged, "true");
 });
 
+test("derives plan-specific prep tasks from an exact meal time", () => {
+  const settings = parseCalendarSettings({
+    enabled: true,
+    calendar_id: "calendar-id",
+    time_zone: "America/New_York",
+  });
+  const events = deriveDesiredCalendarEvents({
+    settings,
+    generation: "generation-task",
+    meals: [{
+      id: "late-dinner",
+      data: {
+        date: "2026-09-03",
+        slot: "dinner",
+        scheduled_time: "20:15",
+        source: "custom",
+        name: "Dinner after class",
+        preparation_tasks: [{
+          id: "thaw-chicken",
+          kind: "thaw",
+          label: "Move chicken to the refrigerator",
+          lead_hours: 24,
+          duration_minutes: 5,
+        }],
+      },
+    }],
+    groceries: [],
+    recipes: new Map(),
+    mealTemplates: new Map(),
+  });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].reminderId, "task:late-dinner:thaw-chicken");
+  assert.equal(events[0].start.dateTime, "2026-09-03T00:15:00.000Z");
+  assert.equal(events[0].end.dateTime, "2026-09-03T00:20:00.000Z");
+  assert.match(events[0].description, /20:15/);
+});
+
 test("disabled settings derive no desired events", () => {
   const events = deriveDesiredCalendarEvents({
     settings: parseCalendarSettings({ enabled: false, calendar_id: "calendar-id" }),

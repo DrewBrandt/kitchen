@@ -145,6 +145,51 @@ paths:
       responses:
         '200': {$ref: '#/components/responses/Success'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /v1/calendar/agenda:
+    get:
+      operationId: getCalendarAgenda
+      summary: Read events from the calendars selected for schedule-aware planning
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema: {type: string, format: date-time}
+        - in: query
+          name: to
+          required: true
+          schema: {type: string, format: date-time}
+          description: The range may not exceed 45 days.
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /v1/calendar/calendars:
+    get:
+      operationId: getReadableCalendars
+      summary: List Google calendars and which ones are selected for Pantry GPT
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: selectReadableCalendars
+      summary: Choose the Google calendars Pantry GPT may read
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [calendarIds]
+              properties:
+                calendarIds:
+                  type: array
+                  items: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
   /v1/calendar/sync:
     post:
       operationId: requestCalendarSync
@@ -682,6 +727,27 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/InvalidRequest'
+  /v1/routine:
+    get:
+      operationId: getPersonalRoutine
+      summary: Read wake, sleep, dinner, travel, and preparation preferences
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: savePersonalRoutine
+      summary: Replace the private routine and availability profile
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalRoutine'
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
 components:
   securitySchemes:
     bearerAuth:
@@ -1053,6 +1119,27 @@ components:
         leadHours:
           type: number
           minimum: 0.000001
+    PlannedPreparationTask:
+      type: object
+      additionalProperties: false
+      required: [kind, label]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          description: Use thaw for moving frozen food to the refrigerator.
+        label:
+          type: string
+        leadHours:
+          type: number
+          minimum: 0.000001
+          description: Defaults to 24 when kind is thaw.
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          default: 5
     Recipe:
       type: object
       additionalProperties: false
@@ -1132,6 +1219,66 @@ components:
           type: number
           minimum: 0.000001
         note:
+          type: string
+        scheduledTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: Exact local meal time; overrides the configured slot time.
+        preparationTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlannedPreparationTask'
+    RoutineDay:
+      type: object
+      additionalProperties: false
+      required: [wakeTime, bedTime]
+      properties:
+        wakeTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        bedTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+    PersonalRoutine:
+      type: object
+      additionalProperties: false
+      required: [timeZone, days, dinnerWindow, commuteMinutes, preparationBufferMinutes]
+      properties:
+        timeZone:
+          type: string
+        days:
+          type: object
+          additionalProperties: false
+          required: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+          properties:
+            monday: {$ref: '#/components/schemas/RoutineDay'}
+            tuesday: {$ref: '#/components/schemas/RoutineDay'}
+            wednesday: {$ref: '#/components/schemas/RoutineDay'}
+            thursday: {$ref: '#/components/schemas/RoutineDay'}
+            friday: {$ref: '#/components/schemas/RoutineDay'}
+            saturday: {$ref: '#/components/schemas/RoutineDay'}
+            sunday: {$ref: '#/components/schemas/RoutineDay'}
+        dinnerWindow:
+          type: object
+          additionalProperties: false
+          required: [start, end]
+          properties:
+            start: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
+            end: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
+        commuteMinutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+        preparationBufferMinutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+        defaultThawHours:
+          type: number
+          minimum: 0.000001
+          maximum: 168
+          default: 24
+        notes:
           type: string
     WeeklyPlan:
       type: object

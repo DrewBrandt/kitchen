@@ -36,3 +36,7 @@ These ideas are recorded for future prioritization. They are not committed deliv
 ## Active promotion
 
 Google Calendar synchronization has been promoted from this backlog into active implementation. Its design and delivery sequence live in `docs/GOOGLE_CALENDAR_INTEGRATION.md`.
+
+The first schedule-aware assistant slice is also active: a private per-day
+routine, selected-calendar read access, exact meal times, and plan-specific prep
+tasks. More advanced automatic rescheduling remains potentially planned.
