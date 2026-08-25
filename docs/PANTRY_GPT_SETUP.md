@@ -17,6 +17,9 @@ Instructions field. You may also upload `docs/API.md` as Knowledge for additiona
 API examples, but do not upload or paste the bearer token into Knowledge,
 Instructions, a conversation, or GitHub.
 
+Keep the Instructions file at or below the Custom GPT editor's 8,000-character
+limit. The backend test suite enforces this limit.
+
 Suggested conversation starters:
 
 - `Plan next week using what I have, while avoiding meals I ate recently.`
