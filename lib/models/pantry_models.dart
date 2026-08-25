@@ -10,6 +10,18 @@ enum PlannedMealSource { recipe, meal, external, custom }
 
 enum PreparedSource { recipe, external, manual }
 
+String normalizeBarcode(String value) {
+  final trimmed = value.trim();
+  if (!RegExp(r'^\d+$').hasMatch(trimmed)) return trimmed;
+  final significant = trimmed.replaceFirst(RegExp(r'^0+'), '');
+  if (significant.isEmpty) return trimmed;
+  if (significant.length <= 7) return significant.padLeft(8, '0');
+  if (significant.length >= 9 && significant.length <= 12) {
+    return significant.padLeft(13, '0');
+  }
+  return trimmed;
+}
+
 class NutritionTotals {
   const NutritionTotals({
     this.calories = 0,
