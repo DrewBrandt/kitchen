@@ -134,4 +134,6 @@ flutter test
 ```
 
 See `REQUIREMENTS.md` for the canonical model and Firebase migration plan.
+See `docs/FEATURE_SPECIFICATION.md` for the UI-agnostic product capabilities,
+data model, business rules, and Custom GPT operating model.
 See `docs/API.md` for the Codex integration contract and deployment authentication model.
