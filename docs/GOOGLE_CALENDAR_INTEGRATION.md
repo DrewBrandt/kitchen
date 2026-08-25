@@ -7,12 +7,14 @@ Implemented in the application and Cloud Functions:
 - chronological `first_needed_date` grocery derivation
 - atomic planning-sync markers from Flutter and Pantry GPT writes
 - disabled-by-default settings and connection controls in the Planning page
-- owner-authenticated OAuth connection using the narrow
-  `calendar.app.created` scope
+- owner-authenticated OAuth connection with write access confined to the
+  app-created Pantry Planner calendar and read-only access to selected calendars
 - encrypted server-only refresh-token storage
 - creation and reuse of the `Pantry Planner` secondary calendar
 - idempotent grocery and explicit recipe-preparation event reconciliation
 - retry handling, sanitized status, manual sync, and managed-event cleanup
+- bounded read-only agendas for schedule-aware Pantry GPT planning
+- exact meal times and plan-specific preparation tasks
 
 Production activation requires the one-time Google OAuth setup below. Live
 end-to-end verification must use a test Google Calendar after those credentials
@@ -39,8 +41,10 @@ are configured.
    `CALENDAR_TOKEN_KEY` must be a randomly generated value of at least 20
    characters. It encrypts the refresh token before the token is stored in the
    server-only `_private_calendar_credentials` collection.
-5. Deploy Functions, Firestore rules/indexes, and Hosting. Sign into Pantry,
-   open Planning, and choose **Connect Google Calendar**.
+5. Add `calendar.app.created`, `calendar.calendarlist.readonly`, and
+   `calendar.events.readonly` to Google Auth Platform Data Access.
+6. Deploy Functions, Firestore rules/indexes, and Hosting. Sign into Pantry,
+   open Planning, choose **Reconnect**, then select calendars to read.
 
 ## Outcome
 
@@ -66,10 +70,9 @@ added later without changing the synchronization design.
 ## Recommended Google design
 
 - Create a secondary calendar named `Pantry Planner`.
-- Request only
-  `https://www.googleapis.com/auth/calendar.app.created`. This scope permits the
-  app to create a secondary calendar and manage events on calendars it created,
-  without granting access to every event on the user's primary calendar.
+- Use `calendar.app.created` for writes, `calendar.calendarlist.readonly` to
+  present calendar choices, and `calendar.events.readonly` for selected-calendar
+  agendas. Never use read-only access to modify source calendars.
 - Use the OAuth 2.0 web-server flow with offline access. Calendar synchronization
   can then run after a Pantry GPT plan update when the Flutter client is closed.
 - Keep the OAuth client secret and refresh token on the server. Never return
@@ -160,8 +163,9 @@ grocery event.
 
 ## Preparation and thawing model
 
-Do not guess thaw duration solely from a recipe name. Add explicit reusable
-preparation rules to recipes or foods:
+Use a simple 24-hour default for thawing. Reusable recipe rules remain supported,
+but when thawing depends on the current freezer inventory the GPT should add a
+plan-specific task instead:
 
 ```json
 {
@@ -172,7 +176,8 @@ preparation rules to recipes or foods:
 }
 ```
 
-The planner combines a rule with the planned meal's date and slot time. Slot
+The planner combines a rule or task with the planned meal's date and exact time.
+Slot
 times are preferences, for example breakfast 08:00, lunch 12:00, dinner 18:00,
 and snack 15:00. Users can override or disable a generated preparation reminder
 on a particular planned meal.

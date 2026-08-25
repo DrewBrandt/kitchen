@@ -23,6 +23,7 @@ class PantryStore extends ChangeNotifier {
     _recipeFeedback = [];
     _nutritionTargets = NutritionTargets.defaults;
     _foodPreferences = FoodPreferences.empty;
+    _personalRoutine = PersonalRoutine.defaults;
     _externalFoods = [];
     _plannedMeals = [];
     _groceryItems = [];
@@ -43,6 +44,7 @@ class PantryStore extends ChangeNotifier {
     _recipeFeedback = data.recipeFeedback;
     _nutritionTargets = data.nutritionTargets;
     _foodPreferences = data.foodPreferences;
+    _personalRoutine = data.personalRoutine;
     _externalFoods = data.externalFoods;
     _plannedMeals = data.plannedMeals;
     _groceryItems = data.groceryItems;
@@ -73,6 +75,7 @@ class PantryStore extends ChangeNotifier {
         history: seeded.history,
         nutritionTargets: seeded.nutritionTargets,
         foodPreferences: seeded.foodPreferences,
+        personalRoutine: seeded.personalRoutine,
         externalFoods: seeded.externalFoods,
         plannedMeals: seeded.plannedMeals,
         groceryItems: seeded.groceryItems,
@@ -96,6 +99,7 @@ class PantryStore extends ChangeNotifier {
   late List<RecipeMakeFeedback> _recipeFeedback;
   late NutritionTargets _nutritionTargets;
   late FoodPreferences _foodPreferences;
+  late PersonalRoutine _personalRoutine;
   late List<ExternalFood> _externalFoods;
   late List<PlannedMeal> _plannedMeals;
   late List<GroceryListItem> _groceryItems;
@@ -121,6 +125,7 @@ class PantryStore extends ChangeNotifier {
   List<ConsumptionEvent> get history => List.unmodifiable(_history.reversed);
   NutritionTargets get nutritionTargets => _nutritionTargets;
   FoodPreferences get foodPreferences => _foodPreferences;
+  PersonalRoutine get personalRoutine => _personalRoutine;
   List<ExternalFood> get externalFoods => List.unmodifiable(_externalFoods);
   List<PlannedMeal> get plannedMeals => List.unmodifiable(
     [..._plannedMeals]..sort((a, b) {
@@ -157,6 +162,7 @@ class PantryStore extends ChangeNotifier {
           ..addAll(data.history);
         _nutritionTargets = data.nutritionTargets;
         _foodPreferences = data.foodPreferences;
+        _personalRoutine = data.personalRoutine;
         _externalFoods = data.externalFoods;
         _plannedMeals = data.plannedMeals;
         _groceryItems = data.groceryItems;
@@ -1022,6 +1028,12 @@ class PantryStore extends ChangeNotifier {
       planningNotes: preferences.planningNotes.trim(),
     );
     _queue(_cloud?.saveFoodPreferences(_foodPreferences));
+    notifyListeners();
+  }
+
+  void savePersonalRoutine(PersonalRoutine routine) {
+    _personalRoutine = routine;
+    _queue(_cloud?.savePersonalRoutine(routine));
     notifyListeners();
   }
 

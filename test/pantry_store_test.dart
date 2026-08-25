@@ -308,6 +308,29 @@ void main() {
     expect(store.foodPreferences.planningNotes, 'Prefer easy weeknights.');
   });
 
+  test('personal routine retains per-day sleep and planning buffers', () {
+    final store = PantryStore.demo();
+    final routine = PersonalRoutine(
+      days: {
+        ...PersonalRoutine.defaultDays,
+        'monday': DailyRoutine(wakeTime: '06:30', bedTime: '22:45'),
+      },
+      dinnerStart: '18:30',
+      dinnerEnd: '21:00',
+      commuteMinutes: 35,
+      preparationBufferMinutes: 45,
+      defaultThawHours: 24,
+      notes: 'School schedule varies.',
+    );
+
+    store.savePersonalRoutine(routine);
+
+    expect(store.personalRoutine.days['monday']!.wakeTime, '06:30');
+    expect(store.personalRoutine.days['monday']!.bedTime, '22:45');
+    expect(store.personalRoutine.commuteMinutes, 35);
+    expect(store.personalRoutine.notes, 'School schedule varies.');
+  });
+
   test('known outside foods can be reused without inventory changes', () {
     final store = PantryStore.demo();
     const sandwich = ExternalFood(

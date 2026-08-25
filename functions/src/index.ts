@@ -4,7 +4,16 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onRequest } from "firebase-functions/v2/https";
 
-import { readCalendarStatus, requestCalendarReconciliation } from "./calendar";
+import {
+  calendarClientId,
+  calendarClientSecret,
+  calendarTokenKey,
+  readCalendarAgenda,
+  readCalendarChoices,
+  readCalendarStatus,
+  requestCalendarReconciliation,
+  saveCalendarChoices,
+} from "./calendar";
 
 export { calendarAuth, syncPlanningCalendar } from "./calendar";
 
@@ -45,7 +54,7 @@ type ProductRecord = {
 export const pantryApi = onRequest(
   {
     region: "us-east4",
-    secrets: [pantryApiToken],
+    secrets: [pantryApiToken, calendarClientId, calendarClientSecret, calendarTokenKey],
     invoker: "public",
     timeoutSeconds: 60,
     maxInstances: 1,
@@ -95,6 +104,10 @@ export const pantryApi = onRequest(
         await exportSetting("food_profile", "foodPreferences", response);
         return;
       }
+      if (request.method === "GET" && path === "/v1/routine") {
+        await exportSetting("personal_routine", "routine", response);
+        return;
+      }
       if (request.method === "GET" && path === "/v1/history") {
         await exportHistory(request.query.days, response);
         return;
@@ -113,6 +126,28 @@ export const pantryApi = onRequest(
       }
       if (request.method === "GET" && path === "/v1/calendar/status") {
         response.status(200).json(await readCalendarStatus());
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/calendar/agenda") {
+        const from = requiredString(request.query.from, "from");
+        const to = requiredString(request.query.to, "to");
+        const fromDate = new Date(from);
+        const toDate = new Date(to);
+        if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate <= fromDate) {
+          throw new ValidationError("from and to must be ordered ISO 8601 timestamps");
+        }
+        if (toDate.getTime() - fromDate.getTime() > 45 * 24 * 60 * 60 * 1000) {
+          throw new ValidationError("Calendar agenda range cannot exceed 45 days");
+        }
+        response.status(200).json(await readCalendarAgenda(from, to));
+        return;
+      }
+      if (request.method === "GET" && path === "/v1/calendar/calendars") {
+        response.status(200).json(await readCalendarChoices());
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/calendar/calendars") {
+        response.status(200).json(await saveCalendarChoices(asObject(request.body).calendarIds));
         return;
       }
       if (request.method === "POST" && path === "/v1/calendar/sync") {
@@ -203,6 +238,10 @@ export const pantryApi = onRequest(
       }
       if (request.method === "POST" && path === "/v1/preferences") {
         await saveFoodPreferences(asObject(request.body), response);
+        return;
+      }
+      if (request.method === "POST" && path === "/v1/routine") {
+        await savePersonalRoutine(asObject(request.body), response);
         return;
       }
       if (request.method === "POST" && path === "/v1/access") {
@@ -437,6 +476,40 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       throw new ValidationError(`entries[${index}].leftoverOfGroupId requires intent "leftover"`);
     }
     const servings = item.servings == null ? 1 : positiveNumber(item.servings, `entries[${index}].servings`);
+    const scheduledTime = optionalString(item.scheduledTime);
+    if (scheduledTime != null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduledTime)) {
+      throw new ValidationError(`entries[${index}].scheduledTime must use 24-hour HH:mm`);
+    }
+    const preparationTasks = item.preparationTasks == null
+      ? []
+      : asArray(item.preparationTasks, `entries[${index}].preparationTasks`).map((raw, taskIndex) => {
+        const task = asObject(raw);
+        const kind = requiredString(task.kind, `entries[${index}].preparationTasks[${taskIndex}].kind`).toLowerCase();
+        const leadHours = task.leadHours == null && kind === "thaw"
+          ? 24
+          : positiveNumber(task.leadHours, `entries[${index}].preparationTasks[${taskIndex}].leadHours`);
+        const durationMinutes = task.durationMinutes == null
+          ? 5
+          : nonNegativeInteger(
+            task.durationMinutes,
+            `entries[${index}].preparationTasks[${taskIndex}].durationMinutes`,
+            1440,
+          );
+        if (durationMinutes === 0) {
+          throw new ValidationError(`entries[${index}].preparationTasks[${taskIndex}].durationMinutes must be positive`);
+        }
+        const label = requiredString(task.label, `entries[${index}].preparationTasks[${taskIndex}].label`);
+        return {
+          id: optionalString(task.id) ?? slug(`${kind}-${label}`),
+          kind,
+          label,
+          lead_hours: leadHours,
+          duration_minutes: durationMinutes,
+        };
+      });
+    if (new Set(preparationTasks.map((task) => task.id)).size !== preparationTasks.length) {
+      throw new ValidationError(`entries[${index}].preparationTasks IDs must be unique`);
+    }
     let name: string;
     let emoji: string;
     if (source === "recipe") {
@@ -494,6 +567,8 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
         emoji,
         servings,
         note: optionalString(item.note) ?? "",
+        scheduled_time: scheduledTime ?? null,
+        preparation_tasks: preparationTasks,
         completed_at: null,
         updated_at: FieldValue.serverTimestamp(),
       },
@@ -1830,6 +1905,50 @@ async function saveFoodPreferences(body: JsonObject, response: ApiResponse): Pro
   response.status(200).json({ status: "saved" });
 }
 
+async function savePersonalRoutine(body: JsonObject, response: ApiResponse): Promise<void> {
+  const timeZone = requiredString(body.timeZone, "timeZone");
+  const rawDays = asObject(body.days);
+  const clock = (value: unknown, label: string): string => {
+    const result = requiredString(value, label);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(result)) {
+      throw new ValidationError(`${label} must use 24-hour HH:mm`);
+    }
+    return result;
+  };
+  const days = Object.fromEntries(
+    ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => {
+      const value = asObject(rawDays[day]);
+      return [day, {
+        wake_time: clock(value.wakeTime, `days.${day}.wakeTime`),
+        bed_time: clock(value.bedTime, `days.${day}.bedTime`),
+      }];
+    }),
+  );
+  const dinner = asObject(body.dinnerWindow);
+  const commuteMinutes = nonNegativeInteger(body.commuteMinutes, "commuteMinutes", 1440);
+  const preparationBufferMinutes = nonNegativeInteger(
+    body.preparationBufferMinutes,
+    "preparationBufferMinutes",
+    1440,
+  );
+  const defaultThawHours = positiveNumber(body.defaultThawHours ?? 24, "defaultThawHours");
+  if (defaultThawHours > 168) throw new ValidationError("defaultThawHours cannot exceed 168");
+  await db.collection("settings").doc("personal_routine").set({
+    time_zone: timeZone,
+    days,
+    dinner_window: {
+      start: clock(dinner.start, "dinnerWindow.start"),
+      end: clock(dinner.end, "dinnerWindow.end"),
+    },
+    commute_minutes: commuteMinutes,
+    preparation_buffer_minutes: preparationBufferMinutes,
+    default_thaw_hours: defaultThawHours,
+    notes: optionalString(body.notes) ?? "",
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  response.status(200).json({ status: "saved" });
+}
+
 async function loadFoods(): Promise<FoodRecord[]> {
   const snapshot = await db.collection("foods").get();
   return snapshot.docs.map((doc) => {
@@ -1999,6 +2118,12 @@ function nonNegativeNumber(value: unknown, name: string): number {
   if (value == null) return 0;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new ValidationError(`${name} must be a non-negative number`);
+  }
+  return value;
+}
+function nonNegativeInteger(value: unknown, name: string, maximum: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > maximum) {
+    throw new ValidationError(`${name} must be a whole number from 0 to ${maximum}`);
   }
   return value;
 }

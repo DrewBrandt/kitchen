@@ -110,7 +110,7 @@ class _PantryHomePageState extends State<PantryHomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.tune_outlined),
-              title: const Text('Food profile'),
+              title: const Text('Me'),
               onTap: () => Navigator.pop(context, -1),
             ),
           ],
@@ -388,7 +388,7 @@ class _PantrySidebar extends StatelessWidget {
                         children: [
                           Text('Drew', style: TextStyle(color: _muted)),
                           Text(
-                            'Food profile',
+                            'Routine & food profile',
                             style: TextStyle(color: _faint, fontSize: 10),
                           ),
                         ],
@@ -2486,7 +2486,7 @@ class _PlannedMealGroupChip extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${first.slot.label}${leftover ? ' · leftovers' : ''}'
+                      '${first.slot.label}${first.scheduledTime == null ? '' : ' · ${first.scheduledTime}'}${leftover ? ' · leftovers' : ''}'
                           .toUpperCase(),
                       style: const TextStyle(
                         color: _amber,
@@ -2521,6 +2521,13 @@ class _PlannedMealGroupChip extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
+                      ),
+                    ],
+                    if (first.preparationTasks.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${first.preparationTasks.length} scheduled prep ${first.preparationTasks.length == 1 ? 'task' : 'tasks'}',
+                        style: const TextStyle(color: _muted, fontSize: 12),
                       ),
                     ],
                   ],
@@ -5434,6 +5441,26 @@ Future<void> _showFoodPreferences(
     text: current.dietaryRules.join('\n'),
   );
   final planningNotes = TextEditingController(text: current.planningNotes);
+  final routine = store.personalRoutine;
+  final timeZone = TextEditingController(text: routine.timeZone);
+  final dinnerStart = TextEditingController(text: routine.dinnerStart);
+  final dinnerEnd = TextEditingController(text: routine.dinnerEnd);
+  final commuteMinutes = TextEditingController(
+    text: '${routine.commuteMinutes}',
+  );
+  final preparationBuffer = TextEditingController(
+    text: '${routine.preparationBufferMinutes}',
+  );
+  final thawHours = TextEditingController(text: '${routine.defaultThawHours}');
+  final routineNotes = TextEditingController(text: routine.notes);
+  final wakeTimes = {
+    for (final day in PersonalRoutine.dayNames)
+      day: TextEditingController(text: routine.days[day]!.wakeTime),
+  };
+  final bedTimes = {
+    for (final day in PersonalRoutine.dayNames)
+      day: TextEditingController(text: routine.days[day]!.bedTime),
+  };
   final fields = <(String, String, TextEditingController)>[
     (
       'Allergies and intolerances',
@@ -5451,7 +5478,7 @@ Future<void> _showFoodPreferences(
   final submitted = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Food profile'),
+      title: const Text('Me'),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -5460,10 +5487,129 @@ Future<void> _showFoodPreferences(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'This profile is stored privately with your pantry and is available to Pantry GPT when it reads your inventory.',
+                'Your routine and food profile are stored privately with Pantry so the assistant can plan around sleep, school, work, and preferences.',
                 style: TextStyle(color: _muted),
               ),
               const SizedBox(height: 18),
+              Text(
+                'Routine & availability',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: timeZone,
+                decoration: const InputDecoration(
+                  labelText: 'IANA time zone',
+                  hintText: 'America/New_York',
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final day in PersonalRoutine.dayNames) ...[
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 92,
+                      child: Text(
+                        '${day[0].toUpperCase()}${day.substring(1, 3)}',
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: wakeTimes[day],
+                        decoration: const InputDecoration(
+                          labelText: 'Wake',
+                          hintText: '07:00',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: bedTimes[day],
+                        decoration: const InputDecoration(
+                          labelText: 'Bed',
+                          hintText: '23:00',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: dinnerStart,
+                      decoration: const InputDecoration(
+                        labelText: 'Dinner window starts',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: dinnerEnd,
+                      decoration: const InputDecoration(
+                        labelText: 'Dinner window ends',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: commuteMinutes,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Travel buffer',
+                        suffixText: 'min',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: preparationBuffer,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Prep buffer',
+                        suffixText: 'min',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: thawHours,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Default thaw',
+                        suffixText: 'hours',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: routineNotes,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Scheduling notes',
+                  hintText: 'Avoid cooking after 9 PM; classes vary by week…',
+                ),
+              ),
+              const SizedBox(height: 22),
+              Text(
+                'Food profile',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
               for (final field in fields) ...[
                 TextField(
                   controller: field.$3,
@@ -5513,6 +5659,52 @@ Future<void> _showFoodPreferences(
           planningNotes: planningNotes.text,
         )
       : null;
+  PersonalRoutine? updatedRoutine;
+  if (submitted == true) {
+    final clock = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
+    final commute = int.tryParse(commuteMinutes.text);
+    final buffer = int.tryParse(preparationBuffer.text);
+    final thaw = int.tryParse(thawHours.text);
+    final validTimes = [
+      dinnerStart.text,
+      dinnerEnd.text,
+      ...wakeTimes.values.map((item) => item.text),
+      ...bedTimes.values.map((item) => item.text),
+    ].every(clock.hasMatch);
+    if (timeZone.text.trim().isNotEmpty &&
+        validTimes &&
+        commute != null &&
+        commute >= 0 &&
+        buffer != null &&
+        buffer >= 0 &&
+        thaw != null &&
+        thaw > 0) {
+      updatedRoutine = PersonalRoutine(
+        timeZone: timeZone.text.trim(),
+        days: {
+          for (final day in PersonalRoutine.dayNames)
+            day: DailyRoutine(
+              wakeTime: wakeTimes[day]!.text,
+              bedTime: bedTimes[day]!.text,
+            ),
+        },
+        dinnerStart: dinnerStart.text,
+        dinnerEnd: dinnerEnd.text,
+        commuteMinutes: commute,
+        preparationBufferMinutes: buffer,
+        defaultThawHours: thaw,
+        notes: routineNotes.text.trim(),
+      );
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Routine times must use 24-hour HH:mm; minute values must be non-negative.',
+          ),
+        ),
+      );
+    }
+  }
   await Future<void>.delayed(kThemeAnimationDuration);
   for (final controller in [
     allergies,
@@ -5520,10 +5712,22 @@ Future<void> _showFoodPreferences(
     favorites,
     dietaryRules,
     planningNotes,
+    timeZone,
+    dinnerStart,
+    dinnerEnd,
+    commuteMinutes,
+    preparationBuffer,
+    thawHours,
+    routineNotes,
+    ...wakeTimes.values,
+    ...bedTimes.values,
   ]) {
     controller.dispose();
   }
-  if (updated != null) store.saveFoodPreferences(updated);
+  if (updated != null && updatedRoutine != null) {
+    store.saveFoodPreferences(updated);
+    store.savePersonalRoutine(updatedRoutine);
+  }
 }
 
 List<String> _parsePreferenceList(String value) => value
@@ -5901,6 +6105,7 @@ Future<void> _showPlannedMealEditor(
   final servings = TextEditingController(
     text: recipe == null ? '1' : _compactNumber(recipe.servings),
   );
+  final scheduledTime = TextEditingController();
   final note = TextEditingController();
   String? error;
   final submitted = await showDialog<bool>(
@@ -6140,6 +6345,16 @@ Future<void> _showPlannedMealEditor(
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: scheduledTime,
+                  decoration: const InputDecoration(
+                    labelText: 'Specific time (optional)',
+                    hintText: '19:00',
+                    helperText:
+                        'Overrides the default breakfast/lunch/dinner time.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
                   controller: note,
                   decoration: const InputDecoration(
                     labelText: 'Note',
@@ -6182,9 +6397,17 @@ Future<void> _showPlannedMealEditor(
                   (planType != 'plannedLeftovers' &&
                       source == PlannedMealSource.custom &&
                       name.text.trim().isEmpty);
-              if (servingCount == null || servingCount <= 0 || invalidSource) {
+              final time = scheduledTime.text.trim();
+              final invalidTime =
+                  time.isNotEmpty &&
+                  !RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(time);
+              if (servingCount == null ||
+                  servingCount <= 0 ||
+                  invalidSource ||
+                  invalidTime) {
                 setDialogState(
-                  () => error = 'Choose a meal and enter positive servings.',
+                  () => error =
+                      'Choose a meal, enter positive servings, and use HH:mm for a specific time.',
                 );
               } else {
                 Navigator.pop(context, true);
@@ -6217,10 +6440,13 @@ Future<void> _showPlannedMealEditor(
             emoji: sourceMeal.emoji,
             servings: servingCount,
             note: note.text.trim(),
+            scheduledTime: scheduledTime.text.trim().isEmpty
+                ? null
+                : scheduledTime.text.trim(),
           ),
         );
       }
-      for (final controller in [name, emoji, servings, note]) {
+      for (final controller in [name, emoji, servings, scheduledTime, note]) {
         controller.dispose();
       }
       return;
@@ -6240,10 +6466,13 @@ Future<void> _showPlannedMealEditor(
             emoji: selected.emoji,
             servings: servingCount,
             note: note.text.trim(),
+            scheduledTime: scheduledTime.text.trim().isEmpty
+                ? null
+                : scheduledTime.text.trim(),
           ),
         );
       }
-      for (final controller in [name, emoji, servings, note]) {
+      for (final controller in [name, emoji, servings, scheduledTime, note]) {
         controller.dispose();
       }
       return;
@@ -6280,10 +6509,13 @@ Future<void> _showPlannedMealEditor(
         emoji: plannedEmoji,
         servings: servingCount,
         note: note.text.trim(),
+        scheduledTime: scheduledTime.text.trim().isEmpty
+            ? null
+            : scheduledTime.text.trim(),
       ),
     );
   }
-  for (final controller in [name, emoji, servings, note]) {
+  for (final controller in [name, emoji, servings, scheduledTime, note]) {
     controller.dispose();
   }
 }

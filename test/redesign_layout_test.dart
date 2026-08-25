@@ -470,15 +470,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('planning exposes an editable food preference profile', (
+  testWidgets('Me exposes editable routine and food preferences', (
     tester,
   ) async {
     final store = PantryStore.demo();
     await pumpPantry(tester, const Size(1440, 980), store: store);
 
-    expect(find.text('Food profile'), findsOneWidget);
-    await tester.tap(find.text('Food profile'));
+    expect(find.text('Routine & food profile'), findsOneWidget);
+    await tester.tap(find.text('Routine & food profile'));
     await tester.pumpAndSettle();
+
+    expect(find.text('Routine & availability'), findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Allergies and intolerances'),

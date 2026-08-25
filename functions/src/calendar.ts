@@ -14,11 +14,16 @@ import {
   parseCalendarSettings,
 } from "./calendar_logic";
 
-const calendarClientId = defineSecret("GOOGLE_CALENDAR_CLIENT_ID");
-const calendarClientSecret = defineSecret("GOOGLE_CALENDAR_CLIENT_SECRET");
-const calendarTokenKey = defineSecret("CALENDAR_TOKEN_KEY");
+export const calendarClientId = defineSecret("GOOGLE_CALENDAR_CLIENT_ID");
+export const calendarClientSecret = defineSecret("GOOGLE_CALENDAR_CLIENT_SECRET");
+export const calendarTokenKey = defineSecret("CALENDAR_TOKEN_KEY");
 
-const calendarScope = "https://www.googleapis.com/auth/calendar.app.created";
+const calendarScopes = [
+  "https://www.googleapis.com/auth/calendar.app.created",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.events.readonly",
+];
+const calendarScope = calendarScopes.join(" ");
 const calendarSettings = "calendar_sync";
 const planningSync = "planning_sync";
 const credentialDocument = "google";
@@ -31,8 +36,12 @@ const allowedOrigins = new Set([
 ]);
 
 export async function readCalendarStatus(): Promise<JsonRecord> {
-  const snapshot = await getFirestore().collection("settings").doc(calendarSettings).get();
+  const [snapshot, credentials] = await Promise.all([
+    getFirestore().collection("settings").doc(calendarSettings).get(),
+    getFirestore().collection("_private_calendar_credentials").doc(credentialDocument).get(),
+  ]);
   const data = snapshot.data() ?? {};
+  const grantedScope = credentials.data()?.scope;
   return {
     enabled: data.enabled === true,
     connected: typeof data.calendar_id === "string" && data.calendar_id.length > 0,
@@ -40,10 +49,92 @@ export async function readCalendarStatus(): Promise<JsonRecord> {
     timeZone: data.time_zone ?? "America/New_York",
     groceryLeadDays: data.grocery_lead_days ?? 1,
     groceryTime: data.grocery_time ?? "18:00",
+    readableCalendarIds: Array.isArray(data.read_calendar_ids) ? data.read_calendar_ids : [],
+    agendaAccess: typeof grantedScope === "string" &&
+      calendarScopes.slice(1).every((scope) => grantedScope.includes(scope)),
     lastSuccessAt: timestampText(data.last_success_at),
     lastAttemptAt: timestampText(data.last_attempt_at),
     lastError: typeof data.last_error === "string" ? data.last_error : null,
   };
+}
+
+export async function readCalendarAgenda(fromValue: string, toValue: string): Promise<JsonRecord> {
+  const from = new Date(fromValue);
+  const to = new Date(toValue);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
+    throw new Error("Calendar agenda requires valid from and to timestamps");
+  }
+  if (to.getTime() - from.getTime() > 45 * 24 * 60 * 60 * 1000) {
+    throw new Error("Calendar agenda range cannot exceed 45 days");
+  }
+  const settings = await getFirestore().collection("settings").doc(calendarSettings).get();
+  const data = settings.data() ?? {};
+  const selected = Array.isArray(data.read_calendar_ids)
+    ? data.read_calendar_ids.filter((value): value is string => typeof value === "string")
+    : [];
+  if (selected.length === 0) {
+    return { from: from.toISOString(), to: to.toISOString(), calendars: [], events: [] };
+  }
+  const accessToken = await calendarAccessToken();
+  const calendars = await listReadableCalendars(accessToken);
+  const names = new Map(calendars.map((calendar) => [calendar.id, calendar.name]));
+  const allowed = selected.filter((id) => names.has(id));
+  const eventGroups = await Promise.all(
+    allowed.map(async (calendarId) => {
+      const query = new URLSearchParams({
+        timeMin: from.toISOString(),
+        timeMax: to.toISOString(),
+        singleEvents: "true",
+        orderBy: "startTime",
+        maxResults: "2500",
+      });
+      const page = await calendarRequest(
+        accessToken,
+        `/calendars/${encodeURIComponent(calendarId)}/events?${query.toString()}`,
+      );
+      return (Array.isArray(page.items) ? page.items : [])
+        .filter((item): item is JsonRecord => item != null && typeof item === "object")
+        .filter((item) => item.status !== "cancelled" && item.transparency !== "transparent")
+        .map((item) => agendaEvent(calendarId, names.get(calendarId)!, item));
+    }),
+  );
+  const events = eventGroups.flat().sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    calendars: allowed.map((id) => ({ id, name: names.get(id) })),
+    events,
+  };
+}
+
+export async function readCalendarChoices(): Promise<JsonRecord> {
+  const accessToken = await calendarAccessToken();
+  const [calendars, settings] = await Promise.all([
+    listReadableCalendars(accessToken),
+    getFirestore().collection("settings").doc(calendarSettings).get(),
+  ]);
+  const selected = new Set(
+    Array.isArray(settings.data()?.read_calendar_ids) ? settings.data()!.read_calendar_ids as string[] : [],
+  );
+  return {
+    calendars: calendars.map((calendar) => ({ ...calendar, selected: selected.has(calendar.id) })),
+  };
+}
+
+export async function saveCalendarChoices(calendarIds: unknown): Promise<JsonRecord> {
+  if (!Array.isArray(calendarIds) || !calendarIds.every((value) => typeof value === "string")) {
+    throw new Error("calendarIds must be a list of Calendar IDs");
+  }
+  const accessToken = await calendarAccessToken();
+  const calendars = await listReadableCalendars(accessToken);
+  const available = new Set(calendars.map((calendar) => calendar.id));
+  const selected = [...new Set(calendarIds as string[])];
+  if (selected.some((id) => !available.has(id))) throw new Error("One or more calendars are unavailable");
+  await getFirestore().collection("settings").doc(calendarSettings).set({
+    read_calendar_ids: selected,
+    updated_at: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { status: "saved", calendarIds: selected };
 }
 
 export async function requestCalendarReconciliation(action: "sync" | "clear" = "sync"): Promise<string> {
@@ -105,6 +196,20 @@ export const calendarAuth = onRequest(
         return;
       }
 
+      if (mode === "calendars") {
+        await verifyOwner(request.get("authorization"));
+        if (request.method === "GET") {
+          response.status(200).json(await readCalendarChoices());
+          return;
+        }
+        if (request.method === "POST") {
+          response.status(200).json(await saveCalendarChoices((request.body as JsonRecord | undefined)?.calendarIds));
+          return;
+        }
+        response.status(405).json({ error: "Use GET or POST for calendar selection" });
+        return;
+      }
+
       if (request.method !== "GET") {
         response.status(405).send("Method not allowed");
         return;
@@ -148,6 +253,17 @@ export const calendarAuth = onRequest(
         accessToken,
         typeof existingCalendarId === "string" ? existingCalendarId : undefined,
       );
+      const readableCalendars = await listReadableCalendars(accessToken);
+      const existingReadIds = Array.isArray(currentSettings.data()?.read_calendar_ids)
+        ? currentSettings.data()!.read_calendar_ids as string[]
+        : [];
+      const availableIds = new Set(readableCalendars.map((item) => item.id));
+      const readCalendarIds = existingReadIds.filter((id) => availableIds.has(id));
+      if (readCalendarIds.length === 0) {
+        readCalendarIds.push(...readableCalendars
+          .filter((item) => item.id !== calendar.id && (item.primary || item.selected))
+          .map((item) => item.id));
+      }
       await getFirestore().collection("settings").doc(calendarSettings).set({
         enabled: true,
         calendar_id: calendar.id,
@@ -163,6 +279,8 @@ export const calendarAuth = onRequest(
           dinner: "18:00",
           snack: "15:00",
         },
+        read_calendar_ids: readCalendarIds,
+        agenda_access: true,
         connected_at: FieldValue.serverTimestamp(),
         last_error: null,
       }, { merge: true });
@@ -330,6 +448,61 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
     grant_type: "refresh_token",
   });
   return requiredText(token.access_token, "Google access token");
+}
+
+async function calendarAccessToken(): Promise<string> {
+  return refreshAccessToken(await loadRefreshToken());
+}
+
+type ReadableCalendar = {
+  id: string;
+  name: string;
+  primary: boolean;
+  selected: boolean;
+  accessRole: string;
+};
+
+async function listReadableCalendars(accessToken: string): Promise<ReadableCalendar[]> {
+  const result: ReadableCalendar[] = [];
+  let pageToken: string | undefined;
+  do {
+    const query = new URLSearchParams({ minAccessRole: "reader", maxResults: "250" });
+    if (pageToken != null) query.set("pageToken", pageToken);
+    const page = await calendarRequest(accessToken, `/users/me/calendarList?${query.toString()}`);
+    for (const raw of Array.isArray(page.items) ? page.items : []) {
+      if (raw == null || typeof raw !== "object") continue;
+      const item = raw as JsonRecord;
+      const id = optionalText(item.id);
+      if (id == null) continue;
+      result.push({
+        id,
+        name: optionalText(item.summaryOverride) ?? optionalText(item.summary) ?? id,
+        primary: item.primary === true,
+        selected: item.selected === true,
+        accessRole: optionalText(item.accessRole) ?? "reader",
+      });
+    }
+    pageToken = typeof page.nextPageToken === "string" ? page.nextPageToken : undefined;
+  } while (pageToken != null);
+  return result.sort((a, b) => Number(b.primary) - Number(a.primary) || a.name.localeCompare(b.name));
+}
+
+function agendaEvent(calendarId: string, calendarName: string, item: JsonRecord): JsonRecord {
+  const start = item.start as JsonRecord | undefined;
+  const end = item.end as JsonRecord | undefined;
+  const startText = optionalText(start?.dateTime) ?? optionalText(start?.date);
+  const endText = optionalText(end?.dateTime) ?? optionalText(end?.date);
+  return {
+    id: requiredText(item.id, "event id"),
+    calendarId,
+    calendarName,
+    summary: (optionalText(item.summary) ?? "Busy").slice(0, 300),
+    description: (optionalText(item.description) ?? "").slice(0, 2000),
+    location: (optionalText(item.location) ?? "").slice(0, 500),
+    start: requiredText(startText, "event start"),
+    end: requiredText(endText, "event end"),
+    allDay: start?.date != null,
+  };
 }
 
 async function tokenRequest(parameters: Record<string, string>): Promise<JsonRecord> {

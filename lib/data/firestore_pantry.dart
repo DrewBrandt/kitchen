@@ -16,6 +16,7 @@ class CloudPantryData {
     required this.history,
     required this.nutritionTargets,
     required this.foodPreferences,
+    required this.personalRoutine,
     required this.externalFoods,
     required this.plannedMeals,
     required this.groceryItems,
@@ -31,6 +32,7 @@ class CloudPantryData {
   final List<ConsumptionEvent> history;
   final NutritionTargets nutritionTargets;
   final FoodPreferences foodPreferences;
+  final PersonalRoutine personalRoutine;
   final List<ExternalFood> externalFoods;
   final List<PlannedMeal> plannedMeals;
   final List<GroceryListItem> groceryItems;
@@ -75,6 +77,7 @@ class FirestorePantry {
     QuerySnapshot<Map<String, dynamic>>? recipeFeedback;
     DocumentSnapshot<Map<String, dynamic>>? targets;
     DocumentSnapshot<Map<String, dynamic>>? profile;
+    DocumentSnapshot<Map<String, dynamic>>? routine;
 
     void emitIfReady() {
       if (foods == null ||
@@ -89,7 +92,8 @@ class FirestorePantry {
           preparedBatches == null ||
           recipeFeedback == null ||
           targets == null ||
-          profile == null) {
+          profile == null ||
+          routine == null) {
         return;
       }
       controller.add(
@@ -112,6 +116,9 @@ class FirestorePantry {
           foodPreferences: profile!.exists
               ? _foodPreferencesFromData(profile!.data()!)
               : FoodPreferences.empty,
+          personalRoutine: routine!.exists
+              ? _personalRoutineFromData(routine!.data()!)
+              : PersonalRoutine.defaults,
           externalFoods: externalFoods!.docs.map(_externalFoodFromDoc).toList(),
           plannedMeals: plannedMeals!.docs.map(_plannedMealFromDoc).toList(),
           groceryItems: groceryItems!.docs.map(_groceryItemFromDoc).toList(),
@@ -183,6 +190,12 @@ class FirestorePantry {
           profile = value;
           emitIfReady();
         }, onError: reportError),
+        db.collection('settings').doc('personal_routine').snapshots().listen((
+          value,
+        ) {
+          routine = value;
+          emitIfReady();
+        }, onError: reportError),
       ]);
     }
 
@@ -214,9 +227,11 @@ class FirestorePantry {
     final settings = await Future.wait([
       db.collection('settings').doc('nutrition').get(),
       db.collection('settings').doc('food_profile').get(),
+      db.collection('settings').doc('personal_routine').get(),
     ]);
     final targets = settings[0];
     final profile = settings[1];
+    final routine = settings[2];
     return CloudPantryData(
       foods: results[0].docs.map(_foodFromDoc).toList(),
       products: results[9].docs.map(_productFromDoc).toList(),
@@ -232,6 +247,9 @@ class FirestorePantry {
       foodPreferences: profile.exists
           ? _foodPreferencesFromData(profile.data()!)
           : FoodPreferences.empty,
+      personalRoutine: routine.exists
+          ? _personalRoutineFromData(routine.data()!)
+          : PersonalRoutine.defaults,
       externalFoods: results[4].docs.map(_externalFoodFromDoc).toList(),
       plannedMeals: results[5].docs.map(_plannedMealFromDoc).toList(),
       groceryItems: results[6].docs.map(_groceryItemFromDoc).toList(),
@@ -298,6 +316,10 @@ class FirestorePantry {
     batch.set(
       db.collection('settings').doc('food_profile'),
       _foodPreferencesData(data.foodPreferences),
+    );
+    batch.set(
+      db.collection('settings').doc('personal_routine'),
+      _personalRoutineData(data.personalRoutine),
     );
     await batch.commit();
   }
@@ -400,6 +422,11 @@ class FirestorePantry {
       .collection('settings')
       .doc('food_profile')
       .set(_foodPreferencesData(preferences));
+
+  Future<void> savePersonalRoutine(PersonalRoutine routine) => db
+      .collection('settings')
+      .doc('personal_routine')
+      .set(_personalRoutineData(routine));
 
   Future<void> saveExternalFood(ExternalFood food) =>
       db.collection('external_foods').doc(food.id).set(_externalFoodData(food));
@@ -725,6 +752,23 @@ class FirestorePantry {
     'updated_at': FieldValue.serverTimestamp(),
   };
 
+  Map<String, Object?> _personalRoutineData(PersonalRoutine routine) => {
+    'time_zone': routine.timeZone,
+    'days': {
+      for (final entry in routine.days.entries)
+        entry.key: {
+          'wake_time': entry.value.wakeTime,
+          'bed_time': entry.value.bedTime,
+        },
+    },
+    'dinner_window': {'start': routine.dinnerStart, 'end': routine.dinnerEnd},
+    'commute_minutes': routine.commuteMinutes,
+    'preparation_buffer_minutes': routine.preparationBufferMinutes,
+    'default_thaw_hours': routine.defaultThawHours,
+    'notes': routine.notes,
+    'updated_at': FieldValue.serverTimestamp(),
+  };
+
   Map<String, Object?> _externalFoodData(ExternalFood food) => {
     'name': food.name,
     'brand': food.brand,
@@ -750,6 +794,18 @@ class FirestorePantry {
     'emoji': meal.emoji,
     'servings': meal.servings,
     'note': meal.note,
+    'scheduled_time': meal.scheduledTime,
+    'preparation_tasks': meal.preparationTasks
+        .map(
+          (task) => {
+            'id': task.id,
+            'kind': task.kind,
+            'label': task.label,
+            'lead_hours': task.leadHours,
+            'duration_minutes': task.durationMinutes,
+          },
+        )
+        .toList(),
     'completed_at': meal.completedAt == null
         ? null
         : Timestamp.fromDate(meal.completedAt!),
@@ -807,6 +863,21 @@ class FirestorePantry {
       emoji: data['emoji'] as String? ?? '🍽️',
       servings: (data['servings'] as num? ?? 1).toDouble(),
       note: data['note'] as String? ?? '',
+      scheduledTime: data['scheduled_time'] as String?,
+      preparationTasks:
+          (data['preparation_tasks'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(
+                (task) => PlannedPreparationTask(
+                  id: task['id'] as String,
+                  kind: task['kind'] as String? ?? 'prep',
+                  label: task['label'] as String,
+                  leadHours: (task['lead_hours'] as num? ?? 24).toDouble(),
+                  durationMinutes: (task['duration_minutes'] as num? ?? 5)
+                      .round(),
+                ),
+              )
+              .toList(),
       completedAt: (data['completed_at'] as Timestamp?)?.toDate(),
     );
   }
@@ -847,6 +918,34 @@ class FirestorePantry {
         dietaryRules: _stringList(data['dietary_rules']),
         planningNotes: data['planning_notes'] as String? ?? '',
       );
+
+  PersonalRoutine _personalRoutineFromData(Map<String, dynamic> data) {
+    final rawDays = data['days'] as Map<String, dynamic>? ?? const {};
+    final dinner = data['dinner_window'] as Map<String, dynamic>? ?? const {};
+    return PersonalRoutine(
+      timeZone: data['time_zone'] as String? ?? 'America/New_York',
+      days: {
+        for (final day in PersonalRoutine.dayNames)
+          day: DailyRoutine(
+            wakeTime:
+                (rawDays[day] as Map<String, dynamic>?)?['wake_time']
+                    as String? ??
+                PersonalRoutine.defaultDays[day]!.wakeTime,
+            bedTime:
+                (rawDays[day] as Map<String, dynamic>?)?['bed_time']
+                    as String? ??
+                PersonalRoutine.defaultDays[day]!.bedTime,
+          ),
+      },
+      dinnerStart: dinner['start'] as String? ?? '18:00',
+      dinnerEnd: dinner['end'] as String? ?? '20:30',
+      commuteMinutes: (data['commute_minutes'] as num? ?? 0).round(),
+      preparationBufferMinutes:
+          (data['preparation_buffer_minutes'] as num? ?? 30).round(),
+      defaultThawHours: (data['default_thaw_hours'] as num? ?? 24).round(),
+      notes: data['notes'] as String? ?? '',
+    );
+  }
 
   List<String> _stringList(Object? value) => value is Iterable
       ? value

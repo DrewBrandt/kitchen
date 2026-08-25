@@ -95,8 +95,33 @@ export function deriveDesiredCalendarEvents(input: {
     const mealDate = asDate(meal.data.date);
     const slot = optionalText(meal.data.slot);
     if (mealDate == null || slot == null) continue;
-    const slotTime = input.settings.slotTimes[slot];
-    if (slotTime == null) continue;
+    const fallbackSlotTime = input.settings.slotTimes[slot];
+    if (fallbackSlotTime == null) continue;
+    const slotTime = clock(meal.data.scheduled_time, fallbackSlotTime);
+    const mealStart = zonedInstant(dateKey(mealDate), slotTime, input.settings.timeZone);
+    const mealName = optionalText(meal.data.name) ?? "planned meal";
+    if (Array.isArray(meal.data.preparation_tasks)) {
+      for (const rawTask of meal.data.preparation_tasks) {
+        if (rawTask == null || typeof rawTask !== "object") continue;
+        const task = rawTask as JsonRecord;
+        const id = optionalText(task.id);
+        const label = optionalText(task.label);
+        const leadHours = positiveNumber(task.lead_hours ?? task.leadHours);
+        const durationMinutes = positiveNumber(task.duration_minutes ?? task.durationMinutes) ?? 5;
+        if (id == null || label == null || leadHours == null) continue;
+        const prepStart = new Date(mealStart.getTime() - leadHours * 60 * 60 * 1000);
+        events.push(eventBody({
+          reminderId: `task:${meal.id}:${id}`,
+          generation: input.generation,
+          summary: label,
+          description: `Preparation for ${mealName}, planned ${dateKey(mealDate)} at ${slotTime}.`,
+          start: prepStart,
+          end: new Date(prepStart.getTime() + durationMinutes * 60 * 1000),
+          timeZone: input.settings.timeZone,
+          reminderMinutes: input.settings.prepReminderMinutes,
+        }));
+      }
+    }
     const sources = recipeSourcesForMeal(meal.data, input.mealTemplates);
     for (const source of sources) {
       const recipe = input.recipes.get(source.recipeId);
@@ -108,9 +133,7 @@ export function deriveDesiredCalendarEvents(input: {
         const label = optionalText(rule.label);
         const leadHours = positiveNumber(rule.lead_hours ?? rule.leadHours);
         if (id == null || label == null || leadHours == null) continue;
-        const mealStart = zonedInstant(dateKey(mealDate), slotTime, input.settings.timeZone);
         const prepStart = new Date(mealStart.getTime() - leadHours * 60 * 60 * 1000);
-        const mealName = optionalText(meal.data.name) ?? "planned meal";
         const suffix = sources.length > 1 ? ` (${optionalText(recipe.name) ?? source.recipeId})` : "";
         events.push(eventBody({
           reminderId: `prep:${meal.id}:${source.recipeId}:${id}`,

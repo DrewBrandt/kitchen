@@ -24,7 +24,9 @@ The current vertical slice includes:
 - authenticated Firebase API scaffold for Codex-driven updates
 - Google sign-in with a Firestore access allowlist
 - automatic GitHub Pages deployment
-- optional Google Calendar synchronization for grocery and explicit recipe-preparation reminders
+- optional Google Calendar synchronization for grocery and preparation reminders
+- a private Me routine with per-day sleep times, dinner windows, and planning buffers
+- read-only selected-calendar agendas for schedule-aware Pantry GPT meal planning
 
 The production app uses Firebase project `pantry-tracker-4bc45`. Firebase's web
 configuration is intentionally safe to ship in a web client; access to pantry

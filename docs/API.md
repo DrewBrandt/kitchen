@@ -208,6 +208,32 @@ Content-Type: application/json
 All arrays are optional and replace their previous values. Allergies are treated
 as hard safety constraints by the Pantry GPT instructions.
 
+## Save the personal routine
+
+`GET /v1/routine` reads the private routine used for schedule-aware planning.
+`POST /v1/routine` replaces it. Wake and bedtime are stored for every weekday;
+all times use local 24-hour `HH:mm` values in the named IANA time zone.
+
+```json
+{
+  "timeZone": "America/New_York",
+  "days": {
+    "monday": {"wakeTime": "07:00", "bedTime": "23:00"},
+    "tuesday": {"wakeTime": "07:00", "bedTime": "23:00"},
+    "wednesday": {"wakeTime": "07:00", "bedTime": "23:00"},
+    "thursday": {"wakeTime": "07:00", "bedTime": "23:00"},
+    "friday": {"wakeTime": "07:00", "bedTime": "23:30"},
+    "saturday": {"wakeTime": "08:00", "bedTime": "23:30"},
+    "sunday": {"wakeTime": "08:00", "bedTime": "23:00"}
+  },
+  "dinnerWindow": {"start": "18:00", "end": "20:30"},
+  "commuteMinutes": 30,
+  "preparationBufferMinutes": 30,
+  "defaultThawHours": 24,
+  "notes": "Avoid cooking after 9 PM."
+}
+```
+
 ## Read current inventory
 
 ```http
@@ -357,6 +383,9 @@ successful when Google is temporarily unavailable.
 
 ```http
 GET /v1/calendar/status
+GET /v1/calendar/calendars
+GET /v1/calendar/agenda?from=2026-09-01T00:00:00-04:00&to=2026-09-08T00:00:00-04:00
+POST /v1/calendar/calendars
 POST /v1/calendar/sync
 DELETE /v1/calendar/events
 ```
@@ -365,6 +394,13 @@ The status response never contains OAuth credentials. The POST route requests
 an idempotent reconciliation. The DELETE route requests removal of
 Pantry-managed events only and disables future synchronization; it cannot
 delete unrelated Calendar events.
+
+The OAuth connection keeps write access confined to the dedicated Pantry
+Planner calendar and separately requests read-only access to existing events.
+The calendar-selection route controls which readable calendars appear in the
+agenda. Agenda requests are bounded to 45 days and return event summary,
+description, location, start/end, and all-day status without exposing OAuth
+credentials. Reconnect once after upgrading from the earlier write-only scope.
 
 Recipe writes may include explicit preparation reminders:
 
@@ -383,6 +419,32 @@ Recipe writes may include explicit preparation reminders:
 
 The Flutter recipe editor uses the equivalent line format
 `24 | thaw | Move chicken to the refrigerator`.
+
+One meal-plan entry may instead carry an exact time and plan-specific task:
+
+```json
+{
+  "date": "2026-09-03",
+  "slot": "dinner",
+  "scheduledTime": "20:15",
+  "source": "recipe",
+  "sourceId": "roast-chicken",
+  "servings": 2,
+  "preparationTasks": [
+    {
+      "id": "thaw-chicken",
+      "kind": "thaw",
+      "label": "Move chicken to the refrigerator",
+      "leadHours": 24,
+      "durationMinutes": 5
+    }
+  ]
+}
+```
+
+For a thaw task, `leadHours` defaults to 24 if omitted. Plan-specific tasks are
+preferred when the action depends on the current inventory lot; they do not
+modify the saved recipe.
 
 ## Reconcile existing inventory
 
