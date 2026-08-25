@@ -216,7 +216,10 @@ GET /v1/inventory
 
 Returns compact stock `items`. Each item contains the canonical food ID and name,
 quantity mode, base/display units, total quantity in the base unit, and its
-positive lots with location, best-by date, and optional product identity. It
+positive lots with location, best-by date, and optional product identity. Items
+are ordered for the Waugh Chapel Safeway and include their grocery section,
+store-order number, optional exact aisle note, and meal-planning role (`main`,
+`supporting`, or `staple`). It
 does not include full food or product definitions, history, targets, preferences,
 recipes, plans, groceries, or prepared foods. Use the focused endpoints below
 for that context.
@@ -438,6 +441,9 @@ Content-Type: application/json
   "quantityMode": "measured",
   "baseUnit": "gram",
   "defaultLocation": "fridge",
+  "grocerySection": "dairyFrozenMeals",
+  "ingredientRole": "staple",
+  "storeAisle": "",
   "conversions": [
     {"unit": "gram", "symbol": "g", "baseAmount": 1},
     {"unit": "tablespoon", "symbol": "tbsp", "baseAmount": 14.175},

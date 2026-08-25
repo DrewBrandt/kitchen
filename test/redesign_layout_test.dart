@@ -262,7 +262,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Add item'), findsOneWidget);
     expect(find.text('Rebuild from plan'), findsOneWidget);
-    expect(find.textContaining('Grouped by aisle'), findsOneWidget);
+    expect(
+      find.textContaining('Waugh Chapel Safeway walking order'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile grocery tab opens shopping mode and checks a whole row', (
+    tester,
+  ) async {
+    final store = PantryStore.demo();
+    store.addManualGroceryItem(
+      'Sports drinks',
+      quantityLabel: '2 bottles',
+      grocerySection: GrocerySection.snacksDrinks,
+    );
+
+    await pumpPantry(tester, const Size(390, 844), store: store);
+    await tester.tap(find.byIcon(Icons.shopping_cart_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Grocery list'), findsOneWidget);
+    expect(find.textContaining('2644 Chapel Lake Dr'), findsOneWidget);
+    expect(find.text('Snacks, chips & sports drinks'), findsOneWidget);
+    expect(find.text('1 item left'), findsOneWidget);
+
+    await tester.tap(find.text('Sports drinks'));
+    await tester.pumpAndSettle();
+
+    expect(store.groceryItems.single.checked, isTrue);
+    expect(find.text('Shopping complete'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('inventory is grouped by store section and meal role', (
+    tester,
+  ) async {
+    await pumpPantry(tester, const Size(1440, 980));
+    await tester.tap(find.text('Inventory').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Produce & deli meats'), findsOneWidget);
+    expect(find.text('Eggs, yogurt, cheese & dough'), findsOneWidget);
+    expect(find.text('Main ingredient'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

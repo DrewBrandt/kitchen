@@ -122,10 +122,7 @@ void main() {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final food = store.food('flour').copyWith(displayUnit: 'bag');
 
-    expect(
-      () => store.saveFood(food),
-      throwsA(isA<ArgumentError>()),
-    );
+    expect(() => store.saveFood(food), throwsA(isA<ArgumentError>()));
   });
 
   test('nutrition scales with food units and recipe servings', () {
@@ -484,6 +481,17 @@ void main() {
 
     store.deleteGroceryItem(item.id);
     expect(store.groceryItems, isEmpty);
+  });
+
+  test('manual groceries infer and retain their Safeway section', () {
+    final store = PantryStore.demo();
+
+    store.addManualGroceryItem('Dog treats');
+
+    expect(
+      store.groceryItems.single.grocerySection,
+      GrocerySection.householdPets,
+    );
   });
 
   test('product lots contribute to their canonical recipe ingredient', () {

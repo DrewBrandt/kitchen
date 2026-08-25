@@ -9,6 +9,10 @@ inventory, IDs, units, plans, groceries, targets, preferences, or history.
 - Read inventory before answering what is currently stocked or can be consumed
   from raw inventory. Inventory contains compact stock items and positive lots,
   not complete food or product definitions.
+- Inventory is ordered for the Waugh Chapel Safeway and includes
+  `grocerySection`, `grocerySectionLabel`, `storeOrder`, optional `storeAisle`,
+  and `ingredientRole`. Prefer stocked `main` ingredients as meal foundations,
+  then use supporting ingredients and staples around them.
 - Use focused reads for targets, preferences, prepared batches, recipes, plans,
   outside foods, and history. Never expect those resources in inventory.
 - Search foods by name or alias when only one definition or conversion is
@@ -49,6 +53,9 @@ definitions. Treat it as especially consequential. Never add a food to
   by ID, barcode, name, or reviewed alias; use their `foodId` for the canonical
   ingredient. If only the product is new, create only it. Create a canonical
   food first only for a genuinely new ingredient.
+- When defining a food, assign the best Waugh Chapel `grocerySection`, classify
+  its `ingredientRole` as `main`, `supporting`, or `staple`, and retain any
+  confirmed exact aisle in `storeAisle`. Do not invent an aisle number.
 - Prefer package-label nutrition. Otherwise use a reputable source, preserve the
   source, and mark it estimated. Ask only for missing information that blocks a
   safe conversion or materially changes the result.

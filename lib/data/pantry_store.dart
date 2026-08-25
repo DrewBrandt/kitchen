@@ -1228,7 +1228,11 @@ class PantryStore extends ChangeNotifier {
     _savePlanning();
   }
 
-  void addManualGroceryItem(String name, {String quantityLabel = ''}) {
+  void addManualGroceryItem(
+    String name, {
+    String quantityLabel = '',
+    GrocerySection? grocerySection,
+  }) {
     if (name.trim().isEmpty) throw ArgumentError('Grocery name is required');
     _groceryItems = [
       ..._groceryItems,
@@ -1239,6 +1243,7 @@ class PantryStore extends ChangeNotifier {
         checked: false,
         fromPlan: false,
         quantityLabel: quantityLabel.trim(),
+        grocerySection: grocerySection ?? inferGrocerySection(name),
       ),
     ];
     _savePlanning();
@@ -1279,10 +1284,16 @@ class PantryStore extends ChangeNotifier {
           foodId: requirement.key,
           quantityBase: shortage,
           firstNeededDate: summary.firstNeededDates[requirement.key],
+          grocerySection: definition.grocerySection,
         ),
       );
     }
-    planned.sort((a, b) => a.name.compareTo(b.name));
+    planned.sort((a, b) {
+      final bySection = a.grocerySection.storeOrder.compareTo(
+        b.grocerySection.storeOrder,
+      );
+      return bySection != 0 ? bySection : a.name.compareTo(b.name);
+    });
     _groceryItems = [...planned, ...manual];
   }
 

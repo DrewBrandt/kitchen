@@ -2,6 +2,147 @@ enum QuantityMode { counted, measured }
 
 enum StorageLocation { pantry, fridge, freezer }
 
+/// The order Drew encounters departments while walking the Waugh Chapel
+/// Safeway from the produce-side entrance.
+enum GrocerySection {
+  produceDeli,
+  seafoodBreadInternational,
+  bakingMeat,
+  snacksDrinks,
+  seasonal,
+  householdPets,
+  dairyFrozenMeals,
+  frozen,
+  eggsCheeseDough,
+  deliBakery,
+  pantryOther,
+}
+
+extension GrocerySectionDetails on GrocerySection {
+  String get label => switch (this) {
+    GrocerySection.produceDeli => 'Produce & deli meats',
+    GrocerySection.seafoodBreadInternational =>
+      'Seafood, bread & international',
+    GrocerySection.bakingMeat => 'Baking & fresh meats',
+    GrocerySection.snacksDrinks => 'Snacks, chips & sports drinks',
+    GrocerySection.seasonal => 'Seasonal & cards',
+    GrocerySection.householdPets => 'Laundry, cleaning & pets',
+    GrocerySection.dairyFrozenMeals => 'Dairy & frozen dinners',
+    GrocerySection.frozen => 'Frozen foods & treats',
+    GrocerySection.eggsCheeseDough => 'Eggs, yogurt, cheese & dough',
+    GrocerySection.deliBakery => 'Deli, bakery & desserts',
+    GrocerySection.pantryOther => 'Pantry & other',
+  };
+
+  String get shortLabel => switch (this) {
+    GrocerySection.produceDeli => 'Produce & deli',
+    GrocerySection.seafoodBreadInternational => 'Seafood & international',
+    GrocerySection.bakingMeat => 'Baking & meat',
+    GrocerySection.snacksDrinks => 'Snacks & drinks',
+    GrocerySection.seasonal => 'Seasonal',
+    GrocerySection.householdPets => 'Home & pets',
+    GrocerySection.dairyFrozenMeals => 'Dairy & frozen meals',
+    GrocerySection.frozen => 'Frozen',
+    GrocerySection.eggsCheeseDough => 'Eggs, cheese & dough',
+    GrocerySection.deliBakery => 'Deli & bakery',
+    GrocerySection.pantryOther => 'Pantry & other',
+  };
+
+  String get emoji => switch (this) {
+    GrocerySection.produceDeli => '🥬',
+    GrocerySection.seafoodBreadInternational => '🐟',
+    GrocerySection.bakingMeat => '🥩',
+    GrocerySection.snacksDrinks => '🥨',
+    GrocerySection.seasonal => '🎉',
+    GrocerySection.householdPets => '🧺',
+    GrocerySection.dairyFrozenMeals => '🥛',
+    GrocerySection.frozen => '❄️',
+    GrocerySection.eggsCheeseDough => '🥚',
+    GrocerySection.deliBakery => '🥖',
+    GrocerySection.pantryOther => '🛒',
+  };
+
+  int get storeOrder => index;
+}
+
+enum IngredientRole { main, supporting, staple }
+
+extension IngredientRoleLabel on IngredientRole {
+  String get label => switch (this) {
+    IngredientRole.main => 'Main ingredient',
+    IngredientRole.supporting => 'Supporting ingredient',
+    IngredientRole.staple => 'Staple / seasoning',
+  };
+}
+
+GrocerySection inferGrocerySection(String value) {
+  final text = value.toLowerCase();
+  if (RegExp(
+    r'produce|apple|banana|berry|broccoli|carrot|potato|garlic|lemon|lime|onion|asparagus|pepper|lettuce|tomato|avocado|spinach|mushroom|deli meat|cold cut|ham|salami',
+  ).hasMatch(text)) {
+    return GrocerySection.produceDeli;
+  }
+  if (RegExp(
+    r'seafood|fish|salmon|shrimp|tuna|international|tortilla|naan',
+  ).hasMatch(text)) {
+    return GrocerySection.seafoodBreadInternational;
+  }
+  if (RegExp(r'frozen dinner|frozen meal').hasMatch(text)) {
+    return GrocerySection.dairyFrozenMeals;
+  }
+  if (RegExp(r'ice cream|popsicle').hasMatch(text)) {
+    return GrocerySection.frozen;
+  }
+  if (RegExp(r'milk|cream|butter').hasMatch(text)) {
+    return GrocerySection.dairyFrozenMeals;
+  }
+  if (text.contains('frozen')) return GrocerySection.frozen;
+  if (RegExp(
+    r'flour|sugar|baking|yeast|vanilla|chicken|beef|pork|turkey|steak|sausage|ground meat',
+  ).hasMatch(text)) {
+    return GrocerySection.bakingMeat;
+  }
+  if (RegExp(
+    r'chip|snack|cracker|pretzel|sports drink|gatorade|powerade|soda',
+  ).hasMatch(text)) {
+    return GrocerySection.snacksDrinks;
+  }
+  if (RegExp(
+    r'laundry|detergent|clean|soap|paper towel|toilet paper|pet|dog|cat',
+  ).hasMatch(text)) {
+    return GrocerySection.householdPets;
+  }
+  if (RegExp(
+    r'egg|yogurt|yoghurt|cheese|refrigerated dough|pie crust',
+  ).hasMatch(text)) {
+    return GrocerySection.eggsCheeseDough;
+  }
+  if (RegExp(
+    r'bakery|cake|cookie|dessert|donut|doughnut|deli|bread|roll|bagel',
+  ).hasMatch(text)) {
+    return GrocerySection.deliBakery;
+  }
+  if (RegExp(r'seasonal|card|candle|gift wrap').hasMatch(text)) {
+    return GrocerySection.seasonal;
+  }
+  return GrocerySection.pantryOther;
+}
+
+IngredientRole inferIngredientRole(String value, GrocerySection section) {
+  final text = value.toLowerCase();
+  if (RegExp(
+    r'salt|pepper|spice|seasoning|oil|vinegar|flour|sugar|butter|sauce|stock|broth',
+  ).hasMatch(text)) {
+    return IngredientRole.staple;
+  }
+  if (section == GrocerySection.bakingMeat ||
+      section == GrocerySection.seafoodBreadInternational ||
+      RegExp(r'egg|tofu|bean|lentil').hasMatch(text)) {
+    return IngredientRole.main;
+  }
+  return IngredientRole.supporting;
+}
+
 enum ConsumptionKind { recipe, inventory, external }
 
 enum MealSlot { breakfast, lunch, dinner, snack }
@@ -176,6 +317,9 @@ class FoodDefinition {
     this.defaultLocation = StorageLocation.pantry,
     this.nutrition,
     this.aliases = const [],
+    this.grocerySection = GrocerySection.pantryOther,
+    this.ingredientRole = IngredientRole.supporting,
+    this.storeAisle = '',
   });
 
   final String id;
@@ -188,6 +332,9 @@ class FoodDefinition {
   final StorageLocation defaultLocation;
   final NutritionFacts? nutrition;
   final List<String> aliases;
+  final GrocerySection grocerySection;
+  final IngredientRole ingredientRole;
+  final String storeAisle;
 
   UnitConversion conversionFor(String unit) => conversions.firstWhere(
     (conversion) => conversion.unit.toLowerCase() == unit.toLowerCase(),
@@ -207,6 +354,9 @@ class FoodDefinition {
     NutritionFacts? nutrition,
     bool clearNutrition = false,
     List<String>? aliases,
+    GrocerySection? grocerySection,
+    IngredientRole? ingredientRole,
+    String? storeAisle,
   }) => FoodDefinition(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -218,6 +368,9 @@ class FoodDefinition {
     defaultLocation: defaultLocation ?? this.defaultLocation,
     nutrition: clearNutrition ? null : nutrition ?? this.nutrition,
     aliases: aliases ?? this.aliases,
+    grocerySection: grocerySection ?? this.grocerySection,
+    ingredientRole: ingredientRole ?? this.ingredientRole,
+    storeAisle: storeAisle ?? this.storeAisle,
   );
 }
 
@@ -587,6 +740,7 @@ class GroceryListItem {
     this.quantityBase,
     this.quantityLabel = '',
     this.firstNeededDate,
+    this.grocerySection = GrocerySection.pantryOther,
   });
 
   final String id;
@@ -598,6 +752,7 @@ class GroceryListItem {
   final double? quantityBase;
   final String quantityLabel;
   final DateTime? firstNeededDate;
+  final GrocerySection grocerySection;
 
   GroceryListItem copyWith({bool? checked}) => GroceryListItem(
     id: id,
@@ -609,6 +764,7 @@ class GroceryListItem {
     quantityBase: quantityBase,
     quantityLabel: quantityLabel,
     firstNeededDate: firstNeededDate,
+    grocerySection: grocerySection,
   );
 }
 

@@ -19,6 +19,25 @@ type ApiResponse = {
   json(body: unknown): void;
 };
 type Conversion = { unit: string; symbol: string; baseAmount: number };
+const grocerySections = [
+  ["produceDeli", "Produce & deli meats"],
+  ["seafoodBreadInternational", "Seafood, bread & international"],
+  ["bakingMeat", "Baking & fresh meats"],
+  ["snacksDrinks", "Snacks, chips & sports drinks"],
+  ["seasonal", "Seasonal & cards"],
+  ["householdPets", "Laundry, cleaning & pets"],
+  ["dairyFrozenMeals", "Dairy & frozen dinners"],
+  ["frozen", "Frozen foods & treats"],
+  ["eggsCheeseDough", "Eggs, yogurt, cheese & dough"],
+  ["deliBakery", "Deli, bakery & desserts"],
+  ["pantryOther", "Pantry & other"],
+] as const;
+type GrocerySection = typeof grocerySections[number][0];
+type IngredientRole = "main" | "supporting" | "staple";
+const grocerySectionOrder = new Map<GrocerySection, number>(
+  grocerySections.map(([section], index) => [section, index]),
+);
+const grocerySectionLabels = new Map<GrocerySection, string>(grocerySections);
 type FoodRecord = {
   id: string;
   name: string;
@@ -30,6 +49,9 @@ type FoodRecord = {
   displayUnit?: string;
   nutrition?: JsonObject;
   aliases: string[];
+  grocerySection: GrocerySection;
+  ingredientRole: IngredientRole;
+  storeAisle?: string;
 };
 type ProductRecord = {
   id: string;
@@ -247,10 +269,27 @@ async function exportInventory(response: ApiResponse): Promise<void> {
         quantityMode: food.quantity_mode,
         baseUnit: food.base_unit,
         displayUnit: food.display_unit ?? food.base_unit,
+        grocerySection: (() => {
+          const stored = optionalString(food.grocery_section);
+          return stored != null && isGrocerySection(stored)
+            ? stored
+            : inferGrocerySection(`${String(food.name)} ${(Array.isArray(food.aliases) ? food.aliases : []).join(" ")}`);
+        })(),
+        grocerySectionLabel: "",
+        storeOrder: 0,
+        ingredientRole: "supporting",
+        storeAisle: optionalString(food.store_aisle),
         totalQuantityBase: 0,
         lots: [],
       };
       items.set(foodId, item);
+      const section = item.grocerySection as GrocerySection;
+      item.grocerySectionLabel = grocerySectionLabels.get(section) ?? "Pantry & other";
+      item.storeOrder = grocerySectionOrder.get(section) ?? grocerySections.length;
+      const storedRole = optionalString(food.ingredient_role);
+      item.ingredientRole = storedRole != null && isIngredientRole(storedRole)
+        ? storedRole
+        : inferIngredientRole(String(food.name), section);
     }
     const productId = typeof data.product_id === "string" ? data.product_id : undefined;
     const product = productId == null ? undefined : productsById.get(productId);
@@ -268,7 +307,13 @@ async function exportInventory(response: ApiResponse): Promise<void> {
     });
   }
   response.status(200).json({
-    items: [...items.values()].sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    store: {
+      name: "Safeway — Waugh Chapel",
+      address: "2644 Chapel Lake Dr, Gambrills, MD 21054",
+      sortDirection: "produce-side entrance to deli/bakery side",
+    },
+    items: [...items.values()].sort((a, b) =>
+      Number(a.storeOrder) - Number(b.storeOrder) || String(a.name).localeCompare(String(b.name))),
     exportedAt: new Date().toISOString(),
   });
 }
@@ -565,6 +610,7 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
       food_id: foodId,
       quantity_base: quantityBase,
       quantity_label: "",
+      grocery_section: food.grocerySection,
       first_needed_date: firstNeededDates.has(foodId)
         ? Timestamp.fromDate(firstNeededDates.get(foodId)!)
         : null,
@@ -588,6 +634,10 @@ async function replacePlanning(body: JsonObject, response: ApiResponse): Promise
 
 async function addManualGroceryItem(body: JsonObject, response: ApiResponse): Promise<void> {
   const name = requiredString(body.name, "name");
+  const requestedSection = optionalString(body.grocerySection) ?? inferGrocerySection(name);
+  if (!isGrocerySection(requestedSection)) {
+    throw new ValidationError("grocerySection is invalid");
+  }
   const reference = db.collection("grocery_list").doc();
   const batch = db.batch();
   batch.set(reference, {
@@ -598,6 +648,7 @@ async function addManualGroceryItem(body: JsonObject, response: ApiResponse): Pr
     food_id: null,
     quantity_base: null,
     quantity_label: optionalString(body.quantityLabel) ?? "",
+    grocery_section: requestedSection,
     updated_at: FieldValue.serverTimestamp(),
   });
   batch.set(db.collection("settings").doc("planning_sync"), {
@@ -889,6 +940,9 @@ async function createFood(body: JsonObject, response: ApiResponse): Promise<void
     quantity_mode: food.quantityMode,
     base_unit: food.baseUnit,
     default_location: food.defaultLocation,
+    grocery_section: food.grocerySection,
+    ingredient_role: food.ingredientRole,
+    store_aisle: food.storeAisle ?? "",
     emoji: food.emoji,
     conversions: food.conversions.map((item) => ({
       unit: item.unit,
@@ -1834,6 +1888,13 @@ async function loadFoods(): Promise<FoodRecord[]> {
   const snapshot = await db.collection("foods").get();
   return snapshot.docs.map((doc) => {
     const data = doc.data();
+    const descriptor = `${String(data.name)} ${Array.isArray(data.aliases) ? data.aliases.join(" ") : ""}`;
+    const inferredSection = inferGrocerySection(descriptor);
+    const storedSection = optionalString(data.grocery_section);
+    const grocerySection = storedSection != null && isGrocerySection(storedSection)
+      ? storedSection
+      : inferredSection;
+    const storedRole = optionalString(data.ingredient_role);
     return {
       id: doc.id,
       name: String(data.name),
@@ -1849,6 +1910,11 @@ async function loadFoods(): Promise<FoodRecord[]> {
       displayUnit: optionalString(data.display_unit),
       nutrition: data.nutrition == null ? undefined : asObject(data.nutrition),
       aliases: Array.isArray(data.aliases) ? data.aliases.map(String) : [],
+      grocerySection,
+      ingredientRole: storedRole != null && isIngredientRole(storedRole)
+        ? storedRole
+        : inferIngredientRole(descriptor, grocerySection),
+      storeAisle: optionalString(data.store_aisle),
     };
   });
 }
@@ -1957,6 +2023,17 @@ function parseFood(body: JsonObject): FoodRecord {
   if (displayUnit != null && !conversions.some((item) => item.unit === displayUnit)) {
     throw new ValidationError("displayUnit must match a conversion unit");
   }
+  const aliases = body.aliases == null ? [] : stringList(body.aliases, "aliases");
+  const descriptor = `${name} ${aliases.join(" ")}`;
+  const grocerySectionValue = optionalString(body.grocerySection) ?? inferGrocerySection(descriptor);
+  if (!isGrocerySection(grocerySectionValue)) {
+    throw new ValidationError("grocerySection is invalid");
+  }
+  const ingredientRoleValue = optionalString(body.ingredientRole) ??
+    inferIngredientRole(descriptor, grocerySectionValue);
+  if (!isIngredientRole(ingredientRoleValue)) {
+    throw new ValidationError("ingredientRole must be main, supporting, or staple");
+  }
   return {
     id: optionalString(body.id) ?? slug(name),
     name,
@@ -1966,7 +2043,10 @@ function parseFood(body: JsonObject): FoodRecord {
     emoji: optionalString(body.emoji) ?? "🥫",
     conversions,
     displayUnit,
-    aliases: body.aliases == null ? [] : stringList(body.aliases, "aliases"),
+    aliases,
+    grocerySection: grocerySectionValue,
+    ingredientRole: ingredientRoleValue,
+    storeAisle: optionalString(body.storeAisle),
   };
 }
 
@@ -2060,6 +2140,34 @@ function dateOnly(value: string, name: string): Date {
 }
 function isLocation(value: string): value is "pantry" | "fridge" | "freezer" {
   return value === "pantry" || value === "fridge" || value === "freezer";
+}
+function isGrocerySection(value: string): value is GrocerySection {
+  return grocerySectionOrder.has(value as GrocerySection);
+}
+function isIngredientRole(value: string): value is IngredientRole {
+  return value === "main" || value === "supporting" || value === "staple";
+}
+function inferGrocerySection(value: string): GrocerySection {
+  const text = value.toLowerCase();
+  if (/produce|apple|banana|berry|broccoli|carrot|potato|garlic|lemon|lime|onion|asparagus|pepper|lettuce|tomato|avocado|spinach|mushroom|deli meat|cold cut|ham|salami/.test(text)) return "produceDeli";
+  if (/seafood|fish|salmon|shrimp|tuna|international|tortilla|naan/.test(text)) return "seafoodBreadInternational";
+  if (/frozen dinner|frozen meal/.test(text)) return "dairyFrozenMeals";
+  if (/ice cream|popsicle/.test(text)) return "frozen";
+  if (/milk|cream|butter/.test(text)) return "dairyFrozenMeals";
+  if (text.includes("frozen")) return "frozen";
+  if (/flour|sugar|baking|yeast|vanilla|chicken|beef|pork|turkey|steak|sausage|ground meat/.test(text)) return "bakingMeat";
+  if (/chip|snack|cracker|pretzel|sports drink|gatorade|powerade|soda/.test(text)) return "snacksDrinks";
+  if (/laundry|detergent|clean|soap|paper towel|toilet paper|pet|dog|cat/.test(text)) return "householdPets";
+  if (/egg|yogurt|yoghurt|cheese|refrigerated dough|pie crust/.test(text)) return "eggsCheeseDough";
+  if (/bakery|cake|cookie|dessert|donut|doughnut|deli|bread|roll|bagel/.test(text)) return "deliBakery";
+  if (/seasonal|card|candle|gift wrap/.test(text)) return "seasonal";
+  return "pantryOther";
+}
+function inferIngredientRole(value: string, section: GrocerySection): IngredientRole {
+  const text = value.toLowerCase();
+  if (/salt|pepper|spice|seasoning|oil|vinegar|flour|sugar|butter|sauce|stock|broth/.test(text)) return "staple";
+  if (section === "bakingMeat" || section === "seafoodBreadInternational" || /egg|tofu|bean|lentil/.test(text)) return "main";
+  return "supporting";
 }
 function normalize(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function singular(value: string): string { return value.endsWith("s") ? value.slice(0, -1) : value; }
