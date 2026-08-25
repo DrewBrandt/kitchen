@@ -1495,6 +1495,7 @@ async function searchExternalFoods(
     })
     .map((food) => ({
       id: food.id,
+      barcode: food.barcode ?? null,
       name: food.name,
       brand: food.brand ?? "",
       emoji: food.emoji ?? "🍽️",
@@ -1917,10 +1918,18 @@ async function saveExternalFood(body: JsonObject, response: ApiResponse): Promis
   const name = requiredString(body.name, "name");
   const brand = optionalString(body.brand) ?? "";
   const id = optionalString(body.id) ?? slug(`${brand}-${name}`);
+  const barcode = optionalString(body.barcode);
+  if (barcode != null) {
+    const duplicate = await db.collection("external_foods").where("barcode", "==", barcode).get();
+    if (duplicate.docs.some((document) => document.id !== id)) {
+      throw new ValidationError("Barcode is already assigned to another outside food");
+    }
+  }
   const nutrition = nutritionFromBody(body);
   await db.collection("external_foods").doc(id).set({
     name,
     brand,
+    barcode: barcode ?? null,
     emoji: optionalString(body.emoji) ?? "🍽️",
     serving_label: requiredString(body.servingLabel, "servingLabel"),
     nutrition,

@@ -702,6 +702,7 @@ class FirestorePantry {
     'label': event.label,
     'kind': event.kind.name,
     'recipe_id': event.recipeId,
+    'product_id': event.productId,
     'timestamp': Timestamp.fromDate(event.timestamp),
     'deductions': event.deductions
         .map(
@@ -780,6 +781,7 @@ class FirestorePantry {
     'nutrition': _nutritionTotalsData(food.nutrition),
     'source': food.source,
     'estimated': food.estimated,
+    'barcode': food.barcode,
     'updated_at': FieldValue.serverTimestamp(),
   };
 
@@ -845,6 +847,7 @@ class FirestorePantry {
       ),
       source: data['source'] as String? ?? '',
       estimated: data['estimated'] as bool? ?? false,
+      barcode: data['barcode'] as String?,
     );
   }
 
@@ -1235,6 +1238,7 @@ class FirestorePantry {
                 : ConsumptionKind.recipe)
           : ConsumptionKind.values.byName(kindName),
       recipeId: recipeId,
+      productId: data['product_id'] as String?,
       timestamp: (data['timestamp'] as Timestamp).toDate(),
       deductions: deductions,
       undoneAt: (data['undone_at'] as Timestamp?)?.toDate(),

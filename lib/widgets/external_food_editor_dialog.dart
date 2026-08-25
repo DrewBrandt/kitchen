@@ -3,29 +3,58 @@ import 'package:flutter/material.dart';
 import '../data/pantry_store.dart';
 import '../models/pantry_models.dart';
 
-Future<void> showExternalFoodEditor(
+class ExternalFoodEditorSeed {
+  const ExternalFoodEditorSeed({
+    required this.barcode,
+    this.name = '',
+    this.brand = '',
+    this.servingLabel = '1 item',
+    this.nutrition = const NutritionTotals(),
+    this.source = '',
+    this.estimated = false,
+  });
+
+  final String barcode;
+  final String name;
+  final String brand;
+  final String servingLabel;
+  final NutritionTotals nutrition;
+  final String source;
+  final bool estimated;
+}
+
+Future<ExternalFood?> showExternalFoodEditor(
   BuildContext context,
   PantryStore store, {
   ExternalFood? existing,
+  ExternalFoodEditorSeed? seed,
 }) async {
-  final name = TextEditingController(text: existing?.name ?? '');
-  final brand = TextEditingController(text: existing?.brand ?? '');
+  final name = TextEditingController(text: existing?.name ?? seed?.name ?? '');
+  final brand = TextEditingController(
+    text: existing?.brand ?? seed?.brand ?? '',
+  );
   final serving = TextEditingController(
-    text: existing?.servingLabel ?? '1 item',
+    text: existing?.servingLabel ?? seed?.servingLabel ?? '1 item',
   );
   final emoji = TextEditingController(text: existing?.emoji ?? '🍽️');
-  final source = TextEditingController(text: existing?.source ?? '');
+  final source = TextEditingController(
+    text: existing?.source ?? seed?.source ?? '',
+  );
+  final barcode = TextEditingController(
+    text: existing?.barcode ?? seed?.barcode ?? '',
+  );
   TextEditingController value(double number) => TextEditingController(
     text: number == 0 ? '' : number.toStringAsFixed(number % 1 == 0 ? 0 : 1),
   );
 
-  final calories = value(existing?.nutrition.calories ?? 0);
-  final protein = value(existing?.nutrition.proteinG ?? 0);
-  final carbs = value(existing?.nutrition.carbsG ?? 0);
-  final fat = value(existing?.nutrition.fatG ?? 0);
-  final fiber = value(existing?.nutrition.fiberG ?? 0);
-  final sugar = value(existing?.nutrition.sugarG ?? 0);
-  final sodium = value(existing?.nutrition.sodiumMg ?? 0);
+  final initialNutrition = existing?.nutrition ?? seed?.nutrition;
+  final calories = value(initialNutrition?.calories ?? 0);
+  final protein = value(initialNutrition?.proteinG ?? 0);
+  final carbs = value(initialNutrition?.carbsG ?? 0);
+  final fat = value(initialNutrition?.fatG ?? 0);
+  final fiber = value(initialNutrition?.fiberG ?? 0);
+  final sugar = value(initialNutrition?.sugarG ?? 0);
+  final sodium = value(initialNutrition?.sodiumMg ?? 0);
   final fields = <(String, TextEditingController, String)>[
     ('Calories', calories, 'cal'),
     ('Protein', protein, 'g'),
@@ -35,7 +64,7 @@ Future<void> showExternalFoodEditor(
     ('Sugar', sugar, 'g'),
     ('Sodium', sodium, 'mg'),
   ];
-  var estimated = existing?.estimated ?? false;
+  var estimated = existing?.estimated ?? seed?.estimated ?? false;
   String? error;
   double number(TextEditingController controller) =>
       double.tryParse(controller.text.trim()) ?? 0;
@@ -98,6 +127,15 @@ Future<void> showExternalFoodEditor(
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: barcode,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Barcode / UPC',
+                    helperText: 'Future scans will recognize this food.',
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Wrap(
@@ -178,26 +216,46 @@ Future<void> showExternalFoodEditor(
   );
 
   if (submitted == true) {
-    store.saveExternalFood(
-      ExternalFood(
-        id: existing?.id ?? store.nextId('${brand.text} ${name.text}'),
-        name: name.text.trim(),
-        brand: brand.text.trim(),
-        servingLabel: serving.text.trim(),
-        emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
-        source: source.text.trim(),
-        estimated: estimated,
-        nutrition: NutritionTotals(
-          calories: number(calories),
-          proteinG: number(protein),
-          carbsG: number(carbs),
-          fatG: number(fat),
-          fiberG: number(fiber),
-          sugarG: number(sugar),
-          sodiumMg: number(sodium),
-        ),
+    final food = ExternalFood(
+      id: existing?.id ?? store.nextId('${brand.text} ${name.text}'),
+      name: name.text.trim(),
+      brand: brand.text.trim(),
+      servingLabel: serving.text.trim(),
+      emoji: emoji.text.trim().isEmpty ? '🍽️' : emoji.text.trim(),
+      source: source.text.trim(),
+      estimated: estimated,
+      barcode: barcode.text.trim().isEmpty
+          ? null
+          : normalizeBarcode(barcode.text),
+      nutrition: NutritionTotals(
+        calories: number(calories),
+        proteinG: number(protein),
+        carbsG: number(carbs),
+        fatG: number(fat),
+        fiberG: number(fiber),
+        sugarG: number(sugar),
+        sodiumMg: number(sodium),
       ),
     );
+    store.saveExternalFood(food);
+    for (final controller in [
+      name,
+      brand,
+      serving,
+      emoji,
+      source,
+      barcode,
+      calories,
+      protein,
+      carbs,
+      fat,
+      fiber,
+      sugar,
+      sodium,
+    ]) {
+      controller.dispose();
+    }
+    return food;
   }
   for (final controller in [
     name,
@@ -205,6 +263,7 @@ Future<void> showExternalFoodEditor(
     serving,
     emoji,
     source,
+    barcode,
     calories,
     protein,
     carbs,
@@ -215,4 +274,5 @@ Future<void> showExternalFoodEditor(
   ]) {
     controller.dispose();
   }
+  return null;
 }

@@ -336,6 +336,7 @@ class ExternalFood {
     this.emoji = '🍽️',
     this.source = '',
     this.estimated = false,
+    this.barcode,
   });
 
   final String id;
@@ -346,6 +347,7 @@ class ExternalFood {
   final String emoji;
   final String source;
   final bool estimated;
+  final String? barcode;
 }
 
 extension StorageLocationLabel on StorageLocation {
@@ -471,6 +473,20 @@ class ProductDefinition {
     }
     return null;
   }
+
+  ProductDefinition copyWith({
+    List<UnitConversion>? conversions,
+    NutritionFacts? nutrition,
+  }) => ProductDefinition(
+    id: id,
+    foodId: foodId,
+    name: name,
+    brand: brand,
+    aliases: aliases,
+    barcode: barcode,
+    conversions: conversions ?? this.conversions,
+    nutrition: nutrition ?? this.nutrition,
+  );
 }
 
 class InventoryLot {
@@ -885,6 +901,7 @@ class ConsumptionEvent {
     required this.deductions,
     required this.kind,
     this.recipeId,
+    this.productId,
     this.undoneAt,
     this.nutrition,
     this.nutritionEstimated = false,
@@ -897,6 +914,7 @@ class ConsumptionEvent {
   final DateTime timestamp;
   final ConsumptionKind kind;
   final String? recipeId;
+  final String? productId;
   final List<LotDeduction> deductions;
   final DateTime? undoneAt;
   final NutritionTotals? nutrition;
@@ -910,6 +928,7 @@ class ConsumptionEvent {
     timestamp: timestamp,
     kind: kind,
     recipeId: recipeId,
+    productId: productId,
     deductions: deductions,
     undoneAt: at,
     nutrition: nutrition,

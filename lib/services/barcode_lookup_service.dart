@@ -13,6 +13,8 @@ class BarcodeProductSuggestion {
     this.packageAmount,
     this.packageUnit,
     this.quantityLabel = '',
+    this.nutritionPerPackage,
+    this.nutritionServingLabel = '',
   });
 
   final String barcode;
@@ -22,6 +24,8 @@ class BarcodeProductSuggestion {
   final double? packageAmount;
   final String? packageUnit;
   final String quantityLabel;
+  final NutritionTotals? nutritionPerPackage;
+  final String nutritionServingLabel;
 
   UnitConversion? packageConversionFor(FoodDefinition food) {
     final amount = packageAmount;
@@ -79,7 +83,7 @@ class OpenFoodFactsBarcodeLookup {
       '/api/v2/product/$normalized.json',
       {
         'fields':
-            'code,product_name,product_name_en,brands,quantity,product_quantity,product_quantity_unit',
+            'code,product_name,product_name_en,brands,quantity,product_quantity,product_quantity_unit,serving_size,serving_quantity,serving_quantity_unit,nutriments',
       },
     );
 
@@ -110,6 +114,13 @@ class OpenFoodFactsBarcodeLookup {
         product['product_name'],
       ]);
       final returnedBarcode = _text(product['code']);
+      final packageAmount = _number(product['product_quantity']);
+      final packageUnit = _nullableText(product['product_quantity_unit']);
+      final nutrition = _nutritionForPackage(
+        product,
+        packageAmount: packageAmount,
+        packageUnit: packageUnit,
+      );
       return BarcodeProductSuggestion(
         barcode: normalizeBarcode(
           returnedBarcode.isEmpty ? normalized : returnedBarcode,
@@ -117,9 +128,14 @@ class OpenFoodFactsBarcodeLookup {
         name: name,
         brand: _text(product['brands']),
         source: 'Open Food Facts',
-        packageAmount: _number(product['product_quantity']),
-        packageUnit: _nullableText(product['product_quantity_unit']),
+        packageAmount: packageAmount,
+        packageUnit: packageUnit,
         quantityLabel: _text(product['quantity']),
+        nutritionPerPackage: nutrition,
+        nutritionServingLabel: _firstText([
+          product['quantity'],
+          product['serving_size'],
+        ]),
       );
     } on FormatException {
       throw const BarcodeLookupException(
@@ -152,4 +168,106 @@ class OpenFoodFactsBarcodeLookup {
     String text => double.tryParse(text),
     _ => null,
   };
+
+  static NutritionTotals? _nutritionForPackage(
+    Map<String, dynamic> product, {
+    required double? packageAmount,
+    required String? packageUnit,
+  }) {
+    final nutriments = product['nutriments'] as Map<String, dynamic>?;
+    if (nutriments == null) return null;
+
+    double scale = 1;
+    var suffix = '_serving';
+    final servingAmount = _number(product['serving_quantity']);
+    final servingUnit = _nullableText(product['serving_quantity_unit']);
+    final packageAndServingMatch =
+        packageAmount != null &&
+        servingAmount != null &&
+        servingAmount > 0 &&
+        _sameDimension(packageUnit, servingUnit);
+    if (packageAndServingMatch) {
+      scale =
+          _toStandard(packageAmount, packageUnit) /
+          _toStandard(servingAmount, servingUnit);
+    } else if (packageAmount != null &&
+        packageAmount > 0 &&
+        _supportsPerHundred(packageUnit)) {
+      suffix = '_100g';
+      scale = _toStandard(packageAmount, packageUnit) / 100;
+    }
+
+    double value(String key) =>
+        (_number(nutriments['$key$suffix']) ?? 0) * scale;
+    final totals = NutritionTotals(
+      calories: value('energy-kcal'),
+      proteinG: value('proteins'),
+      carbsG: value('carbohydrates'),
+      fatG: value('fat'),
+      fiberG: value('fiber'),
+      sugarG: value('sugars'),
+      sodiumMg: value('sodium') * 1000,
+    );
+    return _hasNutrition(totals) ? totals : null;
+  }
+
+  static bool _hasNutrition(NutritionTotals value) =>
+      value.calories > 0 ||
+      value.proteinG > 0 ||
+      value.carbsG > 0 ||
+      value.fatG > 0 ||
+      value.fiberG > 0 ||
+      value.sugarG > 0 ||
+      value.sodiumMg > 0;
+
+  static bool _supportsPerHundred(String? unit) =>
+      switch (unit?.toLowerCase()) {
+        'g' ||
+        'gram' ||
+        'grams' ||
+        'kg' ||
+        'kilogram' ||
+        'kilograms' ||
+        'ml' ||
+        'milliliter' ||
+        'milliliters' ||
+        'cl' ||
+        'dl' ||
+        'l' ||
+        'liter' ||
+        'liters' => true,
+        _ => false,
+      };
+
+  static bool _sameDimension(String? left, String? right) {
+    final leftUnit = left?.toLowerCase();
+    final rightUnit = right?.toLowerCase();
+    const mass = {'g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms'};
+    const volume = {
+      'ml',
+      'milliliter',
+      'milliliters',
+      'cl',
+      'dl',
+      'l',
+      'liter',
+      'liters',
+    };
+    return (mass.contains(leftUnit) && mass.contains(rightUnit)) ||
+        (volume.contains(leftUnit) && volume.contains(rightUnit)) ||
+        leftUnit == rightUnit;
+  }
+
+  static double _toStandard(double amount, String? unit) =>
+      switch (unit?.toLowerCase()) {
+        'kg' ||
+        'kilogram' ||
+        'kilograms' ||
+        'l' ||
+        'liter' ||
+        'liters' => amount * 1000,
+        'cl' => amount * 10,
+        'dl' => amount * 100,
+        _ => amount,
+      };
 }

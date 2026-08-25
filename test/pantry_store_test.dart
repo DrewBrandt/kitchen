@@ -152,6 +152,90 @@ void main() {
     );
   });
 
+  test('outside food lookup normalizes UPC-A and EAN-13 barcodes', () {
+    final store = PantryStore.demo();
+    const drink = ExternalFood(
+      id: 'outside-drink',
+      barcode: '034000470693',
+      name: 'Energy drink',
+      servingLabel: '1 can',
+      nutrition: NutritionTotals(calories: 10),
+    );
+
+    store.saveExternalFood(drink);
+
+    expect(store.externalFoodForBarcode('0034000470693')?.id, drink.id);
+  });
+
+  test('scanned product consumption deducts only its exact product lots', () {
+    final store = PantryStore.demo();
+    final food = store.food('egg');
+    const product = ProductDefinition(
+      id: 'scanned-eggs',
+      foodId: 'egg',
+      name: 'Two-pack eggs',
+      barcode: '123456789012',
+      conversions: [
+        UnitConversion(unit: 'package', symbol: '2-pack', baseAmount: 2),
+      ],
+      nutrition: NutritionFacts(
+        basisBaseAmount: 2,
+        totals: NutritionTotals(calories: 140, proteinG: 12),
+      ),
+    );
+    const otherProduct = ProductDefinition(
+      id: 'other-eggs',
+      foodId: 'egg',
+      name: 'Other eggs',
+    );
+    store.saveProduct(product);
+    store.saveProduct(otherProduct);
+    store.addLot(
+      food: food,
+      product: product,
+      amount: 2,
+      unit: 'each',
+      location: StorageLocation.fridge,
+    );
+    store.addLot(
+      food: food,
+      product: otherProduct,
+      amount: 2,
+      unit: 'each',
+      location: StorageLocation.fridge,
+    );
+    final otherBefore = store.productInventoryBase(otherProduct.id);
+
+    final event = store.consumeProduct(product, 1);
+
+    expect(store.productInventoryBase(product.id), 0);
+    expect(store.productInventoryBase(otherProduct.id), otherBefore);
+    expect(event.kind, ConsumptionKind.inventory);
+    expect(event.productId, product.id);
+    expect(event.nutrition!.calories, 140);
+  });
+
+  test('scanned product can be logged outside without changing inventory', () {
+    final store = PantryStore.demo();
+    const product = ProductDefinition(
+      id: 'outside-product',
+      foodId: 'egg',
+      name: 'Convenience-store eggs',
+      nutrition: NutritionFacts(
+        basisBaseAmount: 1,
+        totals: NutritionTotals(calories: 70),
+      ),
+    );
+    final before = store.totalFor('egg');
+
+    final event = store.logProductOutside(product, 1);
+
+    expect(store.totalFor('egg'), before);
+    expect(event.kind, ConsumptionKind.external);
+    expect(event.productId, product.id);
+    expect(event.deductions, isEmpty);
+  });
+
   test('nutrition scales with food units and recipe servings', () {
     final store = PantryStore.demo(now: DateTime(2026, 8, 23));
     final eggs = store

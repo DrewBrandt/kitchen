@@ -1299,6 +1299,8 @@ components:
       properties:
         id:
           type: string
+        barcode:
+          type: string
         name:
           type: string
         brand:
