@@ -129,6 +129,8 @@ paths:
                   type: string
                 emoji:
                   type: string
+                grocerySection:
+                  $ref: '#/components/schemas/GrocerySection'
       responses:
         '201':
           $ref: '#/components/responses/Success'
@@ -797,10 +799,27 @@ components:
         baseAmount:
           type: number
           minimum: 0.000001
+    GrocerySection:
+      type: string
+      description: >-
+        Department stop in walking order at the Waugh Chapel Safeway, from the
+        produce-side entrance toward deli and bakery.
+      enum:
+        - produceDeli
+        - seafoodBreadInternational
+        - bakingMeat
+        - snacksDrinks
+        - seasonal
+        - householdPets
+        - dairyFrozenMeals
+        - frozen
+        - eggsCheeseDough
+        - deliBakery
+        - pantryOther
     FoodDefinition:
       type: object
       additionalProperties: false
-      required: [name, quantityMode, baseUnit, defaultLocation, conversions]
+      required: [name, quantityMode, baseUnit, defaultLocation, grocerySection, ingredientRole, conversions]
       properties:
         id:
           type: string
@@ -818,6 +837,15 @@ components:
         defaultLocation:
           type: string
           enum: [pantry, fridge, freezer]
+        grocerySection:
+          $ref: '#/components/schemas/GrocerySection'
+        ingredientRole:
+          type: string
+          enum: [main, supporting, staple]
+          description: Main ingredients are useful meal foundations; staples are seasonings and routine cooking supplies.
+        storeAisle:
+          type: string
+          description: Optional exact aisle or area note learned for this store.
         conversions:
           type: array
           minItems: 1
