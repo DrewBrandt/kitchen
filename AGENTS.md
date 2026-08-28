@@ -5,7 +5,7 @@
 
 - Start every implementation task in its own Git worktree on a dedicated `codex/` branch. Do not implement directly on `main`.
 - Preserve unrelated user or agent changes. Do not copy uncommitted work from another worktree unless its owner explicitly asks you to.
-- New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `flutter pub get` at the repository root and `npm ci` in `functions/`. Use the lockfiles; do not copy `node_modules`, `.dart_tool`, or build output from another worktree.
+- New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `flutter pub get` and `npm ci` at the repository root, then `npm ci` in `functions/`. Use the lockfiles; do not copy `node_modules`, `.dart_tool`, or build output from another worktree.
 - Run Flutter/Dart commands sequentially within a worktree. Concurrent first-run Flutter commands can contend on SDK initialization or package locks and appear to hang without output.
 - On Windows, call `flutter.bat` and `dart.bat` explicitly. `where` may resolve the extensionless POSIX launchers before the `.bat` files, which can hang without output under PowerShell. If `dart.bat` still misbehaves, invoke the SDK executable under `<flutter-sdk>\bin\cache\dart-sdk\bin\dart.exe` directly.
 - If the sandbox blocks dependency network access, rerun only the standard locked restore command with the required network approval. Do not replace the locked restore with copied dependencies or an unpinned install.

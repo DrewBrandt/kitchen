@@ -1,9 +1,10 @@
 # Pantry Inventory
 
-A private Flutter pantry, fridge, freezer, nutrition, and recipe tracker backed
-by Firebase.
+A private, responsive TypeScript and React pantry, fridge, freezer, nutrition,
+and recipe tracker. The web-native UI is intentionally isolated from its data
+provider so the Firebase-to-Supabase migration can proceed independently.
 
-The current vertical slice includes:
+The UI represents the following product capabilities:
 
 - counted and measured foods
 - fractional counted quantities
@@ -28,17 +29,24 @@ The current vertical slice includes:
 - a private Me routine with per-day sleep times, dinner windows, and planning buffers
 - read-only selected-calendar agendas for schedule-aware Pantry GPT meal planning
 
-The production app uses Firebase project `pantry-tracker-4bc45`. Firebase's web
-configuration is intentionally safe to ship in a web client; access to pantry
-data is enforced by Firebase Authentication and Firestore Security Rules.
+The legacy Firebase functions, Firestore rules, and Flutter client remain in
+the repository as migration references. They are not imported by the new web
+frontend; its eventual Supabase adapter is deliberately outside this UI change.
 
 ## Run
 
 ```sh
-flutter run
+npm ci
+npm run dev
 ```
 
-## Private access setup
+The UI currently uses representative in-memory data while the PostgreSQL data
+layer is rebuilt. Interactive state such as grocery check-off, search, filters,
+cooking steps, shopping mode, and side-panel workflows is fully client-side.
+
+## Legacy Firebase access setup
+
+These steps apply only to the legacy Flutter/Firebase client during migration.
 
 1. In Firebase Console, open **Authentication → Sign-in method** and enable
    **Google**.
@@ -65,20 +73,10 @@ publishes the app whenever `main` is pushed.
 3. Add `<your-github-name>.github.io` under
    **Firebase Authentication → Settings → Authorized domains**.
 
-No Firebase secret is required by GitHub Actions. The Pages build contains only
-the normal Firebase web configuration already required by every browser client.
+No Firebase secret is required by the frontend build.
 
-## Firefox mobile sign-in
-
-Use the Firebase-hosted app at
-`https://pantry-tracker-4bc45.firebaseapp.com` on Firefox mobile. The app uses a
-same-origin redirect there so Firefox cannot block Firebase's authentication
-handoff as cross-site storage. Build with a root base path and deploy with:
-
-```sh
-flutter build web --release --base-href / --pwa-strategy=none
-firebase deploy --only hosting
-```
+The workflow builds the Vite app into `dist/`. Firebase Hosting serves the same
+artifact and retains the existing no-cache policy for entry files.
 
 ## Codex API credential
 
@@ -91,9 +89,9 @@ credential and send it directly to Firebase Secret Manager with:
 ```
 
 The generated token is never printed. Firebase holds one copy and this Windows
-account holds a DPAPI-encrypted copy outside the repository. The function
-receives it at runtime; it does not belong in Flutter, GitHub Actions, chat, or
-source control.
+account holds a DPAPI-encrypted copy outside the repository. The legacy
+function receives it at runtime; it does not belong in a client, GitHub
+Actions, chat, or source control.
 
 After deploying the function, make an authenticated request with:
 
@@ -129,8 +127,9 @@ identifies a product, but it does not contain the package's best-by date.
 ## Verify
 
 ```sh
-flutter analyze
-flutter test
+npm run check
+npm test
+npm run build
 ```
 
 See `REQUIREMENTS.md` for the canonical model and Firebase migration plan.
