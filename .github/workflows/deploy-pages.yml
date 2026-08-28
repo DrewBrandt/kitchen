@@ -1,4 +1,4 @@
-name: Deploy Flutter web to GitHub Pages
+name: Deploy Pantry web to GitHub Pages
 
 on:
   push:
@@ -21,53 +21,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2.23.0
+      - name: Set up Node
+        uses: actions/setup-node@v6
         with:
-          channel: stable
-          cache: true
+          node-version: 24
+          cache: npm
 
       - name: Install dependencies
-        run: flutter pub get
+        run: npm ci
 
       - name: Verify
-        run: |
-          flutter analyze
-          set +e
-          flutter test --reporter expanded 2>&1 | tee flutter-test.log
-          test_status=${PIPESTATUS[0]}
-          set -e
-          if [[ $test_status -ne 0 ]]; then
-            failing_test="$(grep -E ' \[E\]$' flutter-test.log | tail -n 1 || true)"
-            echo "::error title=Flutter test failure::${failing_test:-Flutter tests failed; inspect the job log.}"
-            python3 - <<'PY'
-          from pathlib import Path
-
-          lines = Path("flutter-test.log").read_text(errors="replace").splitlines()
-          markers = [
-              index
-              for index, line in enumerate(lines)
-              if "EXCEPTION CAUGHT" in line or "TestFailure was thrown" in line
-          ]
-          for number, marker in enumerate(markers[-4:], start=1):
-              detail = "\n".join(lines[marker : marker + 28])
-              detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(f"::error title=Flutter test details {number}::{detail}")
-          PY
-            exit "$test_status"
-          fi
+        run: npm test
 
       - name: Build web app
-        shell: bash
         run: |
-          repository_name="${GITHUB_REPOSITORY#*/}"
-          if [[ "$repository_name" == *.github.io ]]; then
-            base_href="/"
-          else
-            base_href="/$repository_name/"
-          fi
-          flutter build web --release --base-href "$base_href" --pwa-strategy=none
-          touch build/web/.nojekyll
+          npm run build
+          touch dist/.nojekyll
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -75,7 +44,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: build/web
+          path: dist
 
   deploy:
     environment:

@@ -33,6 +33,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+node_modules/
+dist/
 /.firebase/
 /merging.lock
 

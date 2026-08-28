@@ -11,6 +11,8 @@ void main() {
     final hosting = config['hosting'] as Map<String, dynamic>;
     final headers = hosting['headers'] as List<dynamic>;
 
+    expect(hosting['public'], 'dist');
+
     expect(
       headers,
       contains(
@@ -27,13 +29,11 @@ void main() {
     );
   });
 
-  test('web startup retires legacy Flutter service workers', () {
-    final index = File('web/index.html').readAsStringSync();
+  test('web-native startup retires legacy Flutter service workers', () {
+    final index = File('index.html').readAsStringSync();
 
     expect(index, contains('navigator.serviceWorker.getRegistrations()'));
-    expect(index, contains('item.unregister()'));
-    expect(index, contains("const marker = '_pantry_sw_retired'"));
-    expect(index, contains('location.replace(reloadUrl)'));
-    expect(index, contains("bootstrap.src = 'flutter_bootstrap.js'"));
+    expect(index, contains('registration.unregister()'));
+    expect(index, contains('/src/main.tsx'));
   });
 }
