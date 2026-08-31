@@ -510,3 +510,35 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+/* Supabase authentication */
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface, #f7f5ef);
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 22px;
+  padding: 32px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 20px;
+  background: var(--card, #fff);
+  box-shadow: 0 20px 60px rgb(35 44 38 / 10%);
+}
+
+.auth-card h1 { margin: 6px 0 4px; }
+.auth-card p { margin: 0; color: var(--muted, #69736b); }
+.auth-card label { display: grid; gap: 8px; font-size: 13px; font-weight: 700; }
+.auth-card input { width: 100%; padding: 12px 14px; border: 1px solid var(--border, #dedbd2); border-radius: 10px; font: inherit; }
+.auth-card .button { width: 100%; justify-content: center; }
+.auth-card > small { color: var(--muted, #69736b); line-height: 1.5; }
+.auth-brand { position: static; padding: 0; }
+.auth-error { padding: 10px 12px; border-radius: 10px; color: #8f2634; background: #fdecef; font-size: 13px; }
+.sign-out { margin: 0 18px 14px; justify-content: flex-start; }
+.google-button { border: 1px solid #d7dadc; background: #fff; color: #25302a; }
+.google-button:hover { background: #f8faf9; border-color: #b8c1bc; }
+.google-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #4285f4; font-weight: 800; }

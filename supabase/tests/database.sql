@@ -3,7 +3,12 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(16);
+select plan(17);
+
+select ok(
+  not public.is_app_owner(),
+  'database test session is not treated as the application owner'
+);
 
 insert into base_foods (
   id,

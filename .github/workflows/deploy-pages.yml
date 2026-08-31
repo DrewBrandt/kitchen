@@ -34,6 +34,9 @@ jobs:
         run: npm test
 
       - name: Build web app
+        env:
+          VITE_SUPABASE_URL: https://xaetuqdtnolzspfvqvja.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nkixKnZK-C3UTEZv-A5JHQ_OyFFeRuk
         run: |
           npm run build
           touch dist/.nojekyll

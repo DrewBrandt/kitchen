@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
 describe('Pantry web UI', () => {
@@ -61,5 +61,24 @@ describe('Pantry web UI', () => {
     expect(within(dialog).getByText('Food constraints')).toBeInTheDocument();
     expect(within(dialog).getByText('Google Calendar')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Allergies and intolerances')).toBeInTheDocument();
+  });
+
+  it('submits grocery form data through the live action boundary', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Grocery item added.');
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getByRole('button', { name: /Grocery list/ }));
+    await user.click(screen.getByRole('button', { name: 'Add item' }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Item'), 'Fresh basil');
+    await user.type(within(dialog).getByLabelText('Quantity'), '1 bunch');
+    await user.click(within(dialog).getByRole('button', { name: 'Add item' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('item');
+    expect(form.get('name')).toBe('Fresh basil');
+    expect(form.get('quantity_label')).toBe('1 bunch');
   });
 });

@@ -1104,12 +1104,26 @@ export type Database = {
       }
     }
     Functions: {
+      consume_prepared_lot: {
+        Args: { p_lot: string; p_occurred_at?: string; p_quantity?: number }
+        Returns: string
+      }
+      cook_recipe: {
+        Args: { p_actual_yield?: number; p_location?: string; p_recipe: string; p_scale?: number }
+        Returns: string
+      }
+      cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
       food_accepts_unit: {
         Args: { p_food: string; p_unit: string }
         Returns: boolean
       }
       from_base_quantity: {
         Args: { p_base_amount: number; p_food: string; p_unit: string }
+        Returns: number
+      }
+      is_app_owner: { Args: never; Returns: boolean }
+      rebuild_shopping_from_plan: {
+        Args: { p_from?: string; p_through?: string }
         Returns: number
       }
       lot_nutrition_json: {
