@@ -1109,7 +1109,12 @@ export type Database = {
         Returns: string
       }
       cook_recipe: {
-        Args: { p_actual_yield?: number; p_location?: string; p_recipe: string; p_scale?: number }
+        Args: {
+          p_actual_yield?: number
+          p_location?: string
+          p_recipe: string
+          p_scale?: number
+        }
         Returns: string
       }
       cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
@@ -1121,11 +1126,52 @@ export type Database = {
         Args: { p_base_amount: number; p_food: string; p_unit: string }
         Returns: number
       }
-      is_app_owner: { Args: never; Returns: boolean }
-      rebuild_shopping_from_plan: {
-        Args: { p_from?: string; p_through?: string }
-        Returns: number
+      gpt_add_grocery_lots: {
+        Args: { p_items: Json; p_source?: string }
+        Returns: Json
       }
+      gpt_consume_inventory: {
+        Args: {
+          p_food: string
+          p_label?: string
+          p_note?: string
+          p_occurred_at?: string
+          p_quantity: number
+          p_unit: string
+        }
+        Returns: Json
+      }
+      gpt_consume_prepared: {
+        Args: {
+          p_label?: string
+          p_lot: string
+          p_note?: string
+          p_occurred_at?: string
+          p_quantity: number
+        }
+        Returns: Json
+      }
+      gpt_prepare_recipe: {
+        Args: {
+          p_location?: string
+          p_note?: string
+          p_recipe: string
+          p_servings: number
+          p_use_by?: string
+        }
+        Returns: Json
+      }
+      gpt_reconcile_inventory: {
+        Args: { p_replacements: Json; p_source?: string }
+        Returns: Json
+      }
+      gpt_replace_weekly_plan: {
+        Args: { p_entries: Json; p_week_start: string }
+        Returns: Json
+      }
+      gpt_save_external_food: { Args: { p_food: Json }; Returns: Json }
+      gpt_save_recipe: { Args: { p_recipe: Json }; Returns: Json }
+      is_app_owner: { Args: never; Returns: boolean }
       lot_nutrition_json: {
         Args: { p_lot: string; p_path?: string[] }
         Returns: Json
@@ -1142,7 +1188,12 @@ export type Database = {
         }[]
       }
       prep_total_cost: { Args: { p_prep: string }; Returns: number }
+      rebuild_shopping_from_plan: {
+        Args: { p_from?: string; p_through?: string }
+        Returns: number
+      }
       refresh_inventory_lot: { Args: { p_lot: string }; Returns: undefined }
+      resolve_measure_conversion: { Args: { p_unit: string }; Returns: string }
       to_base_quantity: {
         Args: { p_amount: number; p_food: string; p_unit: string }
         Returns: number
