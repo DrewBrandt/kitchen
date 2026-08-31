@@ -443,21 +443,42 @@ function WeekPage({ onOpen }: { onOpen: (kind: PanelKind, recipe?: Recipe) => vo
 }
 
 function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onVoid?: (id: string) => Promise<void> }) {
-  const { foodLog, nutrients } = usePantryData();
-  const segments = [26, 24, 50];
-  const today = new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients } = usePantryData();
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    return date;
+  });
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const selectedKey = selectedDate.toLocaleDateString('en-CA');
+  const isToday = selectedDate.getTime() === today.getTime();
+  const selectedDay = foodLogByDate[selectedKey];
+  const foodLog = isToday ? todayFoodLog : (selectedDay?.foodLog ?? []);
+  const nutrients = isToday ? todayNutrients : (selectedDay?.nutrients ?? todayNutrients.map((nutrient) => ({
+    ...nutrient,
+    value: nutrient.label === 'Calories' ? '0' : `0 ${nutrient.label === 'Sodium' ? 'mg' : 'g'}`,
+    pct: 0,
+  })));
+  const segmentWidth = foodLog.length ? 72 / foodLog.length : 0;
+  const dateLabel = selectedDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const moveDay = (days: number) => setSelectedDate((current) => {
+    const next = new Date(current);
+    next.setDate(next.getDate() + days);
+    return next;
+  });
   return (
     <div className="stack">
-      <div className="date-switcher"><button disabled title="Past-day navigation is coming soon">‹</button><strong>Today</strong><span>{today}</span><button disabled>›</button></div>
+      <div className="date-switcher"><button aria-label="Previous day" onClick={() => moveDay(-1)}>‹</button><strong>{isToday ? 'Today' : dateLabel}</strong>{isToday && <span>{dateLabel}</span>}<button aria-label="Next day" disabled={isToday} onClick={() => moveDay(1)}>›</button></div>
       <Card className="contribution-card">
         <SectionTitle title="How each food built your day" subtitle="Each color is one food or same-day repeat group. The line is your target — sodium's is a limit." action="Targets" onAction={() => onOpen('targets')} />
         <div className="legend">{foodLog.map((item) => <span key={item.id ?? item.label}><i style={{ background: item.color }} />{item.label}<small>{item.calories}</small></span>)}</div>
-        {nutrients.map((nutrient, rowIndex) => (
-          <div className="contribution-row" key={nutrient.label}><strong>{nutrient.label}</strong><div className="segment-bar">{segments.slice(0, foodLog.length).map((width, index) => <i key={index} style={{ width: `${width * (0.65 + rowIndex * 0.04)}%`, background: foodLog[index]?.color }} />)}<b style={{ left: `${Math.min(92, 72 + rowIndex * 3)}%` }} /></div><span>{nutrient.value} {nutrient.target}</span></div>
+        {nutrients.map((nutrient) => (
+          <div className="contribution-row" key={nutrient.label}><strong>{nutrient.label}</strong><div className="segment-bar">{foodLog.map((entry, index) => <i key={entry.id ?? `${entry.label}-${index}`} style={{ width: `${segmentWidth}%`, background: entry.color }} />)}<b style={{ left: '72%' }} /></div><span>{nutrient.value} {nutrient.target}</span></div>
         ))}
       </Card>
       <Card>
-        <SectionTitle title="Meals and snacks" action="3 entries" />
+        <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'}`} />
         {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small><button onClick={() => { if (entry.id && onVoid) void onVoid(entry.id).then(() => notify(`${entry.label} removed. Undo is available.`)); else notify(`${entry.label} removed. Undo is available.`); }}>Remove</button></div>)}
       </Card>
     </div>

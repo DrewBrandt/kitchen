@@ -162,12 +162,11 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     ['Fiber', 'fiber_g', settings.nutrition_fiber_g, 'g', '#e5c07b'],
     ['Sodium', 'sodium_mg', settings.nutrition_sodium_mg, 'mg', '#e88592'],
   ] as const;
-  const nutrients = nutrientSpec.map(([label, field, target, unit, color]) => {
-    const value = sum(todayLogs, field);
+  const buildNutrients = (dayLogs: FoodLogRow[]) => nutrientSpec.map(([label, field, target, unit, color]) => {
+    const value = sum(dayLogs, field);
     return { label, value: `${Math.round(value).toLocaleString()}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
   });
-
-  const foodLog = todayLogs.map((log, index) => ({
+  const buildFoodLog = (dayLogs: FoodLogRow[]) => dayLogs.map((log, index) => ({
     id: log.id,
     emoji: log.kind === 'external' ? '🥡' : '🍽️',
     label: log.label,
@@ -177,12 +176,18 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     time: new Date(log.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     color: ['#86d7ac', '#8fbce6', '#b0a6e0'][index % 3],
   }));
+  const nutrients = buildNutrients(todayLogs);
+  const foodLog = buildFoodLog(todayLogs);
 
   const byDay = new Map<string, FoodLogRow[]>();
   for (const log of logs) {
     const key = new Date(log.occurred_at).toLocaleDateString('en-CA');
     byDay.set(key, [...(byDay.get(key) ?? []), log]);
   }
+  const foodLogByDate = Object.fromEntries([...byDay.entries()].map(([date, dayLogs]) => [date, {
+    nutrients: buildNutrients(dayLogs),
+    foodLog: buildFoodLog(dayLogs),
+  }]));
   const history = [...byDay.entries()].slice(0, 14).map(([date, dayLogs]) => {
     const parsed = new Date(`${date}T12:00:00`);
     return {
@@ -218,7 +223,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
   const start = new Date();
   start.setHours(12, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const weekDays = Array.from({ length: 7 }, (_, offset) => {
     const date = new Date(start);
     date.setDate(start.getDate() + offset);
@@ -237,6 +242,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     nutrients,
     weekDays,
     foodLog,
+    foodLogByDate,
     history,
     foods: [...foods.values()].map((food) => ({ id: food.id, name: food.name, emoji: food.emoji ?? '🍽️', measureStyle: food.measure_style })),
     products: [...products.values()].map((product) => ({

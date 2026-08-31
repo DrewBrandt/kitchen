@@ -136,13 +136,13 @@ export const NUTRIENTS = [
 ];
 
 export const WEEK_DAYS = [
-  { day: 'SUN', date: '24', meals: [] },
   { day: 'MON', date: '25', meals: [] },
   { day: 'TUE', date: '26', meals: [{ slot: 'BREAKFAST', name: 'Soft Scrambled Eggs', emoji: '🍳' }] },
   { day: 'WED', date: '27', today: true, meals: [{ slot: 'DINNER', name: 'Simple Pancakes', emoji: '🥞' }] },
   { day: 'THU', date: '28', meals: [] },
   { day: 'FRI', date: '29', meals: [{ slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳' }] },
   { day: 'SAT', date: '30', meals: [] },
+  { day: 'SUN', date: '31', meals: [] },
 ];
 
 export const FOOD_LOG = [

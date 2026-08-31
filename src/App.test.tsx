@@ -63,6 +63,34 @@ describe('Pantry web UI', () => {
     expect(within(dialog).getByLabelText('Allergies and intolerances')).toBeInTheDocument();
   });
 
+  it('navigates food-log days and keeps nutrition targets aligned', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    const previous = screen.getByRole('button', { name: 'Previous day' });
+    const next = screen.getByRole('button', { name: 'Next day' });
+    expect(next).toBeDisabled();
+
+    await user.click(previous);
+    expect(container.querySelector('.date-switcher strong')).not.toHaveTextContent('Today');
+    expect(next).toBeEnabled();
+    expect([...container.querySelectorAll<HTMLElement>('.segment-bar b')].every((marker) => marker.style.left === '72%')).toBe(true);
+
+    await user.click(next);
+    expect(container.querySelector('.date-switcher strong')).toHaveTextContent('Today');
+    expect(next).toBeDisabled();
+  });
+
+  it('shows this week from Monday through Sunday', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    const days = [...container.querySelectorAll('.week-date strong')].map((day) => day.textContent);
+    expect(days).toEqual(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']);
+  });
+
   it('submits grocery form data through the live action boundary', async () => {
     const user = userEvent.setup();
     const save = vi.fn().mockResolvedValue('Grocery item added.');
