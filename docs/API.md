@@ -1,4 +1,8 @@
-# Codex pantry API
+# Planned Pantry API
+
+> This contract is retained for future work. No private Pantry API is currently
+> deployed; the browser application talks directly to owner-protected Supabase
+> tables and database functions.
 
 The API is the durable boundary between plain-English requests and pantry data. Codex interprets the request, checks uncertainties with the user when necessary, converts it to this structured contract, and sends it with a private bearer token.
 
@@ -12,33 +16,11 @@ Every request uses:
 Authorization: Bearer <PANTRY_API_TOKEN>
 ```
 
-Cloud Functions and Secret Manager require the Firebase Blaze plan. Generate a
-random token, store it in Firebase, and keep a Windows-encrypted local copy by
-running from the repository root:
+The future server must store this token in its own secret environment. Never
+store it in the browser client or commit it to Git.
 
-```powershell
-.\tools\setup_api_secret.ps1
-```
-
-The token is not displayed or passed through chat. Never store it in the Flutter
-client or commit it to Git. Use `tools/pantry_api.ps1` for authenticated calls;
-POST bodies are supplied as JSON files with `-BodyFile`.
-
-## Allow a Google account
-
-Firestore access is denied until the authenticated account's Firebase UID is
-explicitly allowlisted. The signed-in app displays the UID when access is
-missing. Approve it through the private API:
-
-```http
-POST /v1/access
-Content-Type: application/json
-
-{"uid": "firebase-auth-uid"}
-```
-
-This route is protected by the same private bearer token. A UID identifies an
-account but is not itself a credential.
+Supabase Auth and PostgreSQL Row Level Security own interactive Google-account
+authorization. This API must not provide a route that changes the owner.
 
 ## Log food that does not use inventory
 
@@ -65,7 +47,7 @@ Content-Type: application/json
 ```
 
 Only `label` and at least one positive nutrition value are required. If
-`timestamp` is omitted, Firebase records the current time.
+`timestamp` is omitted, the server records the current time.
 
 ## Save and reuse an outside food
 
@@ -127,7 +109,7 @@ Each call to `POST /v1/meals` creates one history event and retains the
 ## Consume a saved recipe
 
 This route deducts the recipe ingredients from the earliest-expiring inventory
-lots and records one nutrition-history event in the same Firestore transaction:
+lots and records one nutrition-history event in the same PostgreSQL transaction:
 
 ```http
 POST /v1/consume/recipe
@@ -379,8 +361,8 @@ Manual items remain on the list independently of meal-plan recalculation.
 
 ## Calendar synchronization
 
-Planning writes from Flutter and `POST /v1/plans` atomically update
-`settings/planning_sync`. The Firestore-triggered reconciler then updates only
+Planning writes from the web app and `POST /v1/plans` will atomically update a
+planning-sync marker. A future server-side reconciler then updates only
 events carrying Pantry's private managed-event properties. A plan write remains
 successful when Google is temporarily unavailable.
 
@@ -420,7 +402,7 @@ Recipe writes may include explicit preparation reminders:
 }
 ```
 
-The Flutter recipe editor uses the equivalent line format
+The web recipe editor uses the equivalent line format
 `24 | thaw | Move chicken to the refrigerator`.
 
 One meal-plan entry may instead carry an exact time and plan-specific task:
@@ -551,21 +533,6 @@ Content-Type: application/json
 ```
 
 Unknown foods and unsupported units return `422` without a partial write. Codex should define a new food first or ask the user for the missing package amount.
-
-## Migrate existing branded foods
-
-`POST /v1/migrations/canonical-products` converts existing branded food
-definitions into canonical foods plus products. It defaults to `dryRun: true`
-and reports affected lots, recipes, and history. With `dryRun: false`, it
-validates every target recipe unit before changing anything, then rewrites
-inventory, recipes, prepared batches, history deductions, and grocery
-references in one Firestore batch. Batches are capped at 450 writes.
-When `canonicalConversions` removes the food's current display unit, the
-mapping must provide a supported `canonicalDisplayUnit`.
-
-The reviewed mapping for the current pantry is
-`tools/canonical_product_migration.json`. Keep it in dry-run mode until the new
-Cloud Function has been deployed and its impact report has been reviewed.
 
 ## Save a recipe
 

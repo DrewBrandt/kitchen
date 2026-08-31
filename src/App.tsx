@@ -604,7 +604,7 @@ function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-
     <Field name="favorites" label="Favorites" defaultValue={settings.favorites.join(', ')} placeholder="Soft preferences" />
     <h3>Routine & availability</h3><Field name="time_zone" label="Time zone" defaultValue={settings.timeZone} required />
     <label className="field"><span>Planning notes</span><textarea name="planning_notes" rows={4} placeholder="Work schedule, cooking constraints, or planning preferences" /></label>
-    <div className="calendar-card"><CalendarDays /><div className="grow"><strong>Google Calendar</strong><small>Calendar sync is paused until its Firebase Function is replaced.</small></div><button className="button compact" type="button" onClick={openCalendar}>Details</button></div>
+    <div className="calendar-card"><CalendarDays /><div className="grow"><strong>Google Calendar</strong><small>Calendar sync is planned and currently unavailable.</small></div><button className="button compact" type="button" onClick={openCalendar}>Details</button></div>
   </div>;
 
   if (kind === 'groceries') return <><label className="field"><span>Paste or type groceries</span><textarea name="groceries" required rows={8} placeholder={'2 onions\n1 bag spinach\n1 dozen eggs'} /></label><div className="notice"><ClipboardList /><span>Each non-empty line becomes a manual grocery item. You can refine quantities after import.</span></div></>;

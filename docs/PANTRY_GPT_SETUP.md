@@ -1,88 +1,24 @@
-# Set up the private Pantry GPT
+# Private Pantry GPT (planned)
 
-This setup gives every new conversation opened with the private GPT live access
-to the pantry. A knowledge-file upload by itself cannot authenticate to the API.
+The private Pantry GPT server integration is not currently deployed. Do not
+configure the checked-in OpenAPI schema as a live Action yet: its server points
+to an intentionally invalid placeholder until an owner-only Supabase-backed API
+exists.
 
-## 1. Create the GPT
+The following product assets are retained for that future implementation:
 
-In ChatGPT, open **Explore GPTs**, choose **Create**, and configure:
+- `PANTRY_GPT_INSTRUCTIONS.md`: conversational behavior and safety rules.
+- `pantry-gpt-openapi.yaml`: the proposed deterministic API contract.
+- `API.md`: detailed request and transaction semantics.
 
-- Name: `Drew's Pantry`
-- Visibility: **Only me**
-- Description: `Private pantry, nutrition, recipe, and weekly meal-planning assistant.`
-- Enable Web Search if you want it to research recipes and current label data.
+Before enabling the Action:
 
-Paste the complete contents of `docs/PANTRY_GPT_INSTRUCTIONS.md` into the GPT's
-Instructions field. You may also upload `docs/API.md` as Knowledge for additional
-API examples, but do not upload or paste the bearer token into Knowledge,
-Instructions, a conversation, or GitHub.
+1. Implement the API in a server environment that can safely hold credentials.
+2. Require owner-only authentication independent of the browser publishable key.
+3. Preserve atomic PostgreSQL operations for inventory and cooking writes.
+4. Replace the placeholder OpenAPI server URL with the verified endpoint.
+5. Test every read operation before testing writes in GPT Preview.
+6. Keep all tokens out of Git, GPT instructions, knowledge files, and chats.
 
-Keep the Instructions file at or below the Custom GPT editor's 8,000-character
-limit. The backend test suite enforces this limit.
-
-Suggested conversation starters:
-
-- `Plan next week using what I have, while avoiding meals I ate recently.`
-- `I just got groceries. Help me reconcile the list and upload it.`
-- `Find three dinners I can make with one small store run.`
-- `I ate this today; log it and tell me how it compares with my targets.`
-
-## 2. Add the Pantry Action
-
-In the GPT editor, open **Actions** and create a new Action.
-
-1. Paste the complete contents of `docs/pantry-gpt-openapi.yaml` into Schema.
-2. Set Authentication to **API key**.
-3. Select **Bearer** authentication.
-4. From this repository in PowerShell, run:
-
-   ```powershell
-   .\tools\copy_api_token.ps1
-   ```
-
-5. Paste the clipboard value into the Action authentication secret field.
-6. Do not paste the token into the schema itself.
-
-The token is stored locally with Windows DPAPI and is copied without being
-printed. Clipboard history can retain copied secrets, so clear the clipboard
-after the GPT is saved:
-
-```powershell
-Set-Clipboard -Value ''
-```
-
-## 3. Test before relying on writes
-
-In Preview, ask:
-
-1. `Read my pantry and tell me how many eggs I have.`
-2. `Search my saved outside foods for Chick-fil-A. Do not create anything.`
-3. `Show my current meal plan and grocery list.`
-4. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
-
-The first three should call read Actions. The fourth should stop before the write.
-Then explicitly confirm the test write, verify it appears in the app, and remove
-it from the app if it was only a test.
-
-If an Action receives `401 Unauthorized`, re-enter the bearer token in the GPT
-Action authentication settings. A `422` response means the API rejected invalid
-or ambiguous structured data without applying a partial write.
-
-## Ordinary fresh chats
-
-A normal ChatGPT conversation that is not opened with this custom GPT will not
-inherit its private Action. It can use an uploaded copy of the instructions as a
-guide, but it cannot read or write live pantry data securely. Open a new chat
-with **Drew's Pantry** whenever live access is needed.
-
-## Applying later API or instruction updates
-
-Repository edits do not update the deployed function or private GPT
-automatically. After changing the API or GPT behavior:
-
-1. Deploy the function with `firebase deploy --only functions`.
-2. Replace the GPT Instructions with the complete current contents of
-   `docs/PANTRY_GPT_INSTRUCTIONS.md`.
-3. Replace the Action schema with the complete current contents of
-   `docs/pantry-gpt-openapi.yaml` and save the GPT.
-4. Repeat the read-only Preview tests above.
+Ordinary ChatGPT conversations do not inherit private GPT Actions. Until this
+integration is rebuilt, use the web application for live pantry access.

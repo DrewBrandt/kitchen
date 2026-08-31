@@ -6,10 +6,10 @@ info:
     name: Private personal use
     identifier: LicenseRef-Proprietary
   description: >-
-    Private live inventory, recipe, meal-history, nutrition, planning, and grocery
-    operations for Drew's Pantry. Read current state before preparing mutations.
+    Planned private inventory, recipe, meal-history, nutrition, planning, and
+    grocery operations for Drew's Pantry. No server is currently deployed.
 servers:
-  - url: https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/pantryApi
+  - url: https://pantry-api.example.invalid
 security:
   - bearerAuth: []
 paths:
@@ -346,7 +346,7 @@ paths:
       summary: Dry-run or apply a canonical food and product migration
       description: >-
         Defaults to dry-run. Applying rewrites inventory, recipe, prepared-food,
-        history, and grocery references in one validated Firestore batch.
+        history, and grocery references in one validated PostgreSQL transaction.
       x-openai-isConsequential: true
       requestBody:
         required: true

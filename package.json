@@ -11,9 +11,7 @@
     "db:push": "supabase db push",
     "db:lint": "supabase db lint --linked --schema public --level warning --fail-on error",
     "db:test": "supabase db query --linked --file supabase/tests/database.sql",
-    "db:test:transactions": "supabase db query --linked --file supabase/tests/transactions.sql",
-    "data:firebase-export": "node tools/export-firestore.mjs",
-    "data:firebase-transform": "node tools/transform-firestore-snapshot.mjs"
+    "db:test:transactions": "supabase db query --linked --file supabase/tests/transactions.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.4",
@@ -30,7 +28,6 @@
     "@testing-library/user-event": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "firebase-tools": "15.28.1",
     "jsdom": "29.0.0",
     "supabase": "2.116.0",
     "vitest": "latest"

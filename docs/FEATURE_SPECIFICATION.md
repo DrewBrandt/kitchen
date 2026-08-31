@@ -75,7 +75,7 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 
 ### 1. Identity, privacy, and synchronization
 
-- Authenticate the owner with Google through Firebase Authentication.
+- Authenticate the owner with Google through Supabase Auth.
 - Permit access only to explicitly allowlisted account identifiers.
 - Keep all pantry data private to the authorized owner.
 - Keep API bearer credentials, Calendar tokens, and OAuth secrets out of client data, source control, logs, and conversational content.
@@ -428,7 +428,7 @@ The names below describe logical records. A rebuild may choose different storage
 
 - The core quantity, conversion, deduction, shortage, nutrition, and undo rules must be covered by automated tests independent of any interface.
 - Application and GPT writes must apply the same domain rules and produce compatible records.
-- Firestore security rules must deny unauthenticated and non-allowlisted access.
+- PostgreSQL Row Level Security must deny unauthenticated and non-owner access.
 - Secrets must be server-only and redacted from errors and logs.
 - Calendar reconciliation and other retried background work must be idempotent.
 - External lookup data must be attributable, reviewable, and safe to reject.
