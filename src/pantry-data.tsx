@@ -27,6 +27,10 @@ export interface PantryData {
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; today?: boolean; meals: Array<{ slot: string; name: string; emoji: string }> }>;
   foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
+  foodLogByDate: Record<string, {
+    nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
+    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
+  }>;
   history: Array<{ day: string; date: string; meals: string[]; totals: string }>;
   foods: Array<{ id: string; name: string; emoji: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
   products: Array<{ id: string; foodId: string; name: string; label: string; isExternal: boolean }>;
@@ -62,6 +66,9 @@ export const previewPantryData: PantryData = {
   nutrients: NUTRIENTS,
   weekDays: WEEK_DAYS,
   foodLog: FOOD_LOG,
+  foodLogByDate: {
+    [new Date().toLocaleDateString('en-CA')]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG },
+  },
   history: HISTORY,
   foods: [],
   products: [],
