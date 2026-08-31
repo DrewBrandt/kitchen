@@ -4,6 +4,32 @@ import path from 'node:path';
 
 const namespace = '36f07576-8b2e-5bce-a73f-a54c9055f71c';
 const estimatesPath = new URL('./firebase-migration-estimates.json', import.meta.url);
+const baseFoodGrammar = new Map([
+  ['pork-loin', ['Boneless pork loin', 'Boneless pork loins']],
+  ['signature-chicken-thighs', ['Boneless skinless chicken thigh', 'Boneless skinless chicken thighs']],
+  ['mission-burrito-tortillas', ['Burrito-size flour tortilla', 'Burrito-size flour tortillas']],
+  ['carrots', ['Carrot', 'Carrots']],
+  ['external:chick-fil-a-chicken-biscuit', ['Chicken Biscuit', 'Chicken Biscuits']],
+  ['egg', ['Egg', 'Eggs']],
+  ['bubba-burger', ['Frozen beef burger patty', 'Frozen beef burger patties']],
+  ['tyson-chicken-twists', ['Frozen breaded chicken twist', 'Frozen breaded chicken twists']],
+  ['burger-bun', ['Hamburger bun', 'Hamburger buns']],
+  ['hillshire-honey-ham', ['Honey ham slice', 'Honey ham slices']],
+  ['sargento-medium-cheddar', ['Medium cheddar slice', 'Medium cheddar slices']],
+  ['ny-strip-steak', ['New York strip steak', 'New York strip steaks']],
+  ['onion', ['Onion', 'Onions']],
+  ['pepperidge-plain-bagels', ['Plain bagel', 'Plain bagels']],
+  ['pork-tenderloin', ['Pork tenderloin', 'Pork tenderloins']],
+  ['ritz-crackers', ['Round butter cracker', 'Round butter crackers']],
+  ['russet-potatoes', ['Russet potato', 'Russet potatoes']],
+  ['semisweet-chocolate-chips', ['Semisweet chocolate chip', 'Semisweet chocolate chips']],
+  ['unidentified-steak', ['Unidentified steak (identify/weigh later)', 'Unidentified steaks (identify/weigh later)']],
+]);
+
+function grammarFor(sourceId, fallbackName) {
+  const [name, plural = null] = baseFoodGrammar.get(sourceId) ?? [fallbackName];
+  return { name, plural };
+}
 
 function argument(name) {
   const index = process.argv.indexOf(name);
@@ -178,8 +204,9 @@ async function main() {
   const baseFoodRows = [];
   for (const food of c.foods) {
     const nutrition = nutritionFor(food, estimates);
+    const grammar = grammarFor(food.id, food.name);
     baseFoodRows.push([
-      sql(uuidFor('food', food.id)), sql(food.name), 'null', sql(styleFor(food)),
+      sql(uuidFor('food', food.id)), sql(grammar.name), sql(grammar.plural), sql(styleFor(food)),
       sql(food.emoji), sql(categoryFor(food)), unit(baseUnitFor(food)), 'null',
       styleFor(food) === 'discrete' && food.id === 'unidentified-steak' ? '340.194' : 'null',
       sql(canonicalQuantity(food, nutrition.basis)), sql(nutrition.kcal), sql(nutrition.protein_g),
@@ -191,8 +218,10 @@ async function main() {
   }
   for (const food of c.external_foods) {
     const n = food.nutrition ?? {};
+    const sourceId = `external:${food.id}`;
+    const grammar = grammarFor(sourceId, food.name);
     baseFoodRows.push([
-      sql(uuidFor('food', `external:${food.id}`)), sql(food.name), 'null', sql('discrete'),
+      sql(uuidFor('food', sourceId)), sql(grammar.name), sql(grammar.plural), sql('discrete'),
       sql(food.emoji), sql('Pantry & other'), unit('ct'), 'null', 'null', '1',
       sql(n.calories), sql(n.protein_g), sql(n.carbs_g), sql(n.fat_g), sql(n.fiber_g),
       sql(n.sugar_g), sql(n.sodium_mg), textArray([]), 'null', 'null', sql(food.source),
@@ -201,8 +230,9 @@ async function main() {
   }
   for (const food of preparedFoods) {
     const n = food.nutrition ?? {};
+    const grammar = grammarFor(food.id, food.name);
     baseFoodRows.push([
-      sql(uuidFor('food', food.id)), sql(food.name), 'null', sql('discrete'), sql(food.emoji),
+      sql(uuidFor('food', food.id)), sql(grammar.name), sql(grammar.plural), sql('discrete'), sql(food.emoji),
       sql('Pantry & other'), unit('ct'), 'null', 'null', '1', sql(n.calories),
       sql(n.protein_g), sql(n.carbs_g), sql(n.fat_g), sql(n.fiber_g), sql(n.sugar_g),
       sql(n.sodium_mg), textArray([]), 'null', 'null', sql('Migrated prepared-batch snapshot'),
