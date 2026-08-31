@@ -19,7 +19,7 @@ try {
 
   Push-Location $ProjectRoot
   try {
-    & npx supabase secrets set `
+    & npx.cmd supabase secrets set `
       --project-ref xaetuqdtnolzspfvqvja `
       --env-file $temporaryTokenPath `
       --agent no
