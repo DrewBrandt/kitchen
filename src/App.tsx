@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   BarChart3,
@@ -40,7 +40,7 @@ const PAGE_ICONS: Record<PageId, LucideIcon> = {
   today: House,
   inventory: Archive,
   recipes: CookingPot,
-  'eating-out': Store,
+  products: Store,
   'food-log': NotebookTabs,
   history: HistoryIcon,
   trends: BarChart3,
@@ -52,7 +52,7 @@ const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
   today: 'lot',
   inventory: 'lot',
   recipes: 'recipe',
-  'eating-out': 'external',
+  products: 'external',
   'food-log': 'log',
   history: 'export',
   trends: 'targets',
@@ -79,9 +79,15 @@ function localDateLabel(date: Date, timeZone: string) {
   catch { return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase(); }
 }
 
-export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onCookRecipes, onConsumePrepared, onRebuildShopping }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number> } = {}) {
+function calendarDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+const servingLabel = (count: number) => `${count} serving${count === 1 ? '' : 's'}`;
+
+export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeal }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeal?: (id: string) => Promise<void> } = {}) {
   const pantryData = usePantryData();
-  const { externalProducts, foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
+  const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
   const [panel, setPanel] = useState<PanelState | null>(null);
   const groceryKey = (item: { id?: string; name: string }) => item.id ?? item.name;
@@ -121,9 +127,9 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
       : page === 'inventory'
         ? `${inventoryFoodCount} FOODS · ${inventoryLotCount} LOTS`
         : page === 'recipes'
-          ? `${recipes.length} SAVED RECIPE${recipes.length === 1 ? '' : 'S'}`
-          : page === 'eating-out'
-            ? `${externalProducts.length} SAVED ITEM${externalProducts.length === 1 ? '' : 'S'}`
+          ? `${recipes.length} RECIPE${recipes.length === 1 ? '' : 'S'}`
+          : page === 'products'
+            ? `${pantryData.products.length} KNOWN PRODUCT${pantryData.products.length === 1 ? '' : 'S'}`
             : page === 'history'
               ? `${history.length} LOGGED DAY${history.length === 1 ? '' : 'S'}`
               : page === 'week'
@@ -134,7 +140,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
     subtitle: page === 'today'
       ? `${foodLog.length} food log entr${foodLog.length === 1 ? 'y' : 'ies'} today · ${plannedMealCount} meal${plannedMealCount === 1 ? '' : 's'} planned this week.`
       : page === 'recipes'
-        ? 'Saved recipes and live inventory availability.'
+        ? 'Recipes and live inventory availability.'
         : page === 'history'
           ? 'Meals and nutrition totals from your live food log.'
           : page === 'week'
@@ -182,7 +188,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         ownerName={ownerName}
         syncStatus={syncStatus}
         groceryLeft={groceryTotal - groceryDone}
-        badges={{ inventory: inventoryFoodCount, recipes: recipes.length, 'eating-out': externalProducts.length, week: plannedMealCount }}
+        badges={{ inventory: inventoryFoodCount, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
         onNavigate={setPage}
         onProfile={() => open('profile')}
         onSignOut={onSignOut}
@@ -222,11 +228,11 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
             />
           )}
           {page === 'recipes' && <RecipesPage filter={recipeFilter} onFilter={setRecipeFilter} onOpen={open} />}
-          {page === 'eating-out' && <EatingOutPage onOpen={open} notify={notify} onLog={onLogExternal} />}
+          {page === 'products' && <ProductsPage onOpen={open} notify={notify} onLog={onLogExternal} />}
           {page === 'food-log' && <FoodLogPage onOpen={open} notify={notify} onVoid={onVoidFoodLog} />}
           {page === 'history' && <HistoryPage onOpen={open} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
-          {page === 'week' && <WeekPage onOpen={open} />}
+          {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeal} />}
           {page === 'grocery' && (
             <GroceryPage
               checked={checkedGroceries}
@@ -239,7 +245,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
       </main>
 
       <MobileNav page={page} onNavigate={setPage} onScan={() => open('scan')} />
-      {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onCookRecipes={onCookRecipes} />}
+      {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} />}
       {toast && <div className="toast" role="status"><Check />{toast}</div>}
     </div>
   );
@@ -249,7 +255,7 @@ function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, onNavigate,
   const initials = ownerName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   return (
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">🫙</span><strong>Pantry</strong><span className={cx('sync-dot', syncStatus)} title={syncStatus === 'synced' ? 'Live data connected' : syncStatus === 'connecting' ? 'Connecting to live updates' : 'Live updates disconnected'} /></div>
+      <button className="brand brand-button" onClick={() => onNavigate('today')} aria-label="Mise home"><span className="brand-mark">🫙</span><strong>Mise</strong><span className={cx('sync-dot', syncStatus)} title={syncStatus === 'synced' ? 'Live data connected' : syncStatus === 'connecting' ? 'Connecting to live updates' : 'Live updates disconnected'} /></button>
       {(['Kitchen', 'Eating', 'Planning'] as const).map((group) => (
         <nav className="nav-group" aria-label={group} key={group}>
           <div className="nav-label">{group}</div>
@@ -318,6 +324,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
   const nextMeal = relevantDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day }))).find(Boolean);
   const nextRecipe = recipes.find((recipe) => recipe.id === nextMeal?.recipeId || recipe.name === nextMeal?.name);
   const useSoon = inventorySections.flatMap((section) => section.foods).filter((food) => ['warn', 'urgent'].includes(food.tone)).slice(0, 2);
+  const popularRecipes = [...recipes].sort((left, right) => (right.prepCount ?? 0) - (left.prepCount ?? 0) || left.name.localeCompare(right.name)).slice(0, 4);
   return (
     <div className="stack">
       <div className="today-grid">
@@ -342,15 +349,15 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
       <Card>
         <SectionTitle title="Ready to eat" subtitle="Leftovers and prepared batches, separate from raw inventory." />
         {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} progress={lot.progress} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One serving of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
-        {!preparedLots.length && <div className="empty-inline">No prepared batches are currently in inventory.</div>}
+        {!preparedLots.length && <div className="empty-ready"><CookingPot /><div><strong>Nothing prepared yet</strong><small>Cook a recipe to keep ready-to-eat servings here.</small></div><button className="button secondary compact" onClick={() => onNavigate('recipes')}>Find a recipe</button></div>}
       </Card>
 
       <Card>
-        <SectionTitle title="Saved recipes" subtitle="Inventory is checked atomically when you start cooking." action="All recipes" onAction={() => onNavigate('recipes')} />
+        <SectionTitle title="Popular recipes" subtitle="Your most-prepared recipes, up to four." action="All recipes" onAction={() => onNavigate('recipes')} />
         <div className="cookable-grid">
-          {recipes.map((recipe) => (
+          {popularRecipes.map((recipe) => (
             <button className="cookable-row" key={recipe.id} onClick={() => onOpen('recipe-detail', recipe)}>
-              <span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {recipe.servings} servings</small></div><ChevronRight />
+              <span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {servingLabel(recipe.servings)}</small></div><ChevronRight />
             </button>
           ))}
         </div>
@@ -402,7 +409,7 @@ function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter:
 }
 
 function Rating({ label, value }: { label: string; value: number }) {
-  return <div className="rating"><small>{label}</small><span>{Array.from({ length: 5 }, (_, index) => <i className={index < value ? 'filled' : ''} key={index} />)}</span></div>;
+  return <div className="rating" title={value ? `${value.toFixed(1)} out of 5` : 'Not rated yet'}><small>{label}</small><span>{Array.from({ length: 5 }, (_, index) => <i className={index < Math.round(value) ? 'filled' : ''} key={index} />)}</span><em>{value ? value.toFixed(1) : '—'}</em></div>;
 }
 
 function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe) => void }) {
@@ -414,8 +421,8 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
       <div className="recipe-grid">
         {visibleRecipes.map((recipe) => (
           <Card className="recipe-card" key={recipe.id}>
-            <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2><em>SAVED</em></div><small>{recipe.minutes} min · {recipe.servings} servings</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
-            <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label.replace(/^\S+\s/, '')}</span>; })}</div>
+            <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2></div><small>{recipe.minutes} min · {servingLabel(recipe.servings)} · {recipe.prepCount ?? 0} preparation{recipe.prepCount === 1 ? '' : 's'}</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
+            <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label}</span>; })}</div>
             <p className="recipe-nutrition">{recipe.nutrition}</p>
             <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-detail', recipe)}>View recipe</button></div>
           </Card>
@@ -461,14 +468,33 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checke
   );
 }
 
-function WeekPage({ onOpen }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void }) {
-  const { weekDays, recipes } = usePantryData();
+function WeekPage({ onOpen, notify, onRemove }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: (message: string) => void; onRemove?: (id: string) => Promise<void> }) {
+  const { plannedMeals, recipes, settings } = usePantryData();
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekDays = useMemo(() => {
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    const start = new Date(now);
+    start.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, offset) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + offset);
+      let dateKey = calendarDateKey(date);
+      try {
+        const parts = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: settings.timeZone }).formatToParts(date);
+        const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+        dateKey = `${value('year')}-${value('month')}-${value('day')}`;
+      } catch { /* device date is a safe fallback */ }
+      return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey, today: date.toDateString() === now.toDateString(), meals: plannedMeals.filter((meal) => meal.dateKey === dateKey) };
+    });
+  }, [plannedMeals, settings.timeZone, weekOffset]);
+  const weekLabel = `${new Date(`${weekDays[0].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(`${weekDays[6].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
   return (
-    <Card className="week-card">
+    <Card className="week-card"><div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
       <div className="week-grid">{weekDays.map((day) => (
-        <div className={cx('week-day', day.today && 'today')} key={day.day}>
+        <div className={cx('week-day', day.today && 'today')} key={day.dateKey}>
           <div className="week-date"><strong>{day.day}</strong><small>{day.date}</small></div>
-          <div className="week-meals">{day.meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <button key={`${meal.slot}-${meal.name}`} onClick={() => recipe ? onOpen('recipe-detail', recipe) : onOpen('meal', undefined, { plan_date: day.dateKey ?? '', daypart: meal.slot.toLowerCase() })}><small>{meal.slot}</small><span>{meal.emoji} {meal.name}</span></button>; })}</div>
+          <div className="week-meals">{day.meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <div className="planned-meal" key={meal.id}><button onClick={() => recipe ? onOpen('recipe-detail', recipe) : onOpen('meal', undefined, { plan_date: day.dateKey, daypart: meal.slot.toLowerCase() })}><small>{meal.slot}</small><span>{meal.emoji} {meal.name}</span></button><button className="plan-remove" aria-label={`Remove ${meal.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(meal.id).then(() => notify(`${meal.name} removed from the plan.`)).catch(() => notify(`Could not remove ${meal.name}.`)); }}><X /></button></div>; })}</div>
           <button className="day-add" aria-label={`Add meal on ${day.day}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Plus /></button>
         </div>
       ))}</div>
@@ -477,7 +503,7 @@ function WeekPage({ onOpen }: { onOpen: (kind: PanelKind, recipe?: Recipe, value
 }
 
 function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onVoid?: (id: string) => Promise<void> }) {
-  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients } = usePantryData();
+  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients, todayProjection } = usePantryData();
   const [selectedDate, setSelectedDate] = useState(() => {
     const date = new Date();
     date.setHours(12, 0, 0, 0);
@@ -494,7 +520,6 @@ function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => 
     value: nutrient.label === 'Calories' ? '0' : `0 ${nutrient.label === 'Sodium' ? 'mg' : 'g'}`,
     pct: 0,
   })));
-  const segmentWidth = foodLog.length ? 72 / foodLog.length : 0;
   const dateLabel = selectedDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   const moveDay = (days: number) => setSelectedDate((current) => {
     const next = new Date(current);
@@ -506,10 +531,15 @@ function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => 
       <div className="date-switcher"><button aria-label="Previous day" onClick={() => moveDay(-1)}>‹</button><strong>{isToday ? 'Today' : dateLabel}</strong>{isToday && <span>{dateLabel}</span>}<button aria-label="Next day" disabled={isToday} onClick={() => moveDay(1)}>›</button></div>
       <Card className="contribution-card">
         <SectionTitle title="How each food built your day" subtitle="Each color is one food or same-day repeat group. The line is your target — sodium's is a limit." action="Targets" onAction={() => onOpen('targets')} />
-        <div className="legend">{foodLog.map((item) => <span key={item.id ?? item.label}><i style={{ background: item.color }} />{item.label}<small>{item.calories}</small></span>)}</div>
-        {nutrients.map((nutrient) => (
-          <div className="contribution-row" key={nutrient.label}><strong>{nutrient.label}</strong><div className="segment-bar">{foodLog.map((entry, index) => <i key={entry.id ?? `${entry.label}-${index}`} style={{ width: `${segmentWidth}%`, background: entry.color }} />)}<b style={{ left: '72%' }} /></div><span>{nutrient.value} {nutrient.target}</span></div>
-        ))}
+        <div className="legend">{foodLog.map((item) => <span key={item.id ?? item.label}><i style={{ background: item.color }} />{item.label}<small>{item.calories}</small></span>)}{isToday && Object.values(todayProjection).some(Boolean) && <span><i className="projection-swatch" />Today's plan<small>what if</small></span>}</div>
+        {nutrients.map((nutrient) => {
+          const label = nutrient.label as keyof typeof todayProjection;
+          const target = Number(nutrient.target.replace(/[^\d.]/g, '')) || 1;
+          const total = foodLog.reduce((sum, entry) => sum + Number(entry.nutrition?.[label] ?? 0), 0);
+          const projection = isToday ? todayProjection[label] : 0;
+          const scale = Math.max(target / 0.82, total + projection, 1);
+          return <div className="contribution-row" key={nutrient.label}><strong>{nutrient.label}</strong><div className="segment-bar">{foodLog.map((entry, index) => <i key={entry.id ?? `${entry.label}-${index}`} style={{ width: `${Number(entry.nutrition?.[label] ?? 0) / scale * 100}%`, background: entry.color }} />)}{projection > 0 && <i className="projection-segment" style={{ width: `${projection / scale * 100}%` }} />}<b style={{ left: `${target / scale * 100}%` }} /></div><span>{nutrient.value} {nutrient.target}</span></div>;
+        })}
       </Card>
       <Card>
         <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'}`} />
@@ -542,29 +572,69 @@ function HistoryPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
 }
 
 function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
-  const { nutrientDrivers, nutrients, proteinTrend, settings } = usePantryData();
-  const [driverNutrient, setDriverNutrient] = useState<'Protein' | 'Calories' | 'Sodium'>('Protein');
-  const average = proteinTrend.reduce((total, day) => total + day.value, 0) / Math.max(proteinTrend.length, 1);
-  const daysOnTarget = proteinTrend.filter((day) => day.value >= settings.proteinG).length;
-  const chartMaximum = Math.max(settings.proteinG, ...proteinTrend.map((day) => day.value), 1) * 1.1;
+  const { nutritionHistory, settings } = usePantryData();
+  const nutrientLabels = ['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const;
+  type TrendNutrient = typeof nutrientLabels[number];
+  const [nutrient, setNutrient] = useState<TrendNutrient>('Protein');
+  const [driverNutrient, setDriverNutrient] = useState<TrendNutrient>('Protein');
+  const [range, setRange] = useState(30);
+  const spec: Record<TrendNutrient, { target: number; unit: string; color: string }> = {
+    Calories: { target: settings.calories, unit: 'cal', color: '#53d7a0' }, Protein: { target: settings.proteinG, unit: 'g', color: '#53d7a0' }, Carbs: { target: settings.carbsG, unit: 'g', color: '#5eb5f5' }, Fat: { target: settings.fatG, unit: 'g', color: '#a78bfa' }, Fiber: { target: settings.fiberG, unit: 'g', color: '#f2d06b' }, Sodium: { target: settings.sodiumMg, unit: 'mg', color: '#ef7d7d' },
+  };
+  const cutoff = new Date();
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (range - 1));
+  const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
+  const recent = nutritionHistory.filter((day) => day.dateKey >= cutoffKey);
+  const days = Array.from({ length: range }, (_, index) => {
+    const date = new Date(cutoff);
+    date.setDate(cutoff.getDate() + index);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return { label: String(date.getDate()), value: recent.find((day) => day.dateKey === key)?.values[nutrient] ?? 0 };
+  });
+  const average = days.reduce((total, day) => total + day.value, 0) / range;
+  const target = spec[nutrient].target;
+  const daysOnTarget = days.filter((day) => nutrient === 'Sodium' ? day.value <= target : day.value >= target).length;
+  const chartMaximum = Math.max(target, ...days.map((day) => day.value), 1) * 1.1;
+  const averages = nutrientLabels.map((label) => ({ label, value: recent.reduce((total, day) => total + day.values[label], 0) / range, ...spec[label] }));
+  const driverTotals = new Map<string, number>();
+  for (const day of recent) for (const food of day.foods) driverTotals.set(food.label, (driverTotals.get(food.label) ?? 0) + food.values[driverNutrient]);
+  const driverGrandTotal = [...driverTotals.values()].reduce((total, value) => total + value, 0);
+  const drivers = [...driverTotals.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5).map(([label, value]) => ({ label, pct: driverGrandTotal ? Math.round(value / driverGrandTotal * 100) : 0 }));
+  const driverMax = Math.max(...drivers.map((driver) => driver.pct), 1);
   return (
     <div className="stack">
       <Card className="trend-card">
-        <SectionTitle title="Protein, day by day" subtitle={`Average ${Math.round(average)}g · target ${settings.proteinG}g · ${daysOnTarget} of 30 days on target`} action="Edit targets" onAction={() => onOpen('targets')} />
-        <div className="bar-chart"><div className="target-line" style={{ bottom: `${settings.proteinG / chartMaximum * 100}%` }}><span>{settings.proteinG}g target</span></div>{proteinTrend.map((day, index) => <div className="chart-column" key={index}><i style={{ height: `${day.value / chartMaximum * 100}%` }} /><small>{index % 5 === 0 ? day.date : ''}</small></div>)}</div>
+        <SectionTitle title={`${nutrient}, day by day`} subtitle={`Daily average ${Math.round(average).toLocaleString()} ${spec[nutrient].unit} · target ${target.toLocaleString()} ${spec[nutrient].unit} · ${daysOnTarget} of ${range} days ${nutrient === 'Sodium' ? 'within limit' : 'on target'}`} action="Edit targets" onAction={() => onOpen('targets')} />
+        <div className="trend-controls"><div className="driver-tabs">{nutrientLabels.map((label) => <button className={nutrient === label ? 'active' : ''} key={label} onClick={() => setNutrient(label)}>{label}</button>)}</div><label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label></div>
+        <div className="bar-chart"><div className="target-line" style={{ bottom: `${target / chartMaximum * 100}%` }}><span>{target.toLocaleString()} {spec[nutrient].unit} target</span></div>{days.map((day, index) => <div className="chart-column" key={index}><i style={{ height: `${day.value / chartMaximum * 100}%`, background: spec[nutrient].color }} /><small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small></div>)}</div>
       </Card>
       <div className="two-column">
-        <Card><SectionTitle title="Today vs target" />{nutrients.slice(1).map((row) => <MacroRow key={row.label} {...row} />)}</Card>
-        <Card><SectionTitle title="What drives each nutrient" subtitle="Share of logged nutrition over the last 30 days." /><div className="driver-tabs">{(['Protein', 'Calories', 'Sodium'] as const).map((label) => <button className={driverNutrient === label ? 'active' : ''} key={label} onClick={() => setDriverNutrient(label)}>{label}</button>)}</div>{nutrientDrivers[driverNutrient].map(({ label, pct }) => <div className="driver" key={label}><div><span>{label}</span><small>{pct}%</small></div><Progress value={pct} /></div>)}{!nutrientDrivers[driverNutrient].length && <div className="empty-inline">No {driverNutrient.toLowerCase()} has been logged in this period.</div>}</Card>
+        <Card><SectionTitle title="Daily average vs target" subtitle={`Average per calendar day over ${range} days.`} />{averages.map((row) => <MacroRow key={row.label} label={row.label} value={`${Math.round(row.value).toLocaleString()} ${row.unit}`} target={`/ ${row.target.toLocaleString()} ${row.unit}`} pct={row.target ? row.value / row.target * 100 : 0} color={row.color} />)}</Card>
+        <Card><SectionTitle title="What drives each nutrient" subtitle={`Share of logged nutrition over ${range} days; bars are relative to the top contributor.`} /><div className="driver-tabs">{nutrientLabels.map((label) => <button className={driverNutrient === label ? 'active' : ''} key={label} onClick={() => setDriverNutrient(label)}>{label}</button>)}</div>{drivers.map(({ label, pct }) => <div className="driver" key={label}><div><span>{label}</span><small>{pct}%</small></div><Progress value={pct / driverMax * 100} /></div>)}{!drivers.length && <div className="empty-inline">No {driverNutrient.toLowerCase()} has been logged in this period.</div>}</Card>
       </div>
     </div>
   );
 }
 
-function EatingOutPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onLog?: (id: string) => Promise<void> }) {
-  const { externalProducts } = usePantryData();
-  const places = [...new Set(externalProducts.map((product) => product.place))];
-  return <div className="grocery-grid">{places.map((place) => { const foods = externalProducts.filter((product) => product.place === place); return <Card className="place-card" key={place}><div className="place-head"><span>{place.slice(0, 2).toUpperCase()}</span><div><strong>{place}</strong><small>{foods.length} saved item{foods.length > 1 ? 's' : ''}</small></div></div>{foods.map((food) => <div className="place-food" key={food.id}><span>{food.emoji}</span><div className="grow"><strong>{food.name}</strong><small>{food.nutrition}</small></div><button className="button compact" disabled={!onLog} onClick={() => { if (onLog) void onLog(food.id).then(() => notify(`${food.name} added to today's food log.`)).catch(() => notify(`Could not log ${food.name}.`)); }}>Log</button></div>)}<button className="text-button place-add" onClick={() => onOpen('external')}>+ Add another saved food</button></Card>; })}{!places.length && <Card className="empty-state"><Store /><h2>No eating-out foods yet</h2><button className="button primary" onClick={() => onOpen('external')}>Save one</button></Card>}</div>;
+function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onLog?: (id: string) => Promise<void> }) {
+  const { products } = usePantryData();
+  const [query, setQuery] = useState('');
+  const [viewing, setViewing] = useState<(typeof products)[number] | null>(null);
+  const [comparison, setComparison] = useState<string[]>([]);
+  const visible = products.filter((product) => `${product.label} ${product.foodName} ${product.barcode}`.toLowerCase().includes(query.toLowerCase()));
+  const compared = comparison.map((id) => products.find((product) => product.id === id)).filter(Boolean) as typeof products;
+  function toggleCompare(id: string) {
+    const product = products.find((candidate) => candidate.id === id);
+    if (!product) return;
+    setComparison((current) => {
+      if (current.includes(id)) return current.filter((value) => value !== id);
+      const existing = products.find((candidate) => candidate.id === current[0]);
+      if (existing && existing.foodId !== product.foodId) { notify(`Choose another ${existing.foodName} product to compare.`); return current; }
+      return [...current, id].slice(-2);
+    });
+  }
+  return <div className="stack"><div className="toolbar"><label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, or barcode…" /></label><button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan barcode</button></div>{compared.length > 0 && <Card className="comparison-card"><SectionTitle title={`Compare ${compared[0].foodName}`} subtitle="Nutrition values use each product's stored nutrition basis." action="Clear" onAction={() => setComparison([])} /><div className="comparison-grid"><span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [<span key={`${label}-label`}>{label}</span>, ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>), ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : [])])}</div></Card>}<div className="product-grid">{visible.map((product) => <Card className="product-card" key={product.id}><div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName}</small><strong>{product.label}</strong><em>{product.barcode || 'No barcode'}</em></div></div><div className="product-macros"><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div><div className="card-actions"><button className="button secondary" onClick={() => setViewing(product)}>View</button><button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>{product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} added to today's food log.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}</div></Card>)}</div>{!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2><p>Try another name, brand, food, or barcode.</p></Card>}{viewing && <div className="panel-layer"><button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} /><aside className="action-panel product-detail" role="dialog" aria-modal="true"><PanelHeader eyebrow={viewing.foodName.toUpperCase()} title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} /><div className="panel-body"><div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></div></aside></div>}</div>;
 }
 
 const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>, { eyebrow: string; title: string; subtitle: string; save: string }> = {
@@ -572,7 +642,7 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
   groceries: { eyebrow: 'GROCERY LIST', title: 'Add several grocery items', subtitle: 'Add one manual shopping-list item per line.', save: 'Add items' },
   food: { eyebrow: 'DEFINE', title: 'Define a food', subtitle: 'Units, conversions, nutrition, and where this food normally lives.', save: 'Save food' },
   recipe: { eyebrow: 'RECIPE', title: 'New recipe', subtitle: 'Ingredients are matched against tracked foods for availability.', save: 'Save recipe' },
-  external: { eyebrow: 'EATING OUT', title: 'Save a food', subtitle: 'A restaurant order or packaged food kept out of inventory.', save: 'Save food' },
+  external: { eyebrow: 'PRODUCTS', title: 'Add a product', subtitle: 'Add a known restaurant item or packaged product with its nutrition.', save: 'Save product' },
   log: { eyebrow: 'FOOD LOG', title: 'Log food', subtitle: 'Enter a meal and its nutrition by hand.', save: 'Log it' },
   item: { eyebrow: 'GROCERY LIST', title: 'Add an item', subtitle: 'Add a durable manual item alongside plan-generated shortages.', save: 'Add item' },
   meal: { eyebrow: 'PLANNING', title: 'Add a recipe to the plan', subtitle: 'Choose a saved recipe, date, meal, and scale.', save: 'Add to plan' },
@@ -580,14 +650,14 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
   export: { eyebrow: 'HISTORY', title: 'Export range', subtitle: 'A CSV of every logged meal in the selected range.', save: 'Download CSV' },
   scan: { eyebrow: 'BARCODE', title: 'Look up a barcode', subtitle: 'Enter a saved UPC or EAN to identify its product.', save: 'Look up' },
   profile: { eyebrow: 'ME', title: 'Routine & food profile', subtitle: 'Hard constraints, preferences, and planning availability.', save: 'Save profile' },
-  calendar: { eyebrow: 'CALENDAR', title: 'Pantry Planner', subtitle: 'Schedule-aware grocery and preparation reminders.', save: 'Sync now' },
+  calendar: { eyebrow: 'CALENDAR', title: 'Mise Planner', subtitle: 'Schedule-aware grocery and preparation reminders.', save: 'Sync now' },
 };
 
-function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onCookRecipes }: { state: PanelState; onClose: () => void; notify: (message: string) => void; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void> }) {
+function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes }: { state: PanelState; onClose: () => void; notify: (message: string) => void; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void> }) {
   const { history, recipes } = usePantryData();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (state.kind === 'recipe-detail' || state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={state.kind === 'cook'} onClose={onClose} notify={notify} onCook={onCookRecipe} />;
+  if (state.kind === 'recipe-detail' || state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={state.kind === 'cook'} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} />;
   if (state.kind === 'combined-meal') return <CombinedMealPanel onClose={onClose} notify={notify} onCook={onCookRecipes} />;
   const copy = PANEL_COPY[state.kind];
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -602,7 +672,7 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onCookRecip
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `pantry-history-${new Date().toLocaleDateString('en-CA')}.csv`;
+      link.download = `mise-history-${new Date().toLocaleDateString('en-CA')}.csv`;
       link.click();
       URL.revokeObjectURL(url);
       onClose();
@@ -645,7 +715,7 @@ function PanelFields({ kind, values = {} }: { kind: Exclude<PanelKind, 'recipe-d
   const today = new Date().toLocaleDateString('en-CA');
   const defaultUnit = units.find((unit) => unit.shortName === 'ct')?.id ?? units[0]?.id ?? '';
 
-  if (kind === 'scan') return <div className="scan-box"><div className="scanner-frame"><ScanLine /><span>Enter the barcode below</span><i /><i /><i /><i /></div><Field name="barcode" label="UPC / EAN" placeholder="Enter barcode" required /></div>;
+  if (kind === 'scan') return <BarcodeScanner />;
 
   if (kind === 'targets') return <div className="form-grid two">
     <Field name="nutrition_calories" label="Calories (kcal)" type="number" defaultValue={String(settings.calories)} required />
@@ -743,12 +813,69 @@ function SelectField({ name, label, options, defaultValue, required }: { name: s
   return <label className="field"><span>{label}</span><select name={name} defaultValue={defaultValue} required={required}><option value="">Choose…</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function RecipePanel({ recipe, cooking, onClose, notify, onCook }: { recipe: Recipe; cooking: boolean; onClose: () => void; notify: (message: string) => void; onCook?: (id: string) => Promise<void> }) {
-  const [checks, setChecks] = useState<Set<string>>(new Set());
+function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback }: { recipe: Recipe; cooking: boolean; onClose: () => void; notify: (message: string) => void; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void> }) {
+  const storageKey = `mise.recipe-progress.${recipe.id}`;
+  const [checks, setChecks] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]); } catch { return new Set(); }
+  });
   const [saving, setSaving] = useState(false);
+  const [prepId, setPrepId] = useState('');
+  const [ease, setEase] = useState(0);
+  const [taste, setTaste] = useState(0);
+  const [minutes, setMinutes] = useState(0);
   const total = recipe.ingredients.length + recipe.steps.length;
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); }, [checks, storageKey]);
   function toggle(key: string) { setChecks((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); }
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow={cooking ? 'COOKING MODE' : 'RECIPE'} title={`${recipe.emoji} ${recipe.name}`} subtitle={`${recipe.servings} servings · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={checks.size / total * 100} /></div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}<div className="deduction-preview"><strong>Inventory transaction</strong><small>Mark cooked deducts earliest-expiring ingredient lots atomically. A prepared lot is created when the recipe defines an output food.</small></div></div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then(() => { onClose(); notify(`${recipe.name} cooked and inventory deducted.`); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
+  const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); };
+  if (prepId) return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close feedback" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow="PREPARATION SAVED" title={`How was ${recipe.name}?`} subtitle="This feedback belongs to this preparation and updates the recipe's averages." onClose={onClose} /><div className="panel-body feedback-form"><RatingInput label="Ease" value={ease} onChange={setEase} /><RatingInput label="Taste" value={taste} onChange={setTaste} /><label className="field"><span>Actual time (minutes)</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label><small>Ratings default to 0, which means “not rated” and is excluded from the average.</small></div><div className="panel-footer"><button className="button secondary" onClick={() => { clearProgress(); onClose(); }}>Skip</button><button className="button primary" disabled={saving || !onFeedback} onClick={() => { if (!onFeedback) return; setSaving(true); void onFeedback(prepId, ease, taste, minutes).then(() => { clearProgress(); onClose(); notify('Preparation feedback saved.'); }).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not save feedback.')).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : 'Save feedback'}</button></div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow={cooking ? 'COOKING MODE' : 'RECIPE'} title={`${recipe.emoji} ${recipe.name}`} subtitle={`${recipe.servings} servings · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}<div className="deduction-preview"><strong>Progress is remembered</strong><small>You can close this recipe and return without losing checked ingredients or steps. Mark cooked deducts inventory atomically.</small></div></div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
+}
+
+function BarcodeScanner() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const frameRef = useRef<number>(0);
+  const [barcode, setBarcode] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [message, setMessage] = useState('Use your phone camera or enter the UPC / EAN.');
+  const stop = () => {
+    cancelAnimationFrame(frameRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setScanning(false);
+  };
+  useEffect(() => stop, []);
+  async function start() {
+    const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector;
+    if (!Detector) { setMessage('This browser does not support live barcode detection. Enter the number below.'); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      streamRef.current = stream;
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setScanning(true);
+      setMessage('Point the camera at the barcode.');
+      const detector = new Detector({ formats: ['upc_a', 'upc_e', 'ean_8', 'ean_13', 'code_128'] });
+      const detect = async () => {
+        if (!videoRef.current || !streamRef.current) return;
+        try {
+          const found = await detector.detect(videoRef.current);
+          if (found[0]?.rawValue) { setBarcode(found[0].rawValue); setMessage(`Found ${found[0].rawValue}`); stop(); return; }
+        } catch { /* keep scanning through transient camera frames */ }
+        frameRef.current = requestAnimationFrame(() => void detect());
+      };
+      void detect();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Camera access was not available.');
+      stop();
+    }
+  }
+  return <div className="scan-box"><div className={cx('scanner-frame', scanning && 'live')}><video ref={videoRef} muted playsInline /><ScanLine /><span>{message}</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" onClick={() => scanning ? stop() : void start()}>{scanning ? 'Stop camera' : 'Scan with camera'}</button><label className="field"><span>UPC / EAN</span><input name="barcode" inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Enter barcode" required /></label></div>;
+}
+
+function RatingInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return <div className="rating-input"><span>{label}</span><div>{Array.from({ length: 5 }, (_, index) => <button type="button" className={index < value ? 'selected' : ''} aria-label={`${label} ${index + 1} out of 5`} key={index} onClick={() => onChange(value === index + 1 ? 0 : index + 1)}>★</button>)}</div><small>{value ? `${value}/5` : 'Not rated'}</small></div>;
 }
 
 function CheckRow({ checked, onClick, title, meta }: { checked: boolean; onClick: () => void; title: string; meta?: string }) {

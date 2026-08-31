@@ -135,7 +135,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
 
   if (kind === 'external') {
     await createProductAndFood(client, form, true);
-    return 'Eating-out product saved.';
+    return 'Product saved.';
   }
 
   if (kind === 'recipe') {

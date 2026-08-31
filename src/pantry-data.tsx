@@ -21,20 +21,37 @@ export interface InventoryFood {
   lots: string[];
 }
 
+export type NutrientName = 'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium';
+export type NutritionValues = Record<NutrientName, number>;
+
+export interface ProductView {
+  id: string;
+  foodId: string;
+  foodName: string;
+  name: string;
+  label: string;
+  brand: string;
+  barcode: string;
+  emoji: string;
+  isExternal: boolean;
+  nutrition: NutritionValues;
+}
+
 export interface PantryData {
   inventorySections: Array<{ emoji: string; label: string; foods: InventoryFood[] }>;
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean }> }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ slot: string; name: string; emoji: string; recipeId?: string }> }>;
-  foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
+  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; slot: string; name: string; emoji: string; recipeId?: string }> }>;
+  plannedMeals: Array<{ id: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string }>;
+  foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues }>;
   foodLogByDate: Record<string, {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
+    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues }>;
   }>;
   history: Array<{ day: string; date: string; dateKey?: string; meals: string[]; totals: string }>;
   foods: Array<{ id: string; name: string; emoji: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
-  products: Array<{ id: string; foodId: string; name: string; label: string; isExternal: boolean }>;
+  products: ProductView[];
   units: Array<{ id: string; label: string; shortName: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
   categories: string[];
   locations: string[];
@@ -56,6 +73,8 @@ export interface PantryData {
   preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
+  nutritionHistory: Array<{ dateKey: string; label: string; values: NutritionValues; foods: Array<{ label: string; values: NutritionValues }> }>;
+  todayProjection: NutritionValues;
 }
 
 export const previewPantryData: PantryData = {
@@ -67,6 +86,7 @@ export const previewPantryData: PantryData = {
   })),
   nutrients: NUTRIENTS,
   weekDays: WEEK_DAYS,
+  plannedMeals: [],
   foodLog: FOOD_LOG,
   foodLogByDate: {
     [new Date().toLocaleDateString('en-CA')]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG },
@@ -95,6 +115,8 @@ export const previewPantryData: PantryData = {
   preparedLots: [],
   proteinTrend: Array.from({ length: 30 }, (_, index) => ({ date: String(index + 1), value: 0 })),
   nutrientDrivers: { Protein: [], Calories: [], Sodium: [] },
+  nutritionHistory: [],
+  todayProjection: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 },
 };
 
 const PantryDataContext = createContext<PantryData>(previewPantryData);

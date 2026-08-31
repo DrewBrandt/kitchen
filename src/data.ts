@@ -2,7 +2,7 @@ export type PageId =
   | 'today'
   | 'inventory'
   | 'recipes'
-  | 'eating-out'
+  | 'products'
   | 'food-log'
   | 'history'
   | 'trends'
@@ -38,7 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'today', label: 'Today', group: 'Kitchen' },
   { id: 'inventory', label: 'Inventory', group: 'Kitchen', badge: '6' },
   { id: 'recipes', label: 'Recipes', group: 'Kitchen', badge: '2' },
-  { id: 'eating-out', label: 'Eating out', group: 'Kitchen', badge: '3' },
+  { id: 'products', label: 'Products', group: 'Kitchen', badge: '3' },
   { id: 'food-log', label: 'Food log', group: 'Eating' },
   { id: 'history', label: 'History', group: 'Eating' },
   { id: 'trends', label: 'Trends', group: 'Eating' },
@@ -50,7 +50,7 @@ export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitl
   today: { eyebrow: '', title: '', subtitle: 'See what needs attention and what is ready to eat.', primary: 'Add inventory', secondary: 'Look up barcode' },
   inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: 'Grouped by grocery department. Lots deduct earliest-expiry first.', primary: 'Add lot' },
   recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: 'What is ready to cook, and exactly what a run to the store would unlock.', primary: 'New recipe' },
-  'eating-out': { eyebrow: '3 SAVED ITEMS · 2 PLACES', title: 'Eating out', subtitle: 'Restaurant orders and packaged foods. Logging these never touches inventory.', primary: 'Save food' },
+  products: { eyebrow: 'KNOWN PRODUCTS', title: 'Products', subtitle: 'Search every known product, inspect nutrition, and compare alternatives for the same food.', primary: 'Add product' },
   'food-log': { eyebrow: 'TODAY · THU, AUG 27', title: 'Food log', subtitle: 'Calories and nutrients from recipes, pantry items, and food away from home.', primary: 'Log food', secondary: 'Look up barcode' },
   history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '9 meals · 6 distinct foods · 1 repeated three times or more.', primary: 'Export range' },
   trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: 'Daily nutrition against targets, and the foods driving each nutrient.', primary: 'Edit targets' },
@@ -93,13 +93,15 @@ export interface Recipe {
   steps: string[];
   ease: number;
   taste: number;
+  prepCount?: number;
+  nutritionValues?: Record<'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium', number>;
   cookable?: boolean;
 }
 
 export const RECIPES: Recipe[] = [
   {
     id: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', servings: 4, minutes: 24,
-    nutrition: '310 cal · 9 g protein per serving', ease: 4, taste: 5, cookable: true,
+    nutrition: '310 cal · 9 g protein per serving', ease: 0, taste: 0, cookable: true,
     ingredients: [
       { label: '1½ cups all-purpose flour', stock: '1.1 kg in stock' },
       { label: '1¼ cups milk', stock: '1.4 L · expires in 3 days' },
@@ -111,7 +113,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', servings: 1, minutes: 9,
-    nutrition: '220 cal · 13 g protein per serving', ease: 5, taste: 4, cookable: true,
+    nutrition: '220 cal · 13 g protein per serving', ease: 0, taste: 0, cookable: true,
     ingredients: [
       { label: '2 eggs', stock: '14 in stock' },
       { label: '½ tbsp butter', stock: '340 g in stock' },
@@ -147,9 +149,9 @@ export const WEEK_DAYS = [
 ];
 
 export const FOOD_LOG = [
-  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#86d7ac' },
-  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#8fbce6' },
-  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#b0a6e0' },
+  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#53d7a0', nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#5eb5f5', nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
+  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a78bfa', nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
 ];
 
 export const HISTORY = [

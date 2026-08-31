@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(7);
+select plan(9);
 
 insert into auth.sessions(id, user_id, created_at, updated_at)
 select
@@ -66,6 +66,17 @@ select is(
   (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000001'),
   100::numeric,
   'Cooking deducts the required ingredient quantity'
+);
+
+select lives_ok(
+  $$select save_prep_feedback((select id from preps where recipe = '94000000-0000-0000-0000-000000000001'), 4, 5, 27)$$,
+  'Preparation feedback is saved against the preparation event'
+);
+
+select is(
+  (select concat(ease_rating, '/', taste_rating, '/', actual_minutes) from preps where recipe = '94000000-0000-0000-0000-000000000001'),
+  '4/5/27',
+  'Ease, taste, and actual time remain attached to that preparation'
 );
 
 select lives_ok(
