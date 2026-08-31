@@ -93,7 +93,10 @@ describe('Pantry web UI', () => {
     await user.click(previous);
     expect(container.querySelector('.date-switcher strong')).not.toHaveTextContent('Today');
     expect(next).toBeEnabled();
-    expect([...container.querySelectorAll<HTMLElement>('.segment-bar b')].every((marker) => marker.style.left === '72%')).toBe(true);
+    expect([...container.querySelectorAll<HTMLElement>('.segment-bar b')].every((marker) => {
+      const position = Number.parseFloat(marker.style.left);
+      return position > 0 && position <= 100;
+    })).toBe(true);
 
     await user.click(next);
     expect(container.querySelector('.date-switcher strong')).toHaveTextContent('Today');

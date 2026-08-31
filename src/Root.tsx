@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, setShoppingItemChecked, voidFoodLog } from './lib/pantry-repository';
+import { consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, removePlannedMeal, savePrepFeedback, setShoppingItemChecked, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
@@ -45,7 +45,7 @@ export function Root() {
 
   if (preview) return <PantryDataProvider data={previewPantryData}><App /></PantryDataProvider>;
   if (!isSupabaseConfigured) return <ConfigurationRequired />;
-  if (!authReady) return <FullPageStatus message="Opening your pantry…" />;
+  if (!authReady) return <FullPageStatus message="Opening Mise…" />;
   if (authError) return <FullPageStatus message={authError} action="Return to sign in" onAction={() => { window.history.replaceState({}, document.title, '/'); window.location.reload(); }} />;
   if (!session) return <Login />;
   return <AuthenticatedApp session={session} />;
@@ -102,10 +102,12 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onVoidFoodLog={async (id) => { await voidFoodLog(supabase, id); await refresh(); }}
         onSaveAction={async (kind, form) => { const message = await savePanelAction(supabase, kind, form); await refresh(); return message; }}
         onLogExternal={async (id) => { await logExternalProduct(supabase, id); await refresh(); }}
-        onCookRecipe={async (id) => { await cookRecipe(supabase, id); await refresh(); }}
+        onCookRecipe={async (id) => { const prepId = await cookRecipe(supabase, id); await refresh(); return prepId; }}
+        onSavePrepFeedback={async (prepId, ease, taste, minutes) => { await savePrepFeedback(supabase, prepId, ease, taste, minutes); await refresh(); }}
         onCookRecipes={async (ids) => { await cookRecipes(supabase, ids); await refresh(); }}
         onConsumePrepared={async (id) => { await consumePreparedLot(supabase, id); await refresh(); }}
         onRebuildShopping={async () => { const count = await rebuildShoppingFromPlan(supabase); await refresh(); return count; }}
+        onRemovePlannedMeal={async (id) => { await removePlannedMeal(supabase, id); await refresh(); }}
       />
     </PantryDataProvider>
   );
@@ -129,7 +131,7 @@ function Login() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="brand auth-brand"><span className="brand-mark">🫙</span><strong>Pantry</strong></div>
+        <div className="brand auth-brand"><span className="brand-mark">🫙</span><strong>Mise</strong></div>
         <div><div className="eyebrow">PRIVATE KITCHEN</div><h1>Welcome back</h1><p>Use your Google account to open inventory, recipes, meals, and nutrition.</p></div>
         {message && <div className="auth-error" role="alert">{message}</div>}
         <button className="button google-button" disabled={busy} onClick={() => void signInWithGoogle()}>
@@ -147,5 +149,5 @@ function ConfigurationRequired() {
 }
 
 function FullPageStatus({ message, action, onAction }: { message: string; action?: string; onAction?: () => void }) {
-  return <main className="auth-page"><div className="auth-card"><div className="brand auth-brand"><span className="brand-mark">🫙</span><strong>Pantry</strong></div><p>{message}</p>{action && <button className="button primary" onClick={onAction}>{action}</button>}</div></main>;
+  return <main className="auth-page"><div className="auth-card"><div className="brand auth-brand"><span className="brand-mark">🫙</span><strong>Mise</strong></div><p>{message}</p>{action && <button className="button primary" onClick={onAction}>{action}</button>}</div></main>;
 }

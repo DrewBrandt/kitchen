@@ -679,8 +679,10 @@ export type Database = {
       }
       preps: {
         Row: {
+          actual_minutes: number
           actual_yield_qty: number | null
           cook_session: string | null
+          ease_rating: number
           id: string
           legacy_firebase_id: string | null
           note: string | null
@@ -688,11 +690,14 @@ export type Database = {
           prepped_at: string
           recipe: string
           scale_factor: number
+          taste_rating: number
           voided_at: string | null
         }
         Insert: {
+          actual_minutes?: number
           actual_yield_qty?: number | null
           cook_session?: string | null
+          ease_rating?: number
           id?: string
           legacy_firebase_id?: string | null
           note?: string | null
@@ -700,11 +705,14 @@ export type Database = {
           prepped_at?: string
           recipe: string
           scale_factor?: number
+          taste_rating?: number
           voided_at?: string | null
         }
         Update: {
+          actual_minutes?: number
           actual_yield_qty?: number | null
           cook_session?: string | null
+          ease_rating?: number
           id?: string
           legacy_firebase_id?: string | null
           note?: string | null
@@ -712,6 +720,7 @@ export type Database = {
           prepped_at?: string
           recipe?: string
           scale_factor?: number
+          taste_rating?: number
           voided_at?: string | null
         }
         Relationships: [
@@ -1118,6 +1127,10 @@ export type Database = {
         Returns: string
       }
       cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
+      save_prep_feedback: {
+        Args: { p_actual_minutes?: number; p_ease?: number; p_prep: string; p_taste?: number }
+        Returns: undefined
+      }
       food_accepts_unit: {
         Args: { p_food: string; p_unit: string }
         Returns: boolean

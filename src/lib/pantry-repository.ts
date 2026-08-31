@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
-import type { PantryData } from '../pantry-data';
+import type { NutritionValues, NutrientName, PantryData } from '../pantry-data';
 
 type Client = SupabaseClient<Database>;
 type FoodLogRow = Database['public']['Tables']['food_logs']['Row'];
@@ -16,6 +16,58 @@ const categoryEmoji = (category: string) => {
 const formatQuantity = (value: number, unit?: string | null) => {
   const rounded = Math.abs(value - Math.round(value)) < 0.01 ? Math.round(value) : Number(value.toFixed(1));
   return `${rounded} ${unit ?? ''}`.trim();
+};
+
+const nutrientFields = {
+  Calories: 'kcal', Protein: 'protein_g', Carbs: 'carbs_g', Fat: 'fat_g', Fiber: 'fiber_g', Sodium: 'sodium_mg',
+} as const;
+
+const nutritionValues = (row: Partial<Record<(typeof nutrientFields)[NutrientName], number | null>>): NutritionValues =>
+  Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, Number(row[field] ?? 0)])) as NutritionValues;
+
+const pluralize = (name: string, plural: string | null | undefined, quantity: number) => {
+  if (Math.abs(quantity - 1) < 0.001) return name;
+  if (plural) return plural;
+  if (/(s|x|z|ch|sh)$/i.test(name)) return `${name}es`;
+  if (/[^aeiou]y$/i.test(name)) return `${name.slice(0, -1)}ies`;
+  return `${name}s`;
+};
+
+type UnitRow = Database['public']['Tables']['measure_conversions']['Row'];
+type FoodRow = Database['public']['Tables']['base_foods']['Row'];
+
+const toFoodBase = (food: FoodRow, quantity: number, unit: UnitRow) => {
+  const unitBase = quantity / Number(unit.base_to_this_ratio);
+  if (food.measure_style === unit.measure_style) return unitBase;
+  if (food.measure_style === 'weight' && unit.measure_style === 'volume') return unitBase * Number(food.g_per_fl_oz);
+  if (food.measure_style === 'volume' && unit.measure_style === 'weight') return unitBase / Number(food.g_per_fl_oz);
+  if (food.measure_style === 'weight' && unit.measure_style === 'discrete') return unitBase * Number(food.g_per_count);
+  if (food.measure_style === 'discrete' && unit.measure_style === 'weight') return unitBase / Number(food.g_per_count);
+  if (food.measure_style === 'volume' && unit.measure_style === 'discrete') return unitBase * Number(food.g_per_count) / Number(food.g_per_fl_oz);
+  if (food.measure_style === 'discrete' && unit.measure_style === 'volume') return unitBase * Number(food.g_per_fl_oz) / Number(food.g_per_count);
+  return Number.POSITIVE_INFINITY;
+};
+
+const fromFoodBase = (food: FoodRow, base: number, unit: UnitRow) => {
+  let unitBase = base;
+  if (food.measure_style === 'weight' && unit.measure_style === 'volume') unitBase = base / Number(food.g_per_fl_oz);
+  else if (food.measure_style === 'volume' && unit.measure_style === 'weight') unitBase = base * Number(food.g_per_fl_oz);
+  else if (food.measure_style === 'weight' && unit.measure_style === 'discrete') unitBase = base / Number(food.g_per_count);
+  else if (food.measure_style === 'discrete' && unit.measure_style === 'weight') unitBase = base * Number(food.g_per_count);
+  else if (food.measure_style === 'volume' && unit.measure_style === 'discrete') unitBase = base * Number(food.g_per_fl_oz) / Number(food.g_per_count);
+  else if (food.measure_style === 'discrete' && unit.measure_style === 'volume') unitBase = base * Number(food.g_per_count) / Number(food.g_per_fl_oz);
+  return unitBase * Number(unit.base_to_this_ratio);
+};
+
+const usMeasurement = (quantity: number, source: UnitRow, unitRows: UnitRow[]) => {
+  const base = quantity / Number(source.base_to_this_ratio);
+  const wanted = source.measure_style === 'weight'
+    ? (base >= 453.592 ? 'lb' : 'oz')
+    : source.measure_style === 'volume'
+      ? (base >= 4 ? 'cup' : base >= 1 ? 'tbsp' : 'tsp')
+      : 'ct';
+  const unit = unitRows.find((candidate) => candidate.short_name.toLowerCase() === wanted) ?? source;
+  return { quantity: base * Number(unit.base_to_this_ratio), unit };
 };
 
 const daysUntil = (date: string | null) => {
@@ -111,11 +163,15 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   }));
 
   const recipeRows = recipesResult.data ?? [];
+  const unitRows = unitsResult.data ?? [];
   const recipes = recipeRows.map((recipe) => {
     const recipeIngredients = (ingredientsResult.data ?? []).filter((ingredient) => ingredient.recipe === recipe.id);
     const steps = Array.isArray(recipe.instructions) ? recipe.instructions.map(String) : [];
     const kcal = Number(recipe.override_kcal ?? 0);
     const protein = Number(recipe.override_protein_g ?? 0);
+    const recipePreps = (prepsResult.data ?? []).filter((prep) => prep.recipe === recipe.id);
+    const easeRatings = recipePreps.map((prep) => prep.ease_rating).filter((rating) => rating > 0);
+    const tasteRatings = recipePreps.map((prep) => prep.taste_rating).filter((rating) => rating > 0);
     return {
       id: recipe.id,
       emoji: recipe.emoji ?? '🍳',
@@ -126,16 +182,24 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       ingredients: recipeIngredients.map((ingredient) => {
         const food = foods.get(ingredient.ingredient);
         const unit = units.get(ingredient.unit);
-        const available = (stockByFood.get(ingredient.ingredient) ?? 0) * Number(unit?.base_to_this_ratio ?? 1);
-        const enough = available + 0.0000001 >= Number(ingredient.qty);
-        return { label: `${formatQuantity(Number(ingredient.qty), unit?.short_name)} ${food?.name ?? 'Ingredient'}`, stock: `${formatQuantity(available, unit?.short_name)} in stock${enough ? '' : ' · short'}` };
+        if (!food || !unit) return { label: `${formatQuantity(Number(ingredient.qty))} Ingredient`, stock: 'Unit unavailable · short' };
+        const display = usMeasurement(Number(ingredient.qty), unit, unitRows);
+        const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
+        const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
+        const enough = availableBase + 0.0000001 >= neededBase;
+        const availableInDisplayStyle = fromFoodBase(food, availableBase, display.unit);
+        const ingredientName = pluralize(food.name, food.plural, display.quantity);
+        return { label: `${formatQuantity(display.quantity, display.unit.short_name)} ${ingredientName}`, stock: `${formatQuantity(availableInDisplayStyle, display.unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
-      ease: 3,
-      taste: 3,
+      ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,
+      taste: tasteRatings.length ? Number((tasteRatings.reduce((total, value) => total + value, 0) / tasteRatings.length).toFixed(1)) : 0,
+      prepCount: recipePreps.length,
+      nutritionValues: { Calories: kcal, Protein: protein, Carbs: Number(recipe.override_carbs_g ?? 0), Fat: Number(recipe.override_fat_g ?? 0), Fiber: Number(recipe.override_fiber_g ?? 0), Sodium: Number(recipe.override_sodium_mg ?? 0) },
       cookable: recipeIngredients.every((ingredient) => {
         const unit = units.get(ingredient.unit);
-        return (stockByFood.get(ingredient.ingredient) ?? 0) * Number(unit?.base_to_this_ratio ?? 1) + 0.0000001 >= Number(ingredient.qty);
+        const food = foods.get(ingredient.ingredient);
+        return Boolean(unit && food && (stockByFood.get(ingredient.ingredient) ?? 0) + 0.0000001 >= toFoodBase(food, Number(ingredient.qty), unit));
       }),
     };
   });
@@ -194,6 +258,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const value = sum(dayLogs, field);
     return { label, value: `${Math.round(value).toLocaleString()}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
   });
+  const palette = ['#53d7a0', '#5eb5f5', '#a78bfa', '#f59e6b', '#f472b6', '#f2d06b', '#4fd1c5', '#ef7d7d'];
   const buildFoodLog = (dayLogs: FoodLogRow[]) => dayLogs.map((log, index) => ({
     id: log.id,
     emoji: log.kind === 'external' ? '🥡' : '🍽️',
@@ -202,7 +267,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     calories: `${Math.round(Number(log.kcal ?? 0))} cal`,
     protein: `${Math.round(Number(log.protein_g ?? 0))} g protein`,
     time: new Date(log.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-    color: ['#86d7ac', '#8fbce6', '#b0a6e0'][index % 3],
+    color: palette[index % palette.length],
+    nutrition: nutritionValues(log),
   }));
   const nutrients = buildNutrients(todayLogs);
   const foodLog = buildFoodLog(todayLogs);
@@ -259,10 +325,28 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const key = dateKeyInZone(date, settings.time_zone);
     const meals = (plansResult.data ?? []).filter((plan) => plan.plan_date === key).map((plan) => {
       const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-      return { slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
+      return { id: plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
     });
     return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
   });
+
+  const plannedMeals = (plansResult.data ?? []).map((plan) => {
+    const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
+    return { id: plan.id, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
+  });
+  const nutritionHistory = [...byDay.entries()].map(([dateKey, dayLogs]) => ({
+    dateKey,
+    label: new Date(`${dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+    values: Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, sum(dayLogs, field)])) as NutritionValues,
+    foods: dayLogs.map((log) => ({ label: log.label, values: nutritionValues(log) })),
+  }));
+  const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey).reduce((totals, plan) => {
+    const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
+    if (!recipe) return totals;
+    const values = nutritionValues({ kcal: recipe.override_kcal, protein_g: recipe.override_protein_g, carbs_g: recipe.override_carbs_g, fat_g: recipe.override_fat_g, fiber_g: recipe.override_fiber_g, sodium_mg: recipe.override_sodium_mg });
+    for (const label of Object.keys(totals) as NutrientName[]) totals[label] += values[label] * Number(plan.scale_factor);
+    return totals;
+  }, { Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 } as NutritionValues);
 
   return {
     inventorySections,
@@ -270,6 +354,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     grocerySections,
     nutrients,
     weekDays,
+    plannedMeals,
     foodLog,
     foodLogByDate,
     history,
@@ -277,9 +362,14 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     products: [...products.values()].map((product) => ({
       id: product.id,
       foodId: product.food,
+      foodName: foods.get(product.food)?.name ?? 'Food',
       name: product.name,
       label: [product.brand, product.name].filter(Boolean).join(' · '),
+      brand: product.brand ?? '',
+      barcode: product.barcode ?? '',
+      emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
       isExternal: product.is_external,
+      nutrition: nutritionValues(product),
     })),
     units: [...units.values()].map((unit) => ({ id: unit.id, label: `${unit.full_name} (${unit.short_name})`, shortName: unit.short_name, measureStyle: unit.measure_style })),
     categories: (categoriesResult.data ?? []).map((category) => category.category),
@@ -302,6 +392,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     preparedLots,
     proteinTrend,
     nutrientDrivers,
+    nutritionHistory,
+    todayProjection,
   };
 }
 
@@ -336,7 +428,18 @@ export async function logExternalProduct(client: Client, id: string) {
 }
 
 export async function cookRecipe(client: Client, recipeId: string) {
-  const { error } = await client.rpc('cook_recipe', { p_recipe: recipeId });
+  const { data, error } = await client.rpc('cook_recipe', { p_recipe: recipeId });
+  if (error) throw error;
+  return data;
+}
+
+export async function savePrepFeedback(client: Client, prepId: string, ease: number, taste: number, actualMinutes: number) {
+  const { error } = await client.rpc('save_prep_feedback', { p_prep: prepId, p_ease: ease, p_taste: taste, p_actual_minutes: actualMinutes });
+  if (error) throw error;
+}
+
+export async function removePlannedMeal(client: Client, planId: string) {
+  const { error } = await client.from('meal_plans').delete().eq('id', planId);
   if (error) throw error;
 }
 
