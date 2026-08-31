@@ -22,16 +22,16 @@ The UI represents the following product capabilities:
 - recipe creation and editing
 - reviewed bulk grocery import
 - on-device UPC/EAN scanning with reviewed Open Food Facts suggestions
-- authenticated Firebase API scaffold for Codex-driven updates
-- Google sign-in with a Firestore access allowlist
+- authenticated Supabase Edge Function API for Custom GPT updates
+- Google sign-in with owner-only PostgreSQL row-level security
 - automatic GitHub Pages deployment
 - optional Google Calendar synchronization for grocery and preparation reminders
 - a private Me routine with per-day sleep times, dinner windows, and planning buffers
 - read-only selected-calendar agendas for schedule-aware Pantry GPT meal planning
 
-The legacy Firebase functions, Firestore rules, and Flutter client remain in
-the repository as migration references. They are not imported by the new web
-frontend; its eventual Supabase adapter is deliberately outside this UI change.
+The web frontend and private GPT now share the Supabase PostgreSQL source of
+truth. Legacy Firebase functions, rules, and Flutter code remain only as
+migration references and are not part of the live web or GPT path.
 
 ## Run
 
@@ -40,9 +40,8 @@ npm ci
 npm run dev
 ```
 
-The UI currently uses representative in-memory data while the PostgreSQL data
-layer is rebuilt. Interactive state such as grocery check-off, search, filters,
-cooking steps, shopping mode, and side-panel workflows is fully client-side.
+Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for live data.
+Without them the UI uses representative preview data.
 
 ## Legacy Firebase access setup
 
@@ -78,20 +77,18 @@ No Firebase secret is required by the frontend build.
 The workflow builds the Vite app into `dist/`. Firebase Hosting serves the same
 artifact and retains the existing no-cache policy for entry files.
 
-## Codex API credential
+## Private GPT API credential
 
-Cloud Functions require the Firebase Blaze plan, although low-volume usage is
-normally covered by its no-cost allowances. After upgrading, generate the
-credential and send it directly to Firebase Secret Manager with:
+Generate a private bearer credential, send it directly to Supabase Edge Function
+secrets, and keep the matching Windows-encrypted local copy with:
 
 ```powershell
 .\tools\setup_api_secret.ps1
 ```
 
-The generated token is never printed. Firebase holds one copy and this Windows
-account holds a DPAPI-encrypted copy outside the repository. The legacy
-function receives it at runtime; it does not belong in a client, GitHub
-Actions, chat, or source control.
+The generated token is never printed. Supabase holds one copy and this Windows
+account holds a DPAPI-encrypted copy outside the repository. It does not belong
+in the browser client, GitHub Actions, chat, or source control.
 
 After deploying the function, make an authenticated request with:
 
@@ -132,7 +129,7 @@ npm test
 npm run build
 ```
 
-See `REQUIREMENTS.md` for the canonical model and Firebase migration plan.
+See `REQUIREMENTS.md` for the canonical data and conversational model.
 See `docs/FEATURE_SPECIFICATION.md` for the UI-agnostic product capabilities,
 data model, business rules, and Custom GPT operating model.
 See `docs/API.md` for the Codex integration contract and deployment authentication model.

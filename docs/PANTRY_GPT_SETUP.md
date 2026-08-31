@@ -1,7 +1,7 @@
 # Set up the private Pantry GPT
 
 This setup gives every new conversation opened with the private GPT live access
-to the pantry. A knowledge-file upload by itself cannot authenticate to the API.
+to the Supabase pantry. A knowledge-file upload by itself cannot authenticate.
 
 ## 1. Create the GPT
 
@@ -43,7 +43,8 @@ In the GPT editor, open **Actions** and create a new Action.
 5. Paste the clipboard value into the Action authentication secret field.
 6. Do not paste the token into the schema itself.
 
-The token is stored locally with Windows DPAPI and is copied without being
+The bearer token is stored as a Supabase Edge Function secret and locally with
+Windows DPAPI. It is copied without being
 printed. Clipboard history can retain copied secrets, so clear the clipboard
 after the GPT is saved:
 
@@ -77,12 +78,13 @@ with **Drew's Pantry** whenever live access is needed.
 
 ## Applying later API or instruction updates
 
-Repository edits do not update the deployed function or private GPT
+Repository edits do not update the deployed Edge Function or private GPT
 automatically. After changing the API or GPT behavior:
 
-1. Deploy the function with `firebase deploy --only functions`.
-2. Replace the GPT Instructions with the complete current contents of
+1. Apply migrations with `npm run db:push -- --agent no`.
+2. Deploy with `npx supabase functions deploy pantry-api --no-verify-jwt --project-ref xaetuqdtnolzspfvqvja --agent no`.
+3. Replace the GPT Instructions with the complete current contents of
    `docs/PANTRY_GPT_INSTRUCTIONS.md`.
-3. Replace the Action schema with the complete current contents of
+4. Replace the Action schema with the complete current contents of
    `docs/pantry-gpt-openapi.yaml` and save the GPT.
-4. Repeat the read-only Preview tests above.
+5. Repeat the read-only Preview tests above.

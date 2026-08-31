@@ -40,7 +40,7 @@ The normal long-term workflow is conversational:
 5. Codex sends validated JSON to the food, grocery, or recipe endpoint.
 6. The API validates the complete request before committing any writes.
 
-Natural language is deliberately not accepted by the mutation endpoint. Interpretation belongs in the conversation layer; the durable API remains deterministic and testable. The bearer token is stored as a Firebase Functions secret and is never embedded in the Flutter app.
+Natural language is deliberately not accepted by the mutation endpoint. Interpretation belongs in the conversation layer; the durable API remains deterministic and testable. The bearer token is stored as a Supabase Edge Function secret and is never embedded in a client.
 
 ## Canonical data model
 
@@ -101,13 +101,11 @@ Conversions are food-specific. One cup of butter and one cup of flour do not sha
 
 Cooking is all-or-nothing. The service first converts every ingredient to its food's base unit, validates the complete demand, and plans deductions ordered by best-by date. Only after every ingredient is available are lot quantities updated and a history record written. Undo restores the exact lots originally used.
 
-The eventual Firestore implementation must perform validation, deductions, and history creation in one transaction.
+The PostgreSQL implementation performs validation, deductions, and history creation in one transaction.
 
 ## Next milestones
 
-1. Configure a separate Firebase project and deploy the scaffolded authenticated API.
-2. Replace the Flutter in-memory store with Firestore repositories.
-3. Add API consumption-history endpoints so conversational quick-use and cooking can be recorded remotely.
-4. Add shopping-list generation and recipe suggestions.
-5. Add receipt capture and opened-item shelf life. Nutrition and reviewed
+1. Deploy the Supabase Edge Function authenticated API and update the private GPT Action.
+2. Retire the legacy Firebase production surfaces after cutover verification.
+3. Add receipt capture and opened-item shelf life. Nutrition and reviewed
    barcode lookup are implemented.

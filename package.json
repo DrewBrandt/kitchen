@@ -12,6 +12,7 @@
     "db:lint": "supabase db lint --linked --schema public --level warning --fail-on error",
     "db:test": "supabase db query --linked --file supabase/tests/database.sql",
     "db:test:transactions": "supabase db query --linked --file supabase/tests/transactions.sql",
+    "db:test:gpt": "supabase db query --linked --file supabase/tests/gpt_api.sql",
     "data:firebase-export": "node tools/export-firestore.mjs",
     "data:firebase-transform": "node tools/transform-firestore-snapshot.mjs"
   },

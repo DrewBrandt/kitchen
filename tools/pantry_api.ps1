@@ -4,7 +4,7 @@ param(
   [string]$Method,
 
   [Parameter(Mandatory)]
-  [ValidateSet('/v1/inventory', '/v1/history', '/v1/history/reconcile', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/products', '/v1/migrations/canonical-products', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/prepare/recipe', '/v1/prepared-batches', '/v1/consume/prepared', '/v1/consume/meal-template', '/v1/meal-templates', '/v1/consume/recipe', '/v1/consume/inventory', '/v1/targets', '/v1/preferences', '/v1/access')]
+  [ValidateSet('/v1/inventory', '/v1/history', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/products', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/prepare/recipe', '/v1/prepared-batches', '/v1/consume/prepared', '/v1/consume/inventory', '/v1/targets', '/v1/preferences', '/v1/routine')]
   [string]$Path,
 
   [string]$BodyFile,
@@ -20,7 +20,7 @@ param(
 
   [string]$Id,
 
-  [string]$BaseUrl = 'https://us-east4-pantry-tracker-4bc45.cloudfunctions.net/pantryApi'
+  [string]$BaseUrl = 'https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api'
 )
 
 $ErrorActionPreference = 'Stop'

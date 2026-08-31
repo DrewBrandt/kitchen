@@ -1,4 +1,8 @@
-# Google Calendar integration
+# Legacy Google Calendar integration
+
+> This document describes the retired Firebase implementation. Calendar tools
+> are not exposed by the Supabase Pantry GPT API. Reintroducing Calendar requires
+> a separate Supabase-native OAuth, encrypted credential, and reconciliation design.
 
 ## Implementation status
 
