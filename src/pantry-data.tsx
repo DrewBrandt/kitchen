@@ -11,6 +11,7 @@ import {
 } from './data';
 
 export interface InventoryFood {
+  productId?: string;
   emoji: string;
   name: string;
   sub: string;
@@ -25,13 +26,13 @@ export interface PantryData {
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean }> }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-  weekDays: Array<{ day: string; date: string; today?: boolean; meals: Array<{ slot: string; name: string; emoji: string }> }>;
+  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ slot: string; name: string; emoji: string; recipeId?: string }> }>;
   foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
   foodLogByDate: Record<string, {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
     foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string }>;
   }>;
-  history: Array<{ day: string; date: string; meals: string[]; totals: string }>;
+  history: Array<{ day: string; date: string; dateKey?: string; meals: string[]; totals: string }>;
   foods: Array<{ id: string; name: string; emoji: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
   products: Array<{ id: string; foodId: string; name: string; label: string; isExternal: boolean }>;
   units: Array<{ id: string; label: string; shortName: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
@@ -49,9 +50,10 @@ export interface PantryData {
     dislikes: string[];
     favorites: string[];
     timeZone: string;
+    planningNotes: string;
   };
   externalProducts: Array<{ id: string; emoji: string; name: string; place: string; nutrition: string }>;
-  preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string }>;
+  preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
 }
@@ -87,6 +89,7 @@ export const previewPantryData: PantryData = {
     dislikes: [],
     favorites: [],
     timeZone: 'America/New_York',
+    planningNotes: '',
   },
   externalProducts: [],
   preparedLots: [],

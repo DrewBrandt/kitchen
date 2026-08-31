@@ -1,17 +1,35 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { App } from './App';
+import { App, greetingFor } from './App';
 
 describe('Pantry web UI', () => {
   it('renders the mockup-inspired dashboard and complete navigation', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Good evening, Drew' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good (morning|afternoon|evening), Drew/ })).toBeInTheDocument();
     expect(screen.getByText('Ready to eat')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Inventory' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Grocery list/ })).toBeInTheDocument();
     expect(screen.getByText('Routine & food profile')).toBeInTheDocument();
+  });
+
+  it('uses the owner time zone for the greeting', () => {
+    expect(greetingFor(new Date('2026-08-31T13:00:00Z'), 'America/New_York')).toBe('morning');
+    expect(greetingFor(new Date('2026-08-31T19:00:00Z'), 'America/New_York')).toBe('afternoon');
+    expect(greetingFor(new Date('2026-08-31T23:00:00Z'), 'America/New_York')).toBe('evening');
+  });
+
+  it('uses centered dialogs, removes dead overflow controls, and closes with Escape', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add inventory' }));
+    expect(screen.getByRole('dialog')).toHaveClass('action-panel');
+    expect(container.querySelector('.panel-layer')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('searches and filters the inventory', async () => {

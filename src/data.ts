@@ -47,15 +47,15 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitle: string; primary: string; secondary?: string }> = {
-  today: { eyebrow: 'THU · AUG 27 · EVENING', title: 'Good evening, Drew', subtitle: 'Two lots want using this week, and dinner is already planned.', primary: 'Put away groceries', secondary: 'Scan food' },
-  inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: 'Grouped in Safeway walking order. Lots deduct earliest-expiry first.', primary: 'Add lot', secondary: 'Import groceries' },
+  today: { eyebrow: '', title: '', subtitle: 'See what needs attention and what is ready to eat.', primary: 'Add inventory', secondary: 'Look up barcode' },
+  inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: 'Grouped by grocery department. Lots deduct earliest-expiry first.', primary: 'Add lot' },
   recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: 'What is ready to cook, and exactly what a run to the store would unlock.', primary: 'New recipe' },
   'eating-out': { eyebrow: '3 SAVED ITEMS · 2 PLACES', title: 'Eating out', subtitle: 'Restaurant orders and packaged foods. Logging these never touches inventory.', primary: 'Save food' },
-  'food-log': { eyebrow: 'TODAY · THU, AUG 27', title: 'Food log', subtitle: 'Calories and nutrients from recipes, pantry items, and food away from home.', primary: 'Log food', secondary: 'Scan food' },
+  'food-log': { eyebrow: 'TODAY · THU, AUG 27', title: 'Food log', subtitle: 'Calories and nutrients from recipes, pantry items, and food away from home.', primary: 'Log food', secondary: 'Look up barcode' },
   history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '9 meals · 6 distinct foods · 1 repeated three times or more.', primary: 'Export range' },
   trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: 'Daily nutrition against targets, and the foods driving each nutrient.', primary: 'Edit targets' },
   week: { eyebrow: 'AUG 24 – AUG 30', title: 'This week', subtitle: '2 meals planned · 4 groceries needed to cook them.', primary: 'Add a meal', secondary: 'Rebuild grocery list' },
-  grocery: { eyebrow: 'AUG 24 – AUG 30 · SAFEWAY', title: 'Grocery list', subtitle: 'Shared ingredients merged, ordered by the aisles you actually walk.', primary: 'Add item', secondary: 'Rebuild from plan' },
+  grocery: { eyebrow: 'THIS WEEK', title: 'Grocery list', subtitle: 'Manual items and plan shortages, grouped by grocery department.', primary: 'Add item', secondary: 'Rebuild from plan' },
 };
 
 export const INVENTORY_SECTIONS = [
@@ -93,12 +93,13 @@ export interface Recipe {
   steps: string[];
   ease: number;
   taste: number;
+  cookable?: boolean;
 }
 
 export const RECIPES: Recipe[] = [
   {
     id: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', servings: 4, minutes: 24,
-    nutrition: '310 cal · 9 g protein per serving', ease: 4, taste: 5,
+    nutrition: '310 cal · 9 g protein per serving', ease: 4, taste: 5, cookable: true,
     ingredients: [
       { label: '1½ cups all-purpose flour', stock: '1.1 kg in stock' },
       { label: '1¼ cups milk', stock: '1.4 L · expires in 3 days' },
@@ -110,7 +111,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', servings: 1, minutes: 9,
-    nutrition: '220 cal · 13 g protein per serving', ease: 5, taste: 4,
+    nutrition: '220 cal · 13 g protein per serving', ease: 5, taste: 4, cookable: true,
     ingredients: [
       { label: '2 eggs', stock: '14 in stock' },
       { label: '½ tbsp butter', stock: '340 g in stock' },

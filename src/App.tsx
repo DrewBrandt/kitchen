@@ -3,7 +3,6 @@ import {
   Archive,
   BarChart3,
   CalendarDays,
-  Camera,
   Check,
   ChevronRight,
   ClipboardList,
@@ -12,7 +11,6 @@ import {
   History as HistoryIcon,
   House,
   ListChecks,
-  MoreHorizontal,
   NotebookTabs,
   PackageOpen,
   Plus,
@@ -51,7 +49,7 @@ const PAGE_ICONS: Record<PageId, LucideIcon> = {
 };
 
 const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
-  today: 'groceries',
+  today: 'lot',
   inventory: 'lot',
   recipes: 'recipe',
   'eating-out': 'external',
@@ -65,16 +63,29 @@ const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
 interface PanelState {
   kind: PanelKind;
   recipe?: Recipe;
+  values?: Record<string, string>;
 }
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ');
 
-export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onCookRecipes, onConsumePrepared, onRebuildShopping }: { onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number> } = {}) {
+export function greetingFor(date: Date, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  let hour = date.getHours();
+  try { hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone }).format(date)); } catch { /* Fall back to the device time zone for invalid legacy values. */ }
+  return hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+}
+
+function localDateLabel(date: Date, timeZone: string) {
+  try { return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', timeZone }).toUpperCase(); }
+  catch { return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase(); }
+}
+
+export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onCookRecipes, onConsumePrepared, onRebuildShopping }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number> } = {}) {
   const pantryData = usePantryData();
   const { externalProducts, foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
   const [panel, setPanel] = useState<PanelState | null>(null);
-  const [checkedGroceries, setCheckedGroceries] = useState<Set<string>>(() => new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map((item) => item.name)));
+  const groceryKey = (item: { id?: string; name: string }) => item.id ?? item.name;
+  const [checkedGroceries, setCheckedGroceries] = useState<Set<string>>(() => new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map(groceryKey)));
   const [inventoryFilter, setInventoryFilter] = useState('All');
   const [recipeFilter, setRecipeFilter] = useState('All recipes');
   const [search, setSearch] = useState('');
@@ -82,17 +93,29 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
   const [shoppingMode, setShoppingMode] = useState(false);
 
   useEffect(() => {
-    setCheckedGroceries(new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map((item) => item.name)));
+    setCheckedGroceries(new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map(groceryKey)));
   }, [grocerySections]);
+
+  useEffect(() => {
+    if (!panel) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(null); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', closeOnEscape); };
+  }, [panel]);
 
   const inventoryFoodCount = inventorySections.reduce((total, section) => total + section.foods.length, 0);
   const inventoryLotCount = inventorySections.reduce((total, section) => total + section.foods.reduce((foodTotal, food) => foodTotal + food.lots.length, 0), 0);
   const groceryTotal = grocerySections.flatMap((section) => section.items).length;
   const groceryDone = checkedGroceries.size;
   const plannedMealCount = weekDays.reduce((total, day) => total + day.meals.length, 0);
-  const dateLabel = new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+  const now = new Date();
+  const dateLabel = localDateLabel(now, pantryData.settings.timeZone);
+  const greeting = greetingFor(now, pantryData.settings.timeZone);
   const meta = {
     ...PAGE_META[page],
+    title: page === 'today' ? `Good ${greeting}, ${ownerName}` : PAGE_META[page].title,
     eyebrow: page === 'today' || page === 'food-log'
       ? dateLabel
       : page === 'inventory'
@@ -111,7 +134,7 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
     subtitle: page === 'today'
       ? `${foodLog.length} food log entr${foodLog.length === 1 ? 'y' : 'ies'} today · ${plannedMealCount} meal${plannedMealCount === 1 ? '' : 's'} planned this week.`
       : page === 'recipes'
-        ? 'Saved recipes and batch cooking. Automatic cookability scoring is coming soon.'
+        ? 'Saved recipes and live inventory availability.'
         : page === 'history'
           ? 'Meals and nutrition totals from your live food log.'
           : page === 'week'
@@ -119,8 +142,8 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
             : PAGE_META[page].subtitle,
   };
 
-  function open(kind: PanelKind, recipe?: Recipe) {
-    setPanel({ kind, recipe });
+  function open(kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) {
+    setPanel({ kind, recipe, values });
   }
 
   function notify(message: string) {
@@ -128,16 +151,19 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
     window.setTimeout(() => setToast(''), 2800);
   }
 
-  function toggleGrocery(name: string) {
-    const item = grocerySections.flatMap((section) => section.items).find((candidate) => candidate.name === name);
-    const nextChecked = !checkedGroceries.has(name);
+  function toggleGrocery(item: { id?: string; name: string }) {
+    const key = groceryKey(item);
+    const nextChecked = !checkedGroceries.has(key);
     setCheckedGroceries((current) => {
       const next = new Set(current);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
-    if (item?.id && onToggleGrocery) void onToggleGrocery(item.id, nextChecked).catch(() => notify('Could not update that grocery item.'));
+    if (item.id && onToggleGrocery) void onToggleGrocery(item.id, nextChecked).catch(() => {
+      setCheckedGroceries((current) => { const next = new Set(current); if (nextChecked) next.delete(key); else next.add(key); return next; });
+      notify('Could not update that grocery item.');
+    });
   }
 
   function runSecondary() {
@@ -153,6 +179,8 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
     <div className="app-shell">
       <Sidebar
         page={page}
+        ownerName={ownerName}
+        syncStatus={syncStatus}
         groceryLeft={groceryTotal - groceryDone}
         badges={{ inventory: inventoryFoodCount, recipes: recipes.length, 'eating-out': externalProducts.length, week: plannedMealCount }}
         onNavigate={setPage}
@@ -171,14 +199,13 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
             <div className="header-actions">
               {meta.secondary && (
                 <button className="button secondary" onClick={runSecondary}>
-                  {meta.secondary.includes('Scan') ? <ScanLine /> : <RefreshCw />}
+                  {meta.secondary.includes('barcode') ? <ScanLine /> : <RefreshCw />}
                   <span>{meta.secondary}</span>
                 </button>
               )}
               <button className="button primary" onClick={() => open(PANEL_FOR_PAGE[page])}>
                 <Plus /> <span>{meta.primary}</span>
               </button>
-              <button className="icon-button" aria-label="More actions"><MoreHorizontal /></button>
             </div>
           </div>
         </header>
@@ -218,10 +245,11 @@ export function App({ onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, o
   );
 }
 
-function Sidebar({ page, groceryLeft, badges, onNavigate, onProfile, onSignOut }: { page: PageId; groceryLeft: number; badges: Partial<Record<PageId, number>>; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
+function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, onNavigate, onProfile, onSignOut }: { page: PageId; ownerName: string; syncStatus: 'connecting' | 'synced' | 'error'; groceryLeft: number; badges: Partial<Record<PageId, number>>; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
+  const initials = ownerName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   return (
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">🫙</span><strong>Pantry</strong><span className="sync-dot" title="Synced" /></div>
+      <div className="brand"><span className="brand-mark">🫙</span><strong>Pantry</strong><span className={cx('sync-dot', syncStatus)} title={syncStatus === 'synced' ? 'Live data connected' : syncStatus === 'connecting' ? 'Connecting to live updates' : 'Live updates disconnected'} /></div>
       {(['Kitchen', 'Eating', 'Planning'] as const).map((group) => (
         <nav className="nav-group" aria-label={group} key={group}>
           <div className="nav-label">{group}</div>
@@ -237,8 +265,8 @@ function Sidebar({ page, groceryLeft, badges, onNavigate, onProfile, onSignOut }
         </nav>
       ))}
       <div className="sidebar-spacer" />
-      <button className="profile-row" aria-label="Drew — Routine & food profile" onClick={onProfile}>
-        <span className="avatar">DB</span><span><strong>Drew</strong><small>Routine & food profile</small></span><Settings2 />
+      <button className="profile-row" aria-label={`${ownerName} — Routine & food profile`} onClick={onProfile}>
+        <span className="avatar">{initials}</span><span><strong>{ownerName}</strong><small>Routine & food profile</small></span><Settings2 />
       </button>
       {onSignOut && <button className="text-button sign-out" onClick={onSignOut}>Sign out</button>}
     </aside>
@@ -255,7 +283,7 @@ function MobileNav({ page, onNavigate, onScan }: { page: PageId; onNavigate: (pa
   return (
     <nav className="mobile-nav" aria-label="Mobile navigation">
       {items.slice(0, 2).map((item) => <MobileNavItem key={item.id} item={item} page={page} onNavigate={onNavigate} />)}
-      <button className="scan-fab" onClick={onScan} aria-label="Scan food"><ScanLine /></button>
+      <button className="scan-fab" onClick={onScan} aria-label="Look up barcode"><ScanLine /></button>
       {items.slice(2).map((item) => <MobileNavItem key={item.id} item={item} page={page} onNavigate={onNavigate} />)}
     </nav>
   );
@@ -274,7 +302,7 @@ function SectionTitle({ title, subtitle, action, onAction }: { title: string; su
   return (
     <div className="section-title">
       <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
-      {action && <button className="text-button" onClick={onAction}>{action}</button>}
+      {action && (onAction ? <button className="text-button" onClick={onAction}>{action}</button> : <span className="section-meta">{action}</span>)}
     </div>
   );
 }
@@ -283,9 +311,12 @@ function Progress({ value, color }: { value: number; color?: string }) {
   return <div className="progress"><span style={{ width: `${Math.min(value, 100)}%`, background: color }} /></div>;
 }
 
-function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe) => void; notify: (message: string) => void; onConsumePrepared?: (id: string) => Promise<void> }) {
+function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: (message: string) => void; onConsumePrepared?: (id: string) => Promise<void> }) {
   const { inventorySections, nutrients, preparedLots, recipes, weekDays } = usePantryData();
-  const nextMeal = weekDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day }))).find(Boolean);
+  const todayIndex = weekDays.findIndex((day) => day.today);
+  const relevantDays = todayIndex >= 0 ? weekDays.slice(todayIndex) : weekDays;
+  const nextMeal = relevantDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day }))).find(Boolean);
+  const nextRecipe = recipes.find((recipe) => recipe.id === nextMeal?.recipeId || recipe.name === nextMeal?.name);
   const useSoon = inventorySections.flatMap((section) => section.foods).filter((food) => ['warn', 'urgent'].includes(food.tone)).slice(0, 2);
   return (
     <div className="stack">
@@ -298,7 +329,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
         <Card className="next-card">
           <div className="card-kicker"><span>NEXT UP</span><button onClick={() => onNavigate('week')}>Week</button></div>
           <div className="featured-meal"><span>{nextMeal?.emoji ?? '📅'}</span><div><strong>{nextMeal?.name ?? 'Nothing planned'}</strong><small>{nextMeal ? `${nextMeal.slot.toLowerCase()} · ${nextMeal.day.today ? 'today' : nextMeal.day.day}` : 'Add a meal to this week'}</small></div></div>
-          <div className="split-actions"><button className="button primary" disabled={!nextMeal} onClick={() => onOpen('cook', recipes.find((recipe) => recipe.name === nextMeal?.name))}>Cook it</button><button className="button secondary" onClick={() => onOpen('meal')}>{nextMeal ? 'Swap' : 'Plan meal'}</button></div>
+          <div className="split-actions"><button className="button primary" disabled={!nextRecipe} onClick={() => nextRecipe && onOpen('cook', nextRecipe)}>Cook it</button><button className="button secondary" onClick={() => onOpen('meal', undefined, nextMeal?.day.dateKey ? { plan_date: nextMeal.day.dateKey, daypart: nextMeal.slot.toLowerCase() } : undefined)}>{nextMeal ? 'Plan another' : 'Plan meal'}</button></div>
         </Card>
         <Card>
           <div className="card-kicker"><span>USE SOON</span><small>{useSoon.length}</small></div>
@@ -309,8 +340,8 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
       </div>
 
       <Card>
-        <SectionTitle title="Ready to eat" subtitle="Leftovers and prepared batches, separate from raw inventory." action="Add leftover" onAction={() => onOpen('food')} />
-        {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One unit of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
+        <SectionTitle title="Ready to eat" subtitle="Leftovers and prepared batches, separate from raw inventory." />
+        {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} progress={lot.progress} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One serving of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
         {!preparedLots.length && <div className="empty-inline">No prepared batches are currently in inventory.</div>}
       </Card>
 
@@ -332,11 +363,11 @@ function MacroRow({ label, value, target, pct, color }: { label: string; value: 
   return <div className="macro-row"><div><span>{label}</span><strong>{value}</strong><small>{target}</small></div><Progress value={pct} color={color} /></div>;
 }
 
-function PreparedRow({ emoji, name, where, servings, due, onEat }: { emoji: string; name: string; where: string; servings: string; due: string; onEat: () => void }) {
-  return <div className="prepared-row"><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong><small>{where}</small></div><div className="servings"><Progress value={55} /><small>{servings}</small></div><small className="due">{due}</small><button className="button compact" onClick={onEat}>Eat</button></div>;
+function PreparedRow({ emoji, name, where, servings, due, progress, onEat }: { emoji: string; name: string; where: string; servings: string; due: string; progress: number; onEat: () => void }) {
+  return <div className="prepared-row"><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong><small>{where}</small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><button className="button compact" onClick={onEat}>Eat</button></div>;
 }
 
-function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind) => void }) {
+function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void }) {
   const { inventorySections } = usePantryData();
   const sections = useMemo(() => inventorySections.map((section) => ({
     ...section,
@@ -349,18 +380,18 @@ function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter:
         <label className="search-box"><Search /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search foods, brands, lots…" /></label>
         {['All', 'Use soon', 'Fridge', 'Pantry'].map((item) => <button key={item} className={cx('filter-chip', filter === item && 'active')} onClick={() => onFilter(item)}>{item}</button>)}
         <span className="toolbar-spacer" />
-        <button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan barcode</button>
+        <button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Look up barcode</button>
         <button className="button secondary" onClick={() => onOpen('food')}><PackageOpen />Define food</button>
       </div>
       {sections.map((section) => (
         <Card className="inventory-section" key={section.label}>
           <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.foods.length} foods</small></div>
           {section.foods.map((food) => (
-            <button className="inventory-row" key={food.name} onClick={() => onOpen('lot')}>
+            <button className="inventory-row" key={food.name} onClick={() => onOpen('lot', undefined, food.productId ? { product: food.productId } : undefined)}>
               <span className="row-emoji">{food.emoji}</span><div className="inventory-name"><strong>{food.name}</strong><small>{food.sub}</small></div>
               <div className="lot-meter"><div>{food.lots.map((lot, index) => <span key={lot} className={cx('lot-bar', index === 0 && food.tone)} />)}</div><small>{food.lots.join(' · ')}</small></div>
               <strong className="inventory-total">{food.total}</strong><small className={cx('inventory-due', food.tone)}>{food.due}</small>
-              <div className="row-actions"><span>+</span><span>−</span><span>···</span></div>
+              <ChevronRight className="row-chevron" />
             </button>
           ))}
         </Card>
@@ -376,18 +407,20 @@ function Rating({ label, value }: { label: string; value: number }) {
 
 function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe) => void }) {
   const { recipes } = usePantryData();
+  const visibleRecipes = filter === 'Cookable now' ? recipes.filter((recipe) => recipe.cookable) : recipes;
   return (
     <div>
-      <div className="toolbar"><button className={cx('filter-chip', filter === 'All recipes' && 'active')} onClick={() => onFilter('All recipes')}>All recipes <small>{recipes.length}</small></button><button className="filter-chip" disabled title="Automatic ingredient availability is planned">Cookable now <small>Coming soon</small></button><button className="filter-chip" disabled title="Grocery-run scoring is planned">Quick grocery run <small>Coming soon</small></button></div>
+      <div className="toolbar"><button className={cx('filter-chip', filter === 'All recipes' && 'active')} onClick={() => onFilter('All recipes')}>All recipes <small>{recipes.length}</small></button><button className={cx('filter-chip', filter === 'Cookable now' && 'active')} onClick={() => onFilter('Cookable now')}>Cookable now <small>{recipes.filter((recipe) => recipe.cookable).length}</small></button></div>
       <div className="recipe-grid">
-        {recipes.map((recipe) => (
+        {visibleRecipes.map((recipe) => (
           <Card className="recipe-card" key={recipe.id}>
             <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2><em>SAVED</em></div><small>{recipe.minutes} min · {recipe.servings} servings</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
-            <div className="ingredient-chips">{recipe.ingredients.map((item) => <span key={item.label}>✓ {item.label.replace(/^\S+\s/, '')}</span>)}</div>
+            <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label.replace(/^\S+\s/, '')}</span>; })}</div>
             <p className="recipe-nutrition">{recipe.nutrition}</p>
-            <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-detail', recipe)}>View recipe</button><span /><button className="icon-button"><MoreHorizontal /></button></div>
+            <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-detail', recipe)}>View recipe</button></div>
           </Card>
         ))}
+        {!visibleRecipes.length && <Card className="empty-state"><CookingPot /><h2>Nothing is fully stocked</h2><p>Add the missing ingredients, then check again.</p></Card>}
       </div>
       <div className="inline-heading"><h2>Meals</h2><p>Cook one recipe or prepare several recipes as one meal.</p><button className="button secondary" onClick={() => onOpen('combined-meal')}>Build a meal</button></div>
       <Card className="combined-meal">
@@ -398,25 +431,26 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
   );
 }
 
-function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checked: Set<string>; toggle: (name: string) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void }) {
+function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void }) {
   const { grocerySections, inventorySections } = usePantryData();
+  const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const total = grocerySections.flatMap((section) => section.items).length;
   const done = checked.size;
-  const next = grocerySections.find((section) => section.items.some((item) => !checked.has(item.name)));
+  const next = grocerySections.find((section) => section.items.some((item) => !checked.has(itemKey(item))));
   const alreadyInKitchen = inventorySections.flatMap((section) => section.foods).slice(0, 6);
   return (
     <div className={cx(shoppingMode && 'shopping-mode')}>
       <Card className="grocery-summary">
-        <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /><small>Waugh Chapel Safeway · 2644 Chapel Lake Dr · walking order from the produce-side entrance</small></div>
+        <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /><small>Manual items and meal-plan shortages are kept together.</small></div>
         <div className="next-aisle"><span>{next ? 'NEXT AISLE' : 'ALL DONE'}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
       </Card>
       <div className="grocery-grid">
         {grocerySections.map((section) => (
-          <Card className={cx('grocery-section', section.items.every((item) => checked.has(item.name)) && 'complete')} key={section.label}>
-            <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.items.filter((item) => !checked.has(item.name)).length} left</small></div>
+          <Card className={cx('grocery-section', section.items.every((item) => checked.has(itemKey(item))) && 'complete')} key={section.label}>
+            <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.items.filter((item) => !checked.has(itemKey(item))).length} left</small></div>
             {section.items.map((item) => (
-              <button className={cx('grocery-row', checked.has(item.name) && 'checked')} onClick={() => toggle(item.name)} key={item.name}>
-                <span className="check-box">{checked.has(item.name) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity}</small>
+              <button className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} onClick={() => toggle(item)} key={itemKey(item)}>
+                <span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity}</small>
               </button>
             ))}
           </Card>
@@ -427,15 +461,15 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checke
   );
 }
 
-function WeekPage({ onOpen }: { onOpen: (kind: PanelKind, recipe?: Recipe) => void }) {
+function WeekPage({ onOpen }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void }) {
   const { weekDays, recipes } = usePantryData();
   return (
     <Card className="week-card">
       <div className="week-grid">{weekDays.map((day) => (
         <div className={cx('week-day', day.today && 'today')} key={day.day}>
           <div className="week-date"><strong>{day.day}</strong><small>{day.date}</small></div>
-          <div className="week-meals">{day.meals.map((meal) => <button key={`${meal.slot}-${meal.name}`} onClick={() => onOpen('recipe-detail', recipes.find((recipe) => recipe.name === meal.name))}><small>{meal.slot}</small><span>{meal.emoji} {meal.name}</span></button>)}</div>
-          <button className="day-add" onClick={() => onOpen('meal')}><Plus /></button>
+          <div className="week-meals">{day.meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <button key={`${meal.slot}-${meal.name}`} onClick={() => recipe ? onOpen('recipe-detail', recipe) : onOpen('meal', undefined, { plan_date: day.dateKey ?? '', daypart: meal.slot.toLowerCase() })}><small>{meal.slot}</small><span>{meal.emoji} {meal.name}</span></button>; })}</div>
+          <button className="day-add" aria-label={`Add meal on ${day.day}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Plus /></button>
         </div>
       ))}</div>
     </Card>
@@ -479,7 +513,7 @@ function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => 
       </Card>
       <Card>
         <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'}`} />
-        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small><button onClick={() => { if (entry.id && onVoid) void onVoid(entry.id).then(() => notify(`${entry.label} removed. Undo is available.`)); else notify(`${entry.label} removed. Undo is available.`); }}>Remove</button></div>)}
+        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small>{entry.id && onVoid && <button onClick={() => { void onVoid(entry.id!).then(() => notify(`${entry.label} removed from the food log.`)).catch(() => notify(`Could not remove ${entry.label}.`)); }}>Remove</button>}</div>)}
       </Card>
     </div>
   );
@@ -530,21 +564,21 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
 function EatingOutPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onLog?: (id: string) => Promise<void> }) {
   const { externalProducts } = usePantryData();
   const places = [...new Set(externalProducts.map((product) => product.place))];
-  return <div className="grocery-grid">{places.map((place) => { const foods = externalProducts.filter((product) => product.place === place); return <Card className="place-card" key={place}><div className="place-head"><span>{place.slice(0, 2).toUpperCase()}</span><div><strong>{place}</strong><small>{foods.length} saved item{foods.length > 1 ? 's' : ''}</small></div><MoreHorizontal /></div>{foods.map((food) => <div className="place-food" key={food.id}><span>{food.emoji}</span><div className="grow"><strong>{food.name}</strong><small>{food.nutrition}</small></div><button className="button compact" disabled={!onLog} onClick={() => { if (onLog) void onLog(food.id).then(() => notify(`${food.name} added to today's food log.`)).catch(() => notify(`Could not log ${food.name}.`)); }}>Log</button></div>)}<button className="text-button place-add" onClick={() => onOpen('external')}>+ Add another saved food</button></Card>; })}{!places.length && <Card className="empty-state"><Store /><h2>No eating-out foods yet</h2><button className="button primary" onClick={() => onOpen('external')}>Save one</button></Card>}</div>;
+  return <div className="grocery-grid">{places.map((place) => { const foods = externalProducts.filter((product) => product.place === place); return <Card className="place-card" key={place}><div className="place-head"><span>{place.slice(0, 2).toUpperCase()}</span><div><strong>{place}</strong><small>{foods.length} saved item{foods.length > 1 ? 's' : ''}</small></div></div>{foods.map((food) => <div className="place-food" key={food.id}><span>{food.emoji}</span><div className="grow"><strong>{food.name}</strong><small>{food.nutrition}</small></div><button className="button compact" disabled={!onLog} onClick={() => { if (onLog) void onLog(food.id).then(() => notify(`${food.name} added to today's food log.`)).catch(() => notify(`Could not log ${food.name}.`)); }}>Log</button></div>)}<button className="text-button place-add" onClick={() => onOpen('external')}>+ Add another saved food</button></Card>; })}{!places.length && <Card className="empty-state"><Store /><h2>No eating-out foods yet</h2><button className="button primary" onClick={() => onOpen('external')}>Save one</button></Card>}</div>;
 }
 
 const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>, { eyebrow: string; title: string; subtitle: string; save: string }> = {
   lot: { eyebrow: 'PUT AWAY', title: 'Add a lot', subtitle: 'One purchase, one expiry date. Lots deduct earliest-first.', save: 'Save lot' },
-  groceries: { eyebrow: 'PUT AWAY', title: 'Put away groceries', subtitle: 'Review a grocery haul, then file every item into a lot.', save: 'Put away' },
+  groceries: { eyebrow: 'GROCERY LIST', title: 'Add several grocery items', subtitle: 'Add one manual shopping-list item per line.', save: 'Add items' },
   food: { eyebrow: 'DEFINE', title: 'Define a food', subtitle: 'Units, conversions, nutrition, and where this food normally lives.', save: 'Save food' },
   recipe: { eyebrow: 'RECIPE', title: 'New recipe', subtitle: 'Ingredients are matched against tracked foods for availability.', save: 'Save recipe' },
   external: { eyebrow: 'EATING OUT', title: 'Save a food', subtitle: 'A restaurant order or packaged food kept out of inventory.', save: 'Save food' },
-  log: { eyebrow: 'FOOD LOG', title: 'Log food', subtitle: 'Pick a saved food or enter nutrition by hand.', save: 'Log it' },
-  item: { eyebrow: 'GROCERY LIST', title: 'Add an item', subtitle: 'Placed in the aisle it belongs to in the Safeway walking order.', save: 'Add item' },
-  meal: { eyebrow: 'PLANNING', title: 'Add a meal', subtitle: 'A recipe, several recipes, leftovers, or a night eating out.', save: 'Add to plan' },
+  log: { eyebrow: 'FOOD LOG', title: 'Log food', subtitle: 'Enter a meal and its nutrition by hand.', save: 'Log it' },
+  item: { eyebrow: 'GROCERY LIST', title: 'Add an item', subtitle: 'Add a durable manual item alongside plan-generated shortages.', save: 'Add item' },
+  meal: { eyebrow: 'PLANNING', title: 'Add a recipe to the plan', subtitle: 'Choose a saved recipe, date, meal, and scale.', save: 'Add to plan' },
   targets: { eyebrow: 'PROFILE', title: 'Edit targets', subtitle: 'Goals and limits used across Today, Food log, and Trends.', save: 'Save targets' },
   export: { eyebrow: 'HISTORY', title: 'Export range', subtitle: 'A CSV of every logged meal in the selected range.', save: 'Download CSV' },
-  scan: { eyebrow: 'BARCODE', title: 'Scan food', subtitle: 'Use the camera or enter a UPC/EAN manually. Suggestions are always reviewed.', save: 'Enter barcode' },
+  scan: { eyebrow: 'BARCODE', title: 'Look up a barcode', subtitle: 'Enter a saved UPC or EAN to identify its product.', save: 'Look up' },
   profile: { eyebrow: 'ME', title: 'Routine & food profile', subtitle: 'Hard constraints, preferences, and planning availability.', save: 'Save profile' },
   calendar: { eyebrow: 'CALENDAR', title: 'Pantry Planner', subtitle: 'Schedule-aware grocery and preparation reminders.', save: 'Sync now' },
 };
@@ -559,7 +593,11 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onCookRecip
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (state.kind === 'export') {
-      const rows = [['date', 'day', 'foods', 'totals'], ...history.map((day) => [day.date, day.day, day.meals.join(' | '), day.totals.replace('\n', ' | ')])];
+      const form = new FormData(event.currentTarget);
+      const from = String(form.get('date_from') ?? '');
+      const through = String(form.get('date_to') ?? '');
+      const selectedHistory = history.filter((day) => (!from || !day.dateKey || day.dateKey >= from) && (!through || !day.dateKey || day.dateKey <= through));
+      const rows = [['date', 'day', 'foods', 'totals'], ...selectedHistory.map((day) => [day.dateKey ?? day.date, day.day, day.meals.join(' | '), day.totals.replace('\n', ' | ')])];
       const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\n');
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a');
@@ -590,7 +628,7 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onCookRecip
       <aside className="action-panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
         <PanelHeader eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} onClose={onClose} />
         <form id="panel-action-form" onSubmit={(event) => void submit(event)}>
-          <div className="panel-body"><PanelFields kind={state.kind} openCalendar={() => notify('Calendar sync will move to a Supabase Edge Function.')} />{error && <div className="auth-error" role="alert">{error}</div>}</div>
+          <div className="panel-body"><PanelFields kind={state.kind} values={state.values} />{error && <div className="auth-error" role="alert">{error}</div>}</div>
         </form>
         <div className="panel-footer"><button className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" type="submit" form="panel-action-form" disabled={saving}>{saving ? 'Saving…' : copy.save}</button></div>
       </aside>
@@ -602,12 +640,12 @@ function PanelHeader({ eyebrow, title, subtitle, onClose }: { eyebrow: string; t
   return <div className="panel-header"><div className="grow"><div className="eyebrow">{eyebrow}</div><h2 id="panel-title">{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X /></button></div>;
 }
 
-function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>; openCalendar: () => void }) {
+function PanelFields({ kind, values = {} }: { kind: Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>; values?: Record<string, string> }) {
   const { categories, locations, products, recipes, settings, units } = usePantryData();
   const today = new Date().toLocaleDateString('en-CA');
   const defaultUnit = units.find((unit) => unit.shortName === 'ct')?.id ?? units[0]?.id ?? '';
 
-  if (kind === 'scan') return <div className="scan-box"><div className="scanner-frame"><ScanLine /><span>Camera scanning is not enabled yet</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" disabled><Camera />Camera coming after core CRUD</button><div className="divider"><span>or</span></div><Field name="barcode" label="UPC / EAN" placeholder="Enter barcode" required /></div>;
+  if (kind === 'scan') return <div className="scan-box"><div className="scanner-frame"><ScanLine /><span>Enter the barcode below</span><i /><i /><i /><i /></div><Field name="barcode" label="UPC / EAN" placeholder="Enter barcode" required /></div>;
 
   if (kind === 'targets') return <div className="form-grid two">
     <Field name="nutrition_calories" label="Calories (kcal)" type="number" defaultValue={String(settings.calories)} required />
@@ -624,8 +662,8 @@ function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-
     <Field name="dislikes" label="Foods to avoid" defaultValue={settings.dislikes.join(', ')} placeholder="Dislikes and avoidances" />
     <Field name="favorites" label="Favorites" defaultValue={settings.favorites.join(', ')} placeholder="Soft preferences" />
     <h3>Routine & availability</h3><Field name="time_zone" label="Time zone" defaultValue={settings.timeZone} required />
-    <label className="field"><span>Planning notes</span><textarea name="planning_notes" rows={4} placeholder="Work schedule, cooking constraints, or planning preferences" /></label>
-    <div className="calendar-card"><CalendarDays /><div className="grow"><strong>Google Calendar</strong><small>Calendar sync is planned and currently unavailable.</small></div><button className="button compact" type="button" onClick={openCalendar}>Details</button></div>
+    <label className="field"><span>Planning notes</span><textarea name="planning_notes" rows={4} defaultValue={settings.planningNotes} placeholder="Work schedule, cooking constraints, or planning preferences" /></label>
+    <div className="calendar-card"><CalendarDays /><div className="grow"><strong>Google Calendar</strong><small>Calendar sync is not connected in this version.</small></div></div>
   </div>;
 
   if (kind === 'groceries') return <><label className="field"><span>Paste or type groceries</span><textarea name="groceries" required rows={8} placeholder={'2 onions\n1 bag spinach\n1 dozen eggs'} /></label><div className="notice"><ClipboardList /><span>Each non-empty line becomes a manual grocery item. You can refine quantities after import.</span></div></>;
@@ -633,8 +671,8 @@ function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-
   if (kind === 'export') return <div className="form-grid"><div className="form-grid two"><Field name="date_from" label="From" type="date" required /><Field name="date_to" label="Through" type="date" defaultValue={today} required /></div><label className="field"><span>Format</span><select name="format"><option value="csv">CSV</option></select></label></div>;
 
   if (kind === 'meal') return <div className="form-grid">
-    <SelectField name="recipe" label="Recipe" options={recipes.map((recipe) => ({ value: recipe.id, label: `${recipe.emoji} ${recipe.name}` }))} required />
-    <div className="form-grid two"><Field name="plan_date" label="Date" type="date" defaultValue={today} required /><SelectField name="daypart" label="Meal" options={['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} required /></div>
+    <SelectField name="recipe" label="Recipe" defaultValue={values.recipe} options={recipes.map((recipe) => ({ value: recipe.id, label: `${recipe.emoji} ${recipe.name}` }))} required />
+    <div className="form-grid two"><Field name="plan_date" label="Date" type="date" defaultValue={values.plan_date || today} required /><SelectField name="daypart" label="Meal" defaultValue={values.daypart || 'dinner'} options={['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} required /></div>
     <Field name="scale_factor" label="Recipe scale" type="number" defaultValue="1" step="0.25" min="0.25" required />
     <Field name="note" label="Notes" placeholder="Optional planning note" />
   </div>;
@@ -649,8 +687,8 @@ function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-
   </div>;
 
   if (kind === 'lot') return <div className="form-grid">
-    <SelectField name="product" label="Product" options={products.filter((product) => !product.isExternal).map((product) => ({ value: product.id, label: product.label }))} required />
-    <div className="form-grid two"><Field name="initial_qty" label="Stock quantity in product base units" type="number" min="0.001" step="any" required /><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" required /></div>
+    <SelectField name="product" label="Product" defaultValue={values.product} options={products.filter((product) => !product.isExternal).map((product) => ({ value: product.id, label: product.label }))} required />
+    <div className="form-grid two"><Field name="initial_qty" label="Stock quantity in product base units" type="number" min="0.001" step="any" required /><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" defaultValue="0" /></div>
     <div className="form-grid two"><SelectField name="location" label="Location" options={locations.map((location) => ({ value: location, label: location }))} /><Field name="use_by" label="Best by" type="date" /></div>
     <Field name="note" label="Note" placeholder="Optional lot note" />
     <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong></span></label>
@@ -668,8 +706,20 @@ function PanelFields({ kind, openCalendar }: { kind: Exclude<PanelKind, 'recipe-
     <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" defaultChecked /><span><strong>Nutrition is estimated</strong><small>Keep the confidence visible in the log.</small></span></label>
   </div>;
 
-  if (kind === 'food' || kind === 'external') return <div className="form-grid">
-    <div className="form-grid two"><Field name="name" label={kind === 'external' ? 'Menu item' : 'Food and product name'} placeholder="Name" required /><Field name="brand" label={kind === 'external' ? 'Restaurant' : 'Brand'} placeholder="Optional" /></div>
+  if (kind === 'external') return <div className="form-grid">
+    <input type="hidden" name="measure_style" value="discrete" /><input type="hidden" name="unit" value={defaultUnit} />
+    <input type="hidden" name="package_qty_base" value="1" /><input type="hidden" name="serving_qty_base" value="1" /><input type="hidden" name="nutrition_basis_qty" value="1" />
+    <div className="form-grid two"><Field name="name" label="Menu item" placeholder="Exact item or order" required /><Field name="brand" label="Restaurant or brand" placeholder="Where is it from?" required /></div>
+    <div className="form-grid two"><Field name="emoji" label="Emoji" placeholder="🥡" /><Field name="barcode" label="Barcode" placeholder="Optional UPC/EAN" /></div>
+    <p className="form-help">Nutrition per serving</p>
+    <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
+    <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>
+    <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" defaultValue="0" /><Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" defaultValue="0" /></div>
+    <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" /><span><strong>Nutrition is estimated</strong></span></label>
+  </div>;
+
+  if (kind === 'food') return <div className="form-grid">
+    <div className="form-grid two"><Field name="name" label="Food and product name" placeholder="Name" required /><Field name="brand" label="Brand" placeholder="Optional" /></div>
     <div className="form-grid two"><Field name="emoji" label="Emoji" placeholder="🍽️" /><Field name="barcode" label="Barcode" placeholder="Optional UPC/EAN" /></div>
     <div className="form-grid two"><SelectField name="measure_style" label="Stock style" options={['discrete', 'weight', 'volume'].map((value) => ({ value, label: value }))} required /><SelectField name="unit" label="Stock unit" defaultValue={defaultUnit} options={units.map((unit) => ({ value: unit.id, label: unit.label }))} required /></div>
     <div className="form-grid two"><Field name="package_qty_base" label="Package quantity" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="serving_qty_base" label="Serving quantity" type="number" defaultValue="1" min="0.001" step="any" /></div>

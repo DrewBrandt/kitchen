@@ -4,7 +4,7 @@ import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, setShoppingItemChecked, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
-import { PantryDataProvider, type PantryData } from './pantry-data';
+import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
 let authBootstrap: Promise<Session | null> | undefined;
 
@@ -28,8 +28,10 @@ export function Root() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState('');
+  const preview = import.meta.env.DEV && new URL(window.location.href).searchParams.has('preview');
 
   useEffect(() => {
+    if (preview) { setAuthReady(true); return; }
     void getInitialSession()
       .then(setSession)
       .catch((cause) => setAuthError(cause instanceof Error ? cause.message : 'Could not complete Google sign-in.'))
@@ -39,29 +41,53 @@ export function Root() {
       setAuthReady(true);
     });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [preview]);
 
+  if (preview) return <PantryDataProvider data={previewPantryData}><App /></PantryDataProvider>;
   if (!isSupabaseConfigured) return <ConfigurationRequired />;
   if (!authReady) return <FullPageStatus message="Opening your pantry…" />;
   if (authError) return <FullPageStatus message={authError} action="Return to sign in" onAction={() => { window.history.replaceState({}, document.title, '/'); window.location.reload(); }} />;
   if (!session) return <Login />;
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp session={session} />;
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp({ session }: { session: Session }) {
   const [data, setData] = useState<PantryData | null>(null);
   const [error, setError] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'connecting' | 'synced' | 'error'>('connecting');
 
   const refresh = useCallback(async () => {
     try {
       setError('');
       setData(await loadPantryData(supabase));
+      setSyncStatus('synced');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load pantry data.');
+      setSyncStatus('error');
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    let refreshTimer: number | undefined;
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void refresh(), 150);
+    };
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') scheduleRefresh(); };
+    const channel = supabase.channel('pantry-live-data')
+      .on('postgres_changes', { event: '*', schema: 'public' }, scheduleRefresh)
+      .subscribe((status) => setSyncStatus(status === 'SUBSCRIBED' ? 'synced' : status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' ? 'error' : 'connecting'));
+    window.addEventListener('focus', scheduleRefresh);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearTimeout(refreshTimer);
+      window.removeEventListener('focus', scheduleRefresh);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh]);
 
   if (error) return <FullPageStatus message={error} action="Try again" onAction={() => void refresh()} />;
   if (!data) return <FullPageStatus message="Loading inventory, recipes, and plans…" />;
@@ -69,6 +95,8 @@ function AuthenticatedApp() {
   return (
     <PantryDataProvider data={data}>
       <App
+        ownerName={String(session.user.user_metadata.full_name ?? session.user.user_metadata.name ?? session.user.email?.split('@')[0] ?? 'Drew').split(' ')[0]}
+        syncStatus={syncStatus}
         onSignOut={() => void supabase.auth.signOut()}
         onToggleGrocery={async (id, checked) => { await setShoppingItemChecked(supabase, id, checked); await refresh(); }}
         onVoidFoodLog={async (id) => { await voidFoodLog(supabase, id); await refresh(); }}

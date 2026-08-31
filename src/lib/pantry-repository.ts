@@ -29,6 +29,16 @@ const daysUntil = (date: string | null) => {
 const sum = (rows: FoodLogRow[], field: keyof Pick<FoodLogRow, 'kcal' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fiber_g' | 'sodium_mg'>) =>
   rows.reduce((total, row) => total + Number(row[field] ?? 0), 0);
 
+const dateKeyInZone = (date: Date, timeZone: string) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts(date);
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  } catch {
+    return date.toLocaleDateString('en-CA');
+  }
+};
+
 export async function loadPantryData(client: Client): Promise<PantryData> {
   const [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, logsResult, settingsResult] = await Promise.all([
     client.from('base_foods').select('*'),
@@ -53,9 +63,18 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const foods = new Map((foodsResult.data ?? []).map((food) => [food.id, food]));
   const products = new Map((productsResult.data ?? []).map((product) => [product.id, product]));
   const units = new Map((unitsResult.data ?? []).map((unit) => [unit.id, unit]));
+  const categoryOrder = new Map((categoriesResult.data ?? []).map((category, index) => [category.category, index]));
+  const orderCategories = <T,>(entries: Array<[string, T]>) => entries.sort(([left], [right]) =>
+    (categoryOrder.get(left) ?? Number.MAX_SAFE_INTEGER) - (categoryOrder.get(right) ?? Number.MAX_SAFE_INTEGER) || left.localeCompare(right));
+  const rawLots = (lotsResult.data ?? []).filter((lot) => !lot.prep);
+  const stockByFood = new Map<string, number>();
+  for (const lot of rawLots) {
+    const product = lot.product ? products.get(lot.product) : undefined;
+    if (product) stockByFood.set(product.food, (stockByFood.get(product.food) ?? 0) + Number(lot.remaining_qty));
+  }
 
   const inventoryGroups = new Map<string, Map<string, NonNullable<typeof foodsResult.data>[number] & { lots: NonNullable<typeof lotsResult.data> }>>();
-  for (const lot of lotsResult.data ?? []) {
+  for (const lot of rawLots) {
     const product = lot.product ? products.get(lot.product) : undefined;
     const food = product ? foods.get(product.food) : undefined;
     if (!food) continue;
@@ -67,7 +86,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     inventoryGroups.set(category, categoryFoods);
   }
 
-  const inventorySections = [...inventoryGroups.entries()].map(([category, groupedFoods]) => ({
+  const inventorySections = orderCategories([...inventoryGroups.entries()]).map(([category, groupedFoods]) => ({
     emoji: categoryEmoji(category),
     label: category,
     foods: [...groupedFoods.values()].map((food) => {
@@ -76,15 +95,17 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       const earliest = stockLots.map((lot) => lot.use_by).filter(Boolean).sort()[0] ?? null;
       const due = daysUntil(earliest);
       const firstProduct = products.get(stockLots[0].product ?? '');
-      const unit = firstProduct ? units.get(firstProduct.package_unit)?.short_name : null;
+      const displayUnit = food.display_unit ? units.get(food.display_unit) : undefined;
+      const ratio = Number(displayUnit?.base_to_this_ratio ?? 1);
       return {
+        productId: firstProduct?.id,
         emoji: food.emoji ?? '🍽️',
         name: food.name,
         sub: [food.ingredient_role, food.grocery_category].filter(Boolean).join(' · ') || 'Pantry item',
-        total: formatQuantity(total, unit),
+        total: formatQuantity(total * ratio, displayUnit?.short_name),
         due: due.label,
         tone: due.tone,
-        lots: stockLots.map((lot) => `${formatQuantity(Number(lot.remaining_qty), unit)} ${lot.location ?? 'unassigned'}`),
+        lots: stockLots.map((lot) => `${formatQuantity(Number(lot.remaining_qty) * ratio, displayUnit?.short_name)} ${lot.location ?? 'unassigned'}`),
       };
     }),
   }));
@@ -104,12 +125,18 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       nutrition: kcal ? `${Math.round(kcal / Number(recipe.servings))} cal · ${Math.round(protein / Number(recipe.servings))} g protein per serving` : 'Nutrition calculated from ingredients',
       ingredients: recipeIngredients.map((ingredient) => {
         const food = foods.get(ingredient.ingredient);
-        const unit = units.get(ingredient.unit)?.short_name;
-        return { label: `${formatQuantity(Number(ingredient.qty), unit)} ${food?.name ?? 'Ingredient'}`, stock: 'See inventory for available lots' };
+        const unit = units.get(ingredient.unit);
+        const available = (stockByFood.get(ingredient.ingredient) ?? 0) * Number(unit?.base_to_this_ratio ?? 1);
+        const enough = available + 0.0000001 >= Number(ingredient.qty);
+        return { label: `${formatQuantity(Number(ingredient.qty), unit?.short_name)} ${food?.name ?? 'Ingredient'}`, stock: `${formatQuantity(available, unit?.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
       ease: 3,
       taste: 3,
+      cookable: recipeIngredients.every((ingredient) => {
+        const unit = units.get(ingredient.unit);
+        return (stockByFood.get(ingredient.ingredient) ?? 0) * Number(unit?.base_to_this_ratio ?? 1) + 0.0000001 >= Number(ingredient.qty);
+      }),
     };
   });
 
@@ -129,8 +156,9 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       emoji: recipe?.emoji ?? '🥘',
       name: recipe?.name ?? 'Prepared batch',
       location: lot.location ?? 'unassigned',
-      remaining: `${Number(lot.remaining_qty).toFixed(1)} of ${Number(lot.initial_qty).toFixed(1)} units`,
+      remaining: `${formatQuantity(Number(lot.remaining_qty))} of ${formatQuantity(Number(lot.initial_qty))} servings`,
       due: daysUntil(lot.use_by).label,
+      progress: Number(lot.initial_qty) ? Number(lot.remaining_qty) / Number(lot.initial_qty) * 100 : 0,
     };
   });
 
@@ -147,13 +175,13 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     });
     groceryGroups.set(category, items);
   }
-  const grocerySections = [...groceryGroups.entries()].map(([label, items]) => ({ emoji: categoryEmoji(label), label, items }));
+  const grocerySections = orderCategories([...groceryGroups.entries()]).map(([label, items]) => ({ emoji: categoryEmoji(label), label, items }));
 
-  const logs = logsResult.data ?? [];
-  const todayKey = new Date().toLocaleDateString('en-CA');
-  const todayLogs = logs.filter((log) => new Date(log.occurred_at).toLocaleDateString('en-CA') === todayKey);
   const settings = settingsResult.data;
   if (!settings) throw new Error('Personal settings are missing.');
+  const logs = logsResult.data ?? [];
+  const todayKey = dateKeyInZone(new Date(), settings.time_zone);
+  const todayLogs = logs.filter((log) => dateKeyInZone(new Date(log.occurred_at), settings.time_zone) === todayKey);
   const nutrientSpec = [
     ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#86d7ac'],
     ['Protein', 'protein_g', settings.nutrition_protein_g, 'g', '#86d7ac'],
@@ -181,7 +209,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
   const byDay = new Map<string, FoodLogRow[]>();
   for (const log of logs) {
-    const key = new Date(log.occurred_at).toLocaleDateString('en-CA');
+    const key = dateKeyInZone(new Date(log.occurred_at), settings.time_zone);
     byDay.set(key, [...(byDay.get(key) ?? []), log]);
   }
   const foodLogByDate = Object.fromEntries([...byDay.entries()].map(([date, dayLogs]) => [date, {
@@ -191,6 +219,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const history = [...byDay.entries()].slice(0, 14).map(([date, dayLogs]) => {
     const parsed = new Date(`${date}T12:00:00`);
     return {
+      dateKey: date,
       day: parsed.toLocaleDateString([], { weekday: 'long' }),
       date: parsed.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase(),
       meals: dayLogs.map((log) => log.label),
@@ -202,7 +231,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const date = new Date();
     date.setHours(12, 0, 0, 0);
     date.setDate(date.getDate() - (29 - index));
-    const key = date.toLocaleDateString('en-CA');
+    const key = dateKeyInZone(date, settings.time_zone);
     return { date: String(date.getDate()), value: sum(byDay.get(key) ?? [], 'protein_g') };
   });
   const recentCutoff = new Date();
@@ -221,18 +250,18 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return [label, rows];
   })) as PantryData['nutrientDrivers'];
 
-  const start = new Date();
+  const start = new Date(`${todayKey}T12:00:00`);
   start.setHours(12, 0, 0, 0);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const weekDays = Array.from({ length: 7 }, (_, offset) => {
     const date = new Date(start);
     date.setDate(start.getDate() + offset);
-    const key = date.toLocaleDateString('en-CA');
+    const key = dateKeyInZone(date, settings.time_zone);
     const meals = (plansResult.data ?? []).filter((plan) => plan.plan_date === key).map((plan) => {
       const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-      return { slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️' };
+      return { slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
     });
-    return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), today: key === todayKey, meals };
+    return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
   });
 
   return {
@@ -267,6 +296,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       dislikes: settings.dislikes,
       favorites: settings.favorites,
       timeZone: settings.time_zone,
+      planningNotes: settings.planning_notes ?? '',
     },
     externalProducts,
     preparedLots,
@@ -322,7 +352,7 @@ export async function consumePreparedLot(client: Client, lotId: string, quantity
 
 export async function rebuildShoppingFromPlan(client: Client) {
   const start = new Date();
-  start.setDate(start.getDate() - start.getDay());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const through = new Date(start);
   through.setDate(start.getDate() + 6);
   const { data, error } = await client.rpc('rebuild_shopping_from_plan', {
