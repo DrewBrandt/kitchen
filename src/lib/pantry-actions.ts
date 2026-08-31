@@ -208,12 +208,15 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'profile') {
+    const timeZone = text(form, 'time_zone');
+    try { new Intl.DateTimeFormat('en-US', { timeZone }).format(); }
+    catch { throw new Error('Time zone must be a valid IANA name such as America/New_York.'); }
     const { error } = await client.from('personal_settings').update({
       allergies: list(form, 'allergies'),
       dietary_rules: list(form, 'dietary_rules'),
       dislikes: list(form, 'dislikes'),
       favorites: list(form, 'favorites'),
-      time_zone: text(form, 'time_zone'),
+      time_zone: timeZone,
       planning_notes: optionalText(form, 'planning_notes'),
     }).eq('singleton', true);
     if (error) throw error;

@@ -38,6 +38,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 22px; font-size: 15px; }
 .brand-mark { width: 28px; height: 28px; border: 1px solid #2c3733; background: #121715; border-radius: 8px; display: grid; place-items: center; font-size: 14px; }
 .sync-dot { width: 6px; height: 6px; margin-left: auto; background: var(--mint); border-radius: 50%; box-shadow: 0 0 12px rgba(134, 215, 172, .5); }
+.sync-dot.connecting { background: var(--warn); box-shadow: none; }
+.sync-dot.error { background: var(--urgent); box-shadow: 0 0 12px rgba(232, 133, 146, .45); }
 .nav-group { margin-bottom: 18px; }
 .nav-label, .eyebrow, .card-kicker, .next-aisle > span, .already-in > span { font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--faint); }
 .nav-label { padding: 0 10px 6px; }
@@ -86,6 +88,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .section-title { padding: 16px 20px; border-bottom: 1px solid #1e2523; display: flex; align-items: center; gap: 12px; }
 .section-title > div { flex: 1; }
 .section-title p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.section-meta { color: var(--faint); font: 10.5px 'JetBrains Mono', monospace; }
 .text-button { padding: 0; background: transparent; color: var(--mint); font-size: 12px; }
 .text-button:hover { color: #a6e3c3; }
 .text-button.align-left { margin-top: 12px; }
@@ -170,8 +173,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inventory-due { width: 72px; color: var(--faint); font: 11px 'JetBrains Mono', monospace; text-align: right; }
 .inventory-due.warn { color: var(--warn); }
 .inventory-due.urgent { color: var(--urgent); }
-.row-actions { display: flex; gap: 6px; opacity: .6; }
-.row-actions span { width: 28px; height: 28px; border: 1px solid #262e2b; border-radius: 7px; display: grid; place-items: center; }
+.row-chevron { width: 16px; flex: 0 0 16px; color: var(--faint); }
 .empty-state { padding: 60px; text-align: center; color: var(--faint); }
 .empty-state svg { width: 30px; }
 .empty-state h2 { margin-top: 12px; color: var(--text); }
@@ -192,9 +194,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .rating i.filled { background: var(--mint); }
 .ingredient-chips { padding: 0 20px 10px; display: flex; gap: 6px; flex-wrap: wrap; }
 .ingredient-chips span { padding: 4px 8px; border-radius: 6px; background: #17201b; color: var(--mint); font: 10.5px 'JetBrains Mono', monospace; }
+.ingredient-chips span.short { background: #25191a; color: var(--urgent); }
 .recipe-nutrition { padding: 0 20px 4px; margin: 0; font-size: 12px; }
 .card-actions { margin-top: auto; padding: 12px 20px; display: flex; gap: 8px; align-items: center; background: #111514; border-top: 1px solid #1e2523; }
-.card-actions > span { flex: 1; }
+.card-actions .button { flex: 1; }
 .inline-heading { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
 .inline-heading h2 { font-size: 13px; margin: 0; }
 .inline-heading p { flex: 1; margin: 0; color: var(--muted); font-size: 12px; }
@@ -328,10 +331,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .place-food > span { font-size: 19px; }
 .place-add { margin: 12px 20px; }
 
-.panel-layer { position: fixed; inset: 0; z-index: 40; }
+.panel-layer { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; }
 .panel-scrim { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(4, 6, 5, .7); backdrop-filter: blur(2px); cursor: default; }
-.action-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(500px, 100vw); background: #0f1311; border-left: 1px solid #2a322f; display: flex; flex-direction: column; box-shadow: -20px 0 70px rgba(0,0,0,.35); animation: panel-in .2s ease-out; }
-@keyframes panel-in { from { transform: translateX(24px); opacity: 0; } }
+.action-panel { position: relative; width: min(680px, 100%); max-height: min(860px, calc(100vh - 48px)); background: #0f1311; border: 1px solid #2a322f; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 90px rgba(0,0,0,.5); animation: modal-in .18s ease-out; }
+.action-panel.recipe-panel { width: min(760px, 100%); }
+.action-panel > form { flex: 1; min-height: 0; display: flex; }
+.action-panel > form > .panel-body { width: 100%; }
+@keyframes modal-in { from { transform: translateY(10px) scale(.985); opacity: 0; } }
 .panel-header { display: flex; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
 .panel-header h2 { margin: 7px 0 5px; font-size: 21px; letter-spacing: -.015em; }
 .panel-header p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
@@ -345,6 +351,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .field input, .field select, .field textarea { width: 100%; border: 1px solid #2b3430; background: #151a18; color: var(--text); border-radius: 9px; padding: 10px 11px; outline: 0; }
 .field input, .field select { height: 40px; }
 .field textarea { resize: vertical; line-height: 1.5; }
+.form-help { margin: 4px 0 -4px; color: var(--faint); font: 10px 'JetBrains Mono', monospace; letter-spacing: .07em; text-transform: uppercase; }
 .field input::placeholder, .field textarea::placeholder { color: #4d5853; }
 .toggle-row { display: flex; gap: 10px; align-items: flex-start; background: #151a18; border: 1px solid var(--line); border-radius: 10px; padding: 12px; cursor: pointer; }
 .toggle-row input { accent-color: var(--mint); }
@@ -435,7 +442,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .toolbar-spacer { display: none; }
   .inventory-section { border-radius: 16px; }
   .inventory-row { padding: 13px 16px; gap: 10px; }
-  .lot-meter, .row-actions { display: none; }
+  .lot-meter { display: none; }
   .inventory-name { flex: 1; }
   .inventory-total { min-width: 60px; }
   .inventory-due { width: 52px; }
@@ -482,8 +489,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .bar-chart { height: 180px; margin: 0 14px; gap: 2px; }
   .two-column > .card { border-radius: 16px; }
   .place-card { border-radius: 16px; }
-  .action-panel { width: 100%; top: 8vh; border-left: 0; border-radius: 18px 18px 0 0; animation-name: panel-up; }
-  @keyframes panel-up { from { transform: translateY(24px); opacity: 0; } }
+  .panel-layer { padding: 12px; }
+  .action-panel { width: 100%; max-height: calc(100vh - 24px); border-radius: 16px; }
   .panel-header { padding: 18px 18px 15px; }
   .panel-body { padding: 18px 18px 32px; }
   .panel-footer { padding: 12px 18px max(12px, env(safe-area-inset-bottom)); }
