@@ -105,7 +105,7 @@ The PostgreSQL implementation performs validation, deductions, and history creat
 
 ## Next milestones
 
-1. Deploy the Supabase Edge Function authenticated API and update the private GPT Action.
-2. Retire the legacy Firebase production surfaces after cutover verification.
+1. Configure the private GPT with the deployed Supabase Action.
+2. Replace the paused calendar synchronization with a Supabase-native server integration.
 3. Add receipt capture and opened-item shelf life. Nutrition and reviewed
    barcode lookup are implemented.

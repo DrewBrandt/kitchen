@@ -5,8 +5,6 @@ stable boundary between plain-English requests and Pantry data: the GPT resolves
 intent and ambiguity, while the API accepts only structured JSON and performs
 validated database operations.
 
-Base URL:
-
 ```text
 https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
 ```
@@ -15,46 +13,41 @@ The complete Custom GPT contract is `docs/pantry-gpt-openapi.yaml`.
 
 ## Authentication
 
-Every request uses the private integration credential:
+Every request uses:
 
 ```text
 Authorization: Bearer <PANTRY_API_TOKEN>
 ```
 
-Generate and deploy it with:
+Generate and deploy the credential with `tools/setup_api_secret.ps1`. The script
+sends it to Supabase without printing it and stores a matching DPAPI-encrypted
+copy under the current Windows account. The plaintext belongs only in the Custom
+GPT Action authentication field—not browser code, Git, logs, GPT instructions,
+Knowledge files, or conversations.
 
-```powershell
-.\tools\setup_api_secret.ps1
-```
+The Edge Function verifies this token before creating a server-only Supabase
+client. Its service-role key comes from the Edge Function environment and is
+never sent to ChatGPT.
 
-The script sends the value to Supabase without printing it and stores a matching
-DPAPI-encrypted copy under the current Windows account. The token must never be
-placed in browser code, source control, logs, GPT instructions, Knowledge files,
-or a conversation. Only the Custom GPT Action authentication field should receive
-the copied plaintext value.
+## Transaction boundaries
 
-The Edge Function deliberately disables Supabase JWT verification because the
-Action uses its own bearer credential. It compares the credential before creating
-a server-only Supabase client. The service-role key is supplied automatically by
-the Edge Function environment and is never exposed to ChatGPT.
-
-## Data and transaction boundaries
-
-Normal reads and single-row settings updates use the generated Supabase Data API.
-Compound writes call narrowly scoped PostgreSQL functions:
+Simple reads use Supabase's Data API. Compound writes call narrowly scoped
+PostgreSQL functions:
 
 - grocery hauls insert all lots or none;
-- inventory reconciliation records auditable adjustments and replacement lots;
-- recipes and their ingredients are replaced together;
+- reconciliation records adjustment events and replacement lots together;
+- recipes and ingredients are replaced together;
 - weekly plans and generated groceries are rebuilt together;
 - preparation deducts ingredients and creates a prepared lot together;
 - consumption deducts FEFO lots and records nutrition together;
-- outside-food definition creation updates its canonical food and product together.
+- outside-food creation updates its food and product together.
 
-GPT-only database functions are executable by `service_role` and not by browser
-roles. Owner RLS continues to protect direct browser access.
+GPT-only functions are executable by `service_role`, not browser roles. Owner RLS
+continues to protect direct browser access.
 
-## Read operations
+## Routes
+
+Reads:
 
 ```text
 GET /v1/inventory
@@ -63,7 +56,7 @@ GET /v1/foods/{uuid}
 GET /v1/recipes?q=<optional search>
 GET /v1/recipes/{uuid}
 GET /v1/prepared-batches
-GET /v1/external-foods?q=<optional search>&brand=<optional exact brand>
+GET /v1/external-foods?q=<optional search>&brand=<optional brand>
 GET /v1/history?days=30
 GET /v1/plans
 GET /v1/targets
@@ -71,18 +64,34 @@ GET /v1/preferences
 GET /v1/routine
 ```
 
-Food lookup returns canonical foods, supported measurement units, and matching
-products. Inventory reads return exact `foodId`, `productId`, and `lotId` values.
-The GPT must reuse those identifiers rather than inventing them.
+Writes:
+
+```text
+POST /v1/inventory
+POST /v1/foods
+POST /v1/products
+POST /v1/groceries
+POST /v1/recipes
+POST /v1/prepare/recipe
+POST /v1/consume/prepared
+POST /v1/consume/inventory
+POST /v1/external-foods
+POST /v1/meals
+POST /v1/plans
+POST /v1/grocery-items
+POST /v1/targets
+POST /v1/preferences
+POST /v1/routine
+```
+
+Food lookup returns supported measurement units and products. Inventory returns
+exact `foodId`, `productId`, and `lotId` values. The GPT must reuse these IDs.
 
 ## Definitions and groceries
 
-Create or update a canonical food:
+Create a canonical food before its branded product:
 
-```http
-POST /v1/foods
-Content-Type: application/json
-
+```json
 {
   "name": "Whole milk",
   "measureStyle": "volume",
@@ -105,124 +114,61 @@ Content-Type: application/json
 }
 ```
 
-Create a product only after its canonical food exists:
-
-```http
-POST /v1/products
-Content-Type: application/json
-
-{
-  "foodId": "<food uuid>",
-  "name": "Whole Milk 1 gal",
-  "brand": "Lucerne",
-  "packageQuantity": 1,
-  "packageUnit": "gal",
-  "servingQuantity": 8
-}
-```
+`POST /v1/products` accepts `foodId`, name, `packageQuantity`, and
+`packageUnit`. Package and serving quantities are converted to the food's base
+quantity on the server.
 
 Add reviewed lots atomically:
 
-```http
-POST /v1/groceries
-Content-Type: application/json
-
+```json
 {
   "source": "Safeway receipt",
-  "items": [
-    {
-      "productId": "<product uuid>",
-      "quantity": 1,
-      "unit": "gal",
-      "location": "fridge",
-      "bestBy": "2026-09-12",
-      "totalCost": 4.99
-    }
-  ]
+  "items": [{
+    "productId": "<product uuid>",
+    "quantity": 1,
+    "unit": "gal",
+    "location": "fridge",
+    "bestBy": "2026-09-12",
+    "totalCost": 4.99
+  }]
 }
 ```
 
-`quantity` is converted to the canonical base quantity inside the database. The
-unit may be a returned unit UUID, full name, or short name.
+The unit may be a returned unit UUID, full name, or short name.
 
 ## Cooking and eating
 
-Cooking and eating remain separate operations.
+Cooking and eating are separate. `POST /v1/prepare/recipe` deducts raw
+ingredients FEFO and creates a prepared batch:
 
-```http
-POST /v1/prepare/recipe
-Content-Type: application/json
-
-{
-  "recipeId": "<recipe uuid>",
-  "servings": 4,
-  "location": "fridge",
-  "bestBy": "2026-09-04"
-}
+```json
+{"recipeId":"<recipe uuid>","servings":4,"location":"fridge","bestBy":"2026-09-04"}
 ```
 
-This deducts raw ingredients FEFO and creates a prepared batch. Eating it uses
-the returned lot ID as `batchId`:
+Eat from its returned lot ID using `POST /v1/consume/prepared`:
 
-```http
-POST /v1/consume/prepared
-Content-Type: application/json
-
-{
-  "batchId": "<prepared lot uuid>",
-  "servings": 1,
-  "timestamp": "2026-08-31T19:00:00-04:00"
-}
+```json
+{"batchId":"<prepared lot uuid>","servings":1,"timestamp":"2026-08-31T19:00:00-04:00"}
 ```
 
-Quick consumption of one canonical food is also atomic:
+Quick use of one food goes through `POST /v1/consume/inventory`:
 
-```http
-POST /v1/consume/inventory
-Content-Type: application/json
-
-{
-  "foodId": "<food uuid>",
-  "quantity": 1,
-  "unit": "ct",
-  "label": "Apple"
-}
+```json
+{"foodId":"<food uuid>","quantity":1,"unit":"ct","label":"Apple"}
 ```
+
+All three operations roll back completely on insufficient inventory.
 
 ## Outside food
 
-Search before saving. Saved outside foods are reusable `products` with
-`is_external = true` and nutrition per consumed unit.
+Search before saving. Saved outside foods are reusable products with nutrition
+per consumed unit. Log one through `POST /v1/meals`:
 
-```http
-POST /v1/external-foods
-Content-Type: application/json
-
-{
-  "name": "Chicken Sandwich",
-  "brand": "Chick-fil-A",
-  "calories": 420,
-  "proteinG": 29,
-  "carbsG": 41,
-  "fatG": 18,
-  "fiberG": 1,
-  "sugarG": 6,
-  "sodiumMg": 1460,
-  "source": "Restaurant nutrition page",
-  "estimated": false
-}
-```
-
-Log the saved food without inventory deduction:
-
-```http
-POST /v1/meals
-Content-Type: application/json
-
+```json
 {"externalFoodId":"<outside product uuid>","servings":1}
 ```
 
-A one-off unidentified meal may instead provide `label` and nutrition fields.
+A one-off unidentified meal may instead provide a label and nutrition totals.
 
 ## Planning and settings
 
@@ -230,23 +176,21 @@ A one-off unidentified meal may instead provide `label` and nutrition fields.
 rebuilds unchecked generated grocery shortages while preserving manual items.
 Recipe and meal entries use `sourceId` and `scaleFactor`.
 
-`POST /v1/grocery-items` adds a manual item. `POST /v1/targets`,
-`POST /v1/preferences`, and `POST /v1/routine` replace their respective singleton
-settings.
+`POST /v1/grocery-items` adds a manual item. The target, preference, and routine
+POST routes replace their respective singleton settings.
 
-Google Calendar operations are intentionally not exposed in the Supabase GPT API
-yet. Weekly planning uses the saved routine and any conflicts supplied in the
-conversation; the GPT must state that external calendar conflicts were not checked.
+Calendar is not exposed yet. Planning uses the saved routine and any conflicts
+provided in conversation; the GPT must say external calendar conflicts were not
+checked.
 
-## Errors
+## Errors and testing
 
-- `401` means the integration bearer credential is missing or invalid.
-- `404` means the requested route or resource does not exist.
-- `422` means validation or a database constraint rejected the request. Compound
-  database functions roll back before returning this response.
-- `500` indicates an unexpected server failure; do not claim the write succeeded.
+- `401`: missing or invalid integration bearer token.
+- `404`: route or resource does not exist.
+- `422`: validation or a database constraint rejected the request.
+- `500`: unexpected server failure; never claim that a write succeeded.
 
-Test the deployed API without exposing the token:
+Test without exposing the token:
 
 ```powershell
 .\tools\pantry_api.ps1 -Method GET -Path /v1/inventory

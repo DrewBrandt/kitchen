@@ -12,15 +12,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // Retire the service worker left by the Flutter build so this migration
-      // cannot be hidden behind a stale application shell.
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          registrations.forEach((registration) => registration.unregister());
-        });
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -12,9 +12,7 @@
     "db:lint": "supabase db lint --linked --schema public --level warning --fail-on error",
     "db:test": "supabase db query --linked --file supabase/tests/database.sql",
     "db:test:transactions": "supabase db query --linked --file supabase/tests/transactions.sql",
-    "db:test:gpt": "supabase db query --linked --file supabase/tests/gpt_api.sql",
-    "data:firebase-export": "node tools/export-firestore.mjs",
-    "data:firebase-transform": "node tools/transform-firestore-snapshot.mjs"
+    "db:test:gpt": "supabase db query --linked --file supabase/tests/gpt_api.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.4",
@@ -31,9 +29,9 @@
     "@testing-library/user-event": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "firebase-tools": "15.28.1",
     "jsdom": "29.0.0",
     "supabase": "2.116.0",
-    "vitest": "latest"
+    "vitest": "latest",
+    "yaml": "2.9.0"
   }
 }
