@@ -34,6 +34,7 @@ export type Database = {
       }
       base_foods: {
         Row: {
+          aliases: string[]
           carbs_g: number | null
           created_at: string
           display_unit: string | null
@@ -44,16 +45,23 @@ export type Database = {
           g_per_fl_oz: number | null
           grocery_category: string | null
           id: string
+          ingredient_role: string | null
           kcal: number | null
+          legacy_firebase_id: string | null
           measure_style: Database["public"]["Enums"]["measure_style"]
           name: string
           nutrition_basis_qty: number
+          nutrition_is_estimated: boolean
+          nutrition_source: string | null
           plural: string | null
           protein_g: number | null
           sodium_mg: number | null
+          store_aisle: string | null
+          sugar_g: number | null
           updated_at: string
         }
         Insert: {
+          aliases?: string[]
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null
@@ -64,16 +72,23 @@ export type Database = {
           g_per_fl_oz?: number | null
           grocery_category?: string | null
           id?: string
+          ingredient_role?: string | null
           kcal?: number | null
+          legacy_firebase_id?: string | null
           measure_style: Database["public"]["Enums"]["measure_style"]
           name: string
           nutrition_basis_qty?: number
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           plural?: string | null
           protein_g?: number | null
           sodium_mg?: number | null
+          store_aisle?: string | null
+          sugar_g?: number | null
           updated_at?: string
         }
         Update: {
+          aliases?: string[]
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null
@@ -84,13 +99,19 @@ export type Database = {
           g_per_fl_oz?: number | null
           grocery_category?: string | null
           id?: string
+          ingredient_role?: string | null
           kcal?: number | null
+          legacy_firebase_id?: string | null
           measure_style?: Database["public"]["Enums"]["measure_style"]
           name?: string
           nutrition_basis_qty?: number
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           plural?: string | null
           protein_g?: number | null
           sodium_mg?: number | null
+          store_aisle?: string | null
+          sugar_g?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -142,6 +163,87 @@ export type Database = {
           },
         ]
       }
+      food_logs: {
+        Row: {
+          carbs_g: number | null
+          created_at: string
+          fat_g: number | null
+          fiber_g: number | null
+          id: string
+          kcal: number | null
+          kind: string
+          label: string
+          legacy_firebase_id: string | null
+          note: string | null
+          nutrition_is_estimated: boolean
+          occurred_at: string
+          product: string | null
+          protein_g: number | null
+          recipe: string | null
+          servings: number | null
+          sodium_mg: number | null
+          sugar_g: number | null
+          voided_at: string | null
+        }
+        Insert: {
+          carbs_g?: number | null
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          kcal?: number | null
+          kind: string
+          label: string
+          legacy_firebase_id?: string | null
+          note?: string | null
+          nutrition_is_estimated?: boolean
+          occurred_at?: string
+          product?: string | null
+          protein_g?: number | null
+          recipe?: string | null
+          servings?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          voided_at?: string | null
+        }
+        Update: {
+          carbs_g?: number | null
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          kcal?: number | null
+          kind?: string
+          label?: string
+          legacy_firebase_id?: string | null
+          note?: string | null
+          nutrition_is_estimated?: boolean
+          occurred_at?: string
+          product?: string | null
+          protein_g?: number | null
+          recipe?: string | null
+          servings?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_logs_product_fkey"
+            columns: ["product"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_logs_recipe_fkey"
+            columns: ["recipe"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grocery_categories: {
         Row: {
           category: string
@@ -161,6 +263,7 @@ export type Database = {
         Row: {
           cook_session: string | null
           created_at: string
+          food_log: string | null
           id: string
           lot: string
           note: string | null
@@ -173,6 +276,7 @@ export type Database = {
         Insert: {
           cook_session?: string | null
           created_at?: string
+          food_log?: string | null
           id?: string
           lot: string
           note?: string | null
@@ -185,6 +289,7 @@ export type Database = {
         Update: {
           cook_session?: string | null
           created_at?: string
+          food_log?: string | null
           id?: string
           lot?: string
           note?: string | null
@@ -200,6 +305,13 @@ export type Database = {
             columns: ["cook_session"]
             isOneToOne: false
             referencedRelation: "cook_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_events_food_log_fkey"
+            columns: ["food_log"]
+            isOneToOne: false
+            referencedRelation: "food_logs"
             referencedColumns: ["id"]
           },
           {
@@ -221,9 +333,12 @@ export type Database = {
       inventory_lots: {
         Row: {
           acquired_at: string
+          cost_is_estimated: boolean
+          cost_source: string | null
           created_at: string
           id: string
           initial_qty: number
+          legacy_firebase_id: string | null
           location: string | null
           note: string | null
           prep: string | null
@@ -234,9 +349,12 @@ export type Database = {
         }
         Insert: {
           acquired_at?: string
+          cost_is_estimated?: boolean
+          cost_source?: string | null
           created_at?: string
           id?: string
           initial_qty: number
+          legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
           prep?: string | null
@@ -247,9 +365,12 @@ export type Database = {
         }
         Update: {
           acquired_at?: string
+          cost_is_estimated?: boolean
+          cost_source?: string | null
           created_at?: string
           id?: string
           initial_qty?: number
+          legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
           prep?: string | null
@@ -302,10 +423,17 @@ export type Database = {
           cook_session: string | null
           created_at: string
           daypart: Database["public"]["Enums"]["daypart"]
+          emoji: string | null
+          group_id: string | null
           id: string
+          intent: string
+          leftover_of_group_id: string | null
+          legacy_firebase_id: string | null
           meal: string | null
+          name: string | null
           note: string | null
           plan_date: string
+          preparation_tasks: Json
           recipe: string | null
           scale_factor: number
           scheduled_time: string | null
@@ -316,10 +444,17 @@ export type Database = {
           cook_session?: string | null
           created_at?: string
           daypart: Database["public"]["Enums"]["daypart"]
+          emoji?: string | null
+          group_id?: string | null
           id?: string
+          intent?: string
+          leftover_of_group_id?: string | null
+          legacy_firebase_id?: string | null
           meal?: string | null
+          name?: string | null
           note?: string | null
           plan_date: string
+          preparation_tasks?: Json
           recipe?: string | null
           scale_factor?: number
           scheduled_time?: string | null
@@ -330,10 +465,17 @@ export type Database = {
           cook_session?: string | null
           created_at?: string
           daypart?: Database["public"]["Enums"]["daypart"]
+          emoji?: string | null
+          group_id?: string | null
           id?: string
+          intent?: string
+          leftover_of_group_id?: string | null
+          legacy_firebase_id?: string | null
           meal?: string | null
+          name?: string | null
           note?: string | null
           plan_date?: string
+          preparation_tasks?: Json
           recipe?: string | null
           scale_factor?: number
           scheduled_time?: string | null
@@ -405,21 +547,27 @@ export type Database = {
           created_at: string
           emoji: string | null
           id: string
+          legacy_firebase_id: string | null
           name: string
+          notes: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           emoji?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           name: string
+          notes?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           emoji?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           name?: string
+          notes?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -451,11 +599,90 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_settings: {
+        Row: {
+          allergies: string[]
+          calendar_settings: Json
+          commute_minutes: number
+          default_thaw_hours: number
+          dietary_rules: string[]
+          dinner_end: string
+          dinner_start: string
+          dislikes: string[]
+          favorites: string[]
+          nutrition_calories: number
+          nutrition_carbs_g: number
+          nutrition_fat_g: number
+          nutrition_fiber_g: number
+          nutrition_label: string | null
+          nutrition_protein_g: number
+          nutrition_sodium_mg: number
+          planning_notes: string | null
+          preparation_buffer_minutes: number
+          routine_days: Json
+          routine_notes: string | null
+          singleton: boolean
+          time_zone: string
+          updated_at: string
+        }
+        Insert: {
+          allergies?: string[]
+          calendar_settings?: Json
+          commute_minutes?: number
+          default_thaw_hours?: number
+          dietary_rules?: string[]
+          dinner_end?: string
+          dinner_start?: string
+          dislikes?: string[]
+          favorites?: string[]
+          nutrition_calories?: number
+          nutrition_carbs_g?: number
+          nutrition_fat_g?: number
+          nutrition_fiber_g?: number
+          nutrition_label?: string | null
+          nutrition_protein_g?: number
+          nutrition_sodium_mg?: number
+          planning_notes?: string | null
+          preparation_buffer_minutes?: number
+          routine_days?: Json
+          routine_notes?: string | null
+          singleton?: boolean
+          time_zone?: string
+          updated_at?: string
+        }
+        Update: {
+          allergies?: string[]
+          calendar_settings?: Json
+          commute_minutes?: number
+          default_thaw_hours?: number
+          dietary_rules?: string[]
+          dinner_end?: string
+          dinner_start?: string
+          dislikes?: string[]
+          favorites?: string[]
+          nutrition_calories?: number
+          nutrition_carbs_g?: number
+          nutrition_fat_g?: number
+          nutrition_fiber_g?: number
+          nutrition_label?: string | null
+          nutrition_protein_g?: number
+          nutrition_sodium_mg?: number
+          planning_notes?: string | null
+          preparation_buffer_minutes?: number
+          routine_days?: Json
+          routine_notes?: string | null
+          singleton?: boolean
+          time_zone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       preps: {
         Row: {
           actual_yield_qty: number | null
           cook_session: string | null
           id: string
+          legacy_firebase_id: string | null
           note: string | null
           parent_prep: string | null
           prepped_at: string
@@ -467,6 +694,7 @@ export type Database = {
           actual_yield_qty?: number | null
           cook_session?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           note?: string | null
           parent_prep?: string | null
           prepped_at?: string
@@ -478,6 +706,7 @@ export type Database = {
           actual_yield_qty?: number | null
           cook_session?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           note?: string | null
           parent_prep?: string | null
           prepped_at?: string
@@ -511,6 +740,7 @@ export type Database = {
       }
       products: {
         Row: {
+          aliases: string[]
           barcode: string | null
           brand: string | null
           carbs_g: number | null
@@ -523,17 +753,22 @@ export type Database = {
           is_external: boolean
           kcal: number | null
           last_used_at: string | null
+          legacy_firebase_id: string | null
           name: string
           nutrition_basis_qty: number | null
+          nutrition_is_estimated: boolean
+          nutrition_source: string | null
           package_qty_base: number
           package_unit: string
           protein_g: number | null
           serving_qty_base: number | null
           sodium_mg: number | null
+          sugar_g: number | null
           updated_at: string
           use_count: number
         }
         Insert: {
+          aliases?: string[]
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
@@ -546,17 +781,22 @@ export type Database = {
           is_external?: boolean
           kcal?: number | null
           last_used_at?: string | null
+          legacy_firebase_id?: string | null
           name: string
           nutrition_basis_qty?: number | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           package_qty_base: number
           package_unit: string
           protein_g?: number | null
           serving_qty_base?: number | null
           sodium_mg?: number | null
+          sugar_g?: number | null
           updated_at?: string
           use_count?: number
         }
         Update: {
+          aliases?: string[]
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
@@ -569,13 +809,17 @@ export type Database = {
           is_external?: boolean
           kcal?: number | null
           last_used_at?: string | null
+          legacy_firebase_id?: string | null
           name?: string
           nutrition_basis_qty?: number | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           package_qty_base?: number
           package_unit?: string
           protein_g?: number | null
           serving_qty_base?: number | null
           sodium_mg?: number | null
+          sugar_g?: number | null
           updated_at?: string
           use_count?: number
         }
@@ -664,6 +908,7 @@ export type Database = {
           emoji: string | null
           id: string
           instructions: Json
+          legacy_firebase_id: string | null
           name: string
           output_food: string | null
           override_basis_qty: number | null
@@ -673,7 +918,13 @@ export type Database = {
           override_kcal: number | null
           override_protein_g: number | null
           override_sodium_mg: number | null
+          override_sugar_g: number | null
+          portions: Json
+          preparation_rules: Json
+          prompt_for_feedback: boolean
           servings: number
+          source_note: string | null
+          source_url: string | null
           updated_at: string
           yield_qty: number | null
         }
@@ -682,6 +933,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           instructions?: Json
+          legacy_firebase_id?: string | null
           name: string
           output_food?: string | null
           override_basis_qty?: number | null
@@ -691,7 +943,13 @@ export type Database = {
           override_kcal?: number | null
           override_protein_g?: number | null
           override_sodium_mg?: number | null
+          override_sugar_g?: number | null
+          portions?: Json
+          preparation_rules?: Json
+          prompt_for_feedback?: boolean
           servings?: number
+          source_note?: string | null
+          source_url?: string | null
           updated_at?: string
           yield_qty?: number | null
         }
@@ -700,6 +958,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           instructions?: Json
+          legacy_firebase_id?: string | null
           name?: string
           output_food?: string | null
           override_basis_qty?: number | null
@@ -709,7 +968,13 @@ export type Database = {
           override_kcal?: number | null
           override_protein_g?: number | null
           override_sodium_mg?: number | null
+          override_sugar_g?: number | null
+          portions?: Json
+          preparation_rules?: Json
+          prompt_for_feedback?: boolean
           servings?: number
+          source_note?: string | null
+          source_url?: string | null
           updated_at?: string
           yield_qty?: number | null
         }
@@ -727,39 +992,48 @@ export type Database = {
         Row: {
           checked_at: string | null
           created_at: string
+          first_needed_date: string | null
           food: string | null
           free_text: string | null
           id: string
+          legacy_firebase_id: string | null
           lot: string | null
           note: string | null
           pinned_product: string | null
           qty_needed: number | null
+          quantity_label: string | null
           source: Database["public"]["Enums"]["shopping_source"]
           unit: string | null
         }
         Insert: {
           checked_at?: string | null
           created_at?: string
+          first_needed_date?: string | null
           food?: string | null
           free_text?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           lot?: string | null
           note?: string | null
           pinned_product?: string | null
           qty_needed?: number | null
+          quantity_label?: string | null
           source?: Database["public"]["Enums"]["shopping_source"]
           unit?: string | null
         }
         Update: {
           checked_at?: string | null
           created_at?: string
+          first_needed_date?: string | null
           food?: string | null
           free_text?: string | null
           id?: string
+          legacy_firebase_id?: string | null
           lot?: string | null
           note?: string | null
           pinned_product?: string | null
           qty_needed?: number | null
+          quantity_label?: string | null
           source?: Database["public"]["Enums"]["shopping_source"]
           unit?: string | null
         }
@@ -805,6 +1079,7 @@ export type Database = {
           local_date: string | null
           protein_g: number | null
           sodium_mg: number | null
+          sugar_g: number | null
         }
         Relationships: []
       }

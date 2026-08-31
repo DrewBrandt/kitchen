@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(14);
+select plan(16);
 
 insert into base_foods (
   id,
@@ -81,18 +81,46 @@ select is(
   'Weight units convert to the gram base quantity'
 );
 
+insert into food_logs (
+  id,
+  label,
+  kind,
+  occurred_at,
+  kcal,
+  protein_g,
+  carbs_g,
+  fat_g,
+  fiber_g,
+  sugar_g,
+  sodium_mg
+) values (
+  '41000000-0000-0000-0000-000000000001',
+  'Test flour serving',
+  'inventory',
+  '2026-08-30 02:00:00+00',
+  364,
+  10,
+  76,
+  1,
+  3,
+  0,
+  2
+);
+
 insert into inventory_events (
   id,
   lot,
   quantity_delta,
   reason,
-  occurred_at
+  occurred_at,
+  food_log
 ) values (
   '40000000-0000-0000-0000-000000000001',
   '30000000-0000-0000-0000-000000000001',
   -100,
   'eaten',
-  '2026-08-30 02:00:00+00'
+  '2026-08-30 02:00:00+00',
+  '41000000-0000-0000-0000-000000000001'
 );
 
 select is(
@@ -158,6 +186,29 @@ select is(
   (select local_date from daily_nutrition where local_date = '2026-08-29'),
   '2026-08-29'::date,
   'Daily nutrition uses the configured local time zone'
+);
+
+update personal_settings
+set nutrition_calories = 2500,
+    allergies = array['Test allergy'],
+    commute_minutes = 45
+where singleton;
+
+select is(
+  (select nutrition_calories from personal_settings where singleton),
+  2500::numeric,
+  'Personal nutrition targets are stored in the settings singleton'
+);
+
+select throws_ok(
+  $$
+    update personal_settings
+    set time_zone = 'Not/A_Time_Zone'
+    where singleton
+  $$,
+  'P0001',
+  'Unknown IANA time zone: Not/A_Time_Zone',
+  'Personal settings reject invalid time zones'
 );
 
 insert into recipes (
