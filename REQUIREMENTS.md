@@ -40,7 +40,7 @@ The normal long-term workflow is conversational:
 5. Codex sends validated JSON to the food, grocery, or recipe endpoint.
 6. The API validates the complete request before committing any writes.
 
-Natural language is deliberately not accepted by mutation endpoints. Interpretation belongs in the conversation layer; durable operations remain deterministic and testable. Any future server credential must be stored server-side and never embedded in the browser application.
+Natural language is deliberately not accepted by the mutation endpoint. Interpretation belongs in the conversation layer; the durable API remains deterministic and testable. The bearer token is stored as a Supabase Edge Function secret and is never embedded in a client.
 
 ## Canonical data model
 
@@ -101,11 +101,11 @@ Conversions are food-specific. One cup of butter and one cup of flour do not sha
 
 Cooking is all-or-nothing. The service first converts every ingredient to its food's base unit, validates the complete demand, and plans deductions ordered by best-by date. Only after every ingredient is available are lot quantities updated and a history record written. Undo restores the exact lots originally used.
 
-PostgreSQL database functions perform validation, deductions, and history creation in one transaction.
+The PostgreSQL implementation performs validation, deductions, and history creation in one transaction.
 
 ## Next milestones
 
-1. Add a private Supabase-backed API for conversational quick-use and cooking.
-2. Replace the paused calendar synchronization with a server-side integration.
+1. Configure the private GPT with the deployed Supabase Action.
+2. Replace the paused calendar synchronization with a Supabase-native server integration.
 3. Add receipt capture and opened-item shelf life. Nutrition and reviewed
    barcode lookup are implemented.

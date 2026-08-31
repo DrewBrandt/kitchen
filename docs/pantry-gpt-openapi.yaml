@@ -1,477 +1,82 @@
 openapi: 3.1.0
 info:
   title: Drew's Pantry API
-  version: 1.2.0
-  license:
-    name: Private personal use
-    identifier: LicenseRef-Proprietary
-  description: >-
-    Planned private inventory, recipe, meal-history, nutrition, planning, and
-    grocery operations for Drew's Pantry. No server is currently deployed.
+  version: 2.0.0
+  description: Private Supabase-backed pantry operations. Read current state before mutations.
 servers:
-  - url: https://pantry-api.example.invalid
+  - url: https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
 security:
   - bearerAuth: []
 paths:
   /v1/inventory:
     get:
       operationId: getPantryInventory
-      summary: Read current pantry stock
-      description: >-
-        Returns compact stock items with names, total base quantities, and
-        positive lots. Use food lookup for conversions and nutrition, and use
-        the other focused read endpoints for non-inventory context.
-      responses:
-        '200':
-          description: Current pantry snapshot
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyObject'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+      summary: Read positive inventory lots with canonical food and product IDs
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: reconcilePantryInventory
-      summary: Replace complete lots for selected foods
-      description: >-
-        Consequential correction operation. Each named food's existing lots are
-        deleted and replaced by the submitted lots. Empty lots means zero stock.
-        deleteFoodIds also deletes food definitions and must be used sparingly.
+      summary: Atomically replace live lots for selected foods using auditable adjustments
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InventoryReconciliation'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/history:
-    get:
-      operationId: getMealHistory
-      summary: Read recent meal history and repetition trends
-      parameters:
-        - in: query
-          name: days
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 365
-            default: 30
-          description: Number of calendar days to include.
-      responses:
-        '200':
-          description: Meal events and planning summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyObject'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/plans:
-    get:
-      operationId: getMealPlanAndGroceries
-      summary: Read the current meal plan and grocery list
-      responses:
-        '200':
-          description: Current plan and grocery list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyObject'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      operationId: replaceWeeklyMealPlan
-      summary: Replace one seven-day meal plan and rebuild planned groceries
-      description: >-
-        Replaces only the week beginning at weekStart. Manual grocery items are
-        preserved. Read inventory, history, and the current plan first.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WeeklyPlan'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/grocery-items:
-    post:
-      operationId: addManualGroceryItem
-      summary: Add one durable manual grocery-list item
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [name]
-              properties:
-                name:
-                  type: string
-                quantityLabel:
-                  type: string
-                emoji:
-                  type: string
-                grocerySection:
-                  $ref: '#/components/schemas/GrocerySection'
-      responses:
-        '201':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/calendar/status:
-    get:
-      operationId: getCalendarSyncStatus
-      summary: Read sanitized Pantry Planner synchronization status
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-  /v1/calendar/agenda:
-    get:
-      operationId: getCalendarAgenda
-      summary: Read events from the calendars selected for schedule-aware planning
-      parameters:
-        - in: query
-          name: from
-          required: true
-          schema: {type: string, format: date-time}
-        - in: query
-          name: to
-          required: true
-          schema: {type: string, format: date-time}
-          description: The range may not exceed 45 days.
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
-  /v1/calendar/calendars:
-    get:
-      operationId: getReadableCalendars
-      summary: List Google calendars and which ones are selected for Pantry GPT
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-    post:
-      operationId: selectReadableCalendars
-      summary: Choose the Google calendars Pantry GPT may read
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [calendarIds]
-              properties:
-                calendarIds:
-                  type: array
-                  items: {type: string}
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
-  /v1/calendar/sync:
-    post:
-      operationId: requestCalendarSync
-      summary: Request an idempotent Pantry Planner reconciliation
-      x-openai-isConsequential: true
-      responses:
-        '202': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-  /v1/calendar/events:
-    delete:
-      operationId: removePantryCalendarEvents
-      summary: Remove only events managed by Pantry
-      x-openai-isConsequential: true
-      responses:
-        '202': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+      requestBody: {$ref: '#/components/requestBodies/InventoryReconciliation'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods:
     get:
       operationId: findPantryFoods
-      summary: Find pantry food definitions
-      description: Returns matching definitions and their units, conversions, and nutrition.
+      summary: Find canonical foods, supported units, nutrition, and products
       parameters:
-        - in: query
-          name: q
-          required: false
-          schema: {type: string}
-          description: Case-insensitive ID, name, or alias search. Omit to return all definitions.
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+        - {in: query, name: q, required: false, schema: {type: string}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveFoodDefinition
-      summary: Create or update a pantry food definition
-      description: >-
-        Use before adding a truly new grocery or recipe ingredient. Existing IDs
-        are updated in place. Do not guess package conversions or nutrition.
+      summary: Create or update a canonical food
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FoodDefinition'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+      requestBody: {$ref: '#/components/requestBodies/Food'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods/{id}:
     get:
       operationId: getPantryFood
-      summary: Read one pantry food definition
+      summary: Read one canonical food and its products
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: {type: string}
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '404': {$ref: '#/components/responses/NotFound'}
-  /v1/groceries:
-    post:
-      operationId: addGroceryHaul
-      summary: Add one or more grocery lots to inventory
-      description: Unknown foods or unsupported units reject the entire request.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GroceryHaul'
-      responses:
-        '201':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
   /v1/products:
     post:
       operationId: saveProductDefinition
-      summary: Create or update a purchasable product
-      description: >-
-        Maps a branded product, receipt name, or barcode to an existing
-        canonical food. Product package conversions are expressed in that
-        food's base unit.
+      summary: Create or update a purchasable product mapped to a canonical food
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProductDefinition'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+      requestBody: {$ref: '#/components/requestBodies/Product'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/groceries:
+    post:
+      operationId: addGroceryHaul
+      summary: Atomically add reviewed product lots to inventory
+      x-openai-isConsequential: true
+      requestBody: {$ref: '#/components/requestBodies/GroceryHaul'}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes:
     get:
       operationId: findRecipes
-      summary: Find saved recipes
+      summary: Find recipes with resolved ingredients and units
       parameters:
-        - in: query
-          name: q
-          required: false
-          schema: {type: string}
-          description: Case-insensitive ID or name search. Omit to return all recipes.
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+        - {in: query, name: q, required: false, schema: {type: string}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveRecipe
-      summary: Create or update a recipe
-      description: >-
-        Ingredient foods and units must already exist. Preserve a source URL and
-        paraphrase source instructions.
+      summary: Atomically create or update a recipe and all ingredients
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Recipe'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+      requestBody: {$ref: '#/components/requestBodies/Recipe'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes/{id}:
     get:
       operationId: getRecipe
-      summary: Read one saved recipe
+      summary: Read one recipe
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: {type: string}
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '404': {$ref: '#/components/responses/NotFound'}
-  /v1/migrations/canonical-products:
-    post:
-      operationId: migrateCanonicalProducts
-      summary: Dry-run or apply a canonical food and product migration
-      description: >-
-        Defaults to dry-run. Applying rewrites inventory, recipe, prepared-food,
-        history, and grocery references in one validated PostgreSQL transaction.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CanonicalProductMigration'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/external-foods:
-    get:
-      operationId: searchOutsideFoods
-      summary: Search reusable restaurant and packaged outside foods
-      description: >-
-        Use before saving or logging an identifiable outside food. Returns only
-        reusable outside-food definitions, avoiding the much larger full pantry
-        response. With no parameters, returns every saved outside food.
-      parameters:
-        - in: query
-          name: q
-          required: false
-          schema:
-            type: string
-          description: Partial match against ID, name, brand, or serving label.
-        - in: query
-          name: brand
-          required: false
-          schema:
-            type: string
-          description: Exact brand match, ignoring case and punctuation.
-      responses:
-        '200':
-          description: Matching reusable outside foods
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyObject'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      operationId: saveOutsideFood
-      summary: Save or update a reusable restaurant or packaged outside food
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OutsideFood'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/meals:
-    post:
-      operationId: logMealWithoutInventoryDeduction
-      summary: Log an outside meal or snack without changing inventory
-      description: >-
-        Log exactly one consumed item per call. Normally use an externalFoodId
-        and servings 1 for a saved outside food. Use label and nutrition totals
-        only for a genuinely unidentifiable or explicitly combined one-off meal.
-        Repeated units should be separate calls unless the user requests grouping.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MealLog'
-      responses:
-        '201':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
-  /v1/consume/recipe:
-    post:
-      operationId: consumeSavedRecipe
-      summary: Deduct a saved recipe and log its nutrition
-      description: >-
-        Atomically deducts ingredients from earliest-expiring lots. Fails without
-        changes when the recipe is unknown or inventory is insufficient.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [recipeId, servings]
-              properties:
-                recipeId:
-                  type: string
-                servings:
-                  type: number
-                  minimum: 0.000001
-                label:
-                  type: string
-                note:
-                  type: string
-                timestamp:
-                  type: string
-                  format: date-time
-      responses:
-        '201':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
   /v1/prepare/recipe:
     post:
       operationId: prepareSavedRecipe
-      summary: Make a recipe and add its prepared servings
-      description: Deducts raw ingredients once and creates a prepared batch to consume later.
+      summary: Atomically deduct ingredients and create a prepared recipe batch
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -482,63 +87,21 @@ paths:
               additionalProperties: false
               required: [recipeId, servings]
               properties:
-                recipeId: {type: string}
-                servings: {type: number, minimum: 0.000001}
+                recipeId: {type: string, format: uuid}
+                servings: {type: number, exclusiveMinimum: 0}
                 location: {type: string, enum: [fridge, freezer]}
-                bestBy: {type: string, format: date-time}
+                bestBy: {type: string, format: date}
                 note: {type: string}
-      responses:
-        '201': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/prepared-batches:
     get:
       operationId: getPreparedFoods
-      summary: Read prepared foods with servings remaining
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-    post:
-      operationId: addPreparedFood
-      summary: Add a manual or ready-made leftover
-      description: Adds servings without deducting raw inventory. An externalFoodId copies saved nutrition.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [name, servings]
-              properties:
-                name: {type: string}
-                servings: {type: number, minimum: 0.000001}
-                emoji: {type: string}
-                externalFoodId: {type: string}
-                location: {type: string, enum: [fridge, freezer, pantry]}
-                madeAt: {type: string, format: date-time}
-                bestBy: {type: string, format: date-time}
-                note: {type: string}
-                nutrition:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    calories: {type: number, minimum: 0}
-                    proteinG: {type: number, minimum: 0}
-                    carbsG: {type: number, minimum: 0}
-                    fatG: {type: number, minimum: 0}
-                    fiberG: {type: number, minimum: 0}
-                    sugarG: {type: number, minimum: 0}
-                    sodiumMg: {type: number, minimum: 0}
-      responses:
-        '201': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
+      summary: Read prepared recipe batches with servings remaining
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
   /v1/consume/prepared:
     post:
       operationId: consumePreparedFood
-      summary: Eat servings from a prepared batch
+      summary: Atomically consume a prepared batch and log nutrition
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -549,77 +112,16 @@ paths:
               additionalProperties: false
               required: [batchId, servings]
               properties:
-                batchId: {type: string}
-                servings: {type: number, minimum: 0.000001}
+                batchId: {type: string, format: uuid}
+                servings: {type: number, exclusiveMinimum: 0}
+                timestamp: {type: string, format: date-time}
                 label: {type: string}
                 note: {type: string}
-                timestamp: {type: string, format: date-time}
-      responses:
-        '201': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
-  /v1/consume/meal-template:
-    post:
-      operationId: consumeCombinedMeal
-      summary: Eat a combined meal from its prepared component batches
-      description: Atomically consumes the required prepared servings from every component and creates one nutrition log entry.
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [mealId, servings]
-              properties:
-                mealId: {type: string}
-                servings: {type: number, minimum: 0.000001}
-                label: {type: string}
-                note: {type: string}
-                timestamp: {type: string, format: date-time}
-      responses:
-        '201': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
-  /v1/meal-templates:
-    post:
-      operationId: saveCombinedMeal
-      summary: Save a meal made from multiple component recipes
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [name, servings, components]
-              properties:
-                id: {type: string}
-                name: {type: string}
-                emoji: {type: string}
-                servings: {type: number, minimum: 0.000001}
-                notes: {type: string}
-                components:
-                  type: array
-                  minItems: 2
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required: [recipeId, servings]
-                    properties:
-                      recipeId: {type: string}
-                      servings: {type: number, minimum: 0.000001}
-      responses:
-        '201': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/consume/inventory:
     post:
       operationId: consumePantryItem
-      summary: Deduct a quantity of one pantry food and log its nutrition
-      description: Use either foodId or food name, and a unit supported by that food.
+      summary: Atomically deduct one food FEFO and log nutrition
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -628,720 +130,346 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [amount, unit]
+              required: [foodId, quantity, unit]
               properties:
-                foodId:
-                  type: string
-                food:
-                  type: string
-                amount:
-                  type: number
-                  minimum: 0.000001
-                unit:
-                  type: string
-                label:
-                  type: string
-                note:
-                  type: string
-                timestamp:
-                  type: string
-                  format: date-time
-      responses:
-        '201':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+                foodId: {type: string, format: uuid}
+                quantity: {type: number, exclusiveMinimum: 0}
+                unit: {type: string, description: Unit UUID, full name, or short name from food lookup.}
+                timestamp: {type: string, format: date-time}
+                label: {type: string}
+                note: {type: string}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/external-foods:
+    get:
+      operationId: searchOutsideFoods
+      summary: Search reusable restaurant and packaged outside foods
+      parameters:
+        - {in: query, name: q, required: false, schema: {type: string}}
+        - {in: query, name: brand, required: false, schema: {type: string}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+    post:
+      operationId: saveOutsideFood
+      summary: Save or update a reusable outside food
+      x-openai-isConsequential: true
+      requestBody: {$ref: '#/components/requestBodies/OutsideFood'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/meals:
+    post:
+      operationId: logMealWithoutInventoryDeduction
+      summary: Log one outside or custom food without changing inventory
+      x-openai-isConsequential: true
+      requestBody: {$ref: '#/components/requestBodies/MealLog'}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/history:
+    get:
+      operationId: getMealHistory
+      summary: Read recent non-voided nutrition history
+      parameters:
+        - {in: query, name: days, required: false, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /v1/plans:
+    get:
+      operationId: getMealPlanAndGroceries
+      summary: Read meal plans and the current grocery list
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+    post:
+      operationId: replaceWeeklyMealPlan
+      summary: Atomically replace seven days and rebuild generated groceries
+      x-openai-isConsequential: true
+      requestBody: {$ref: '#/components/requestBodies/WeeklyPlan'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/grocery-items:
+    post:
+      operationId: addManualGroceryItem
+      summary: Add one durable manual grocery item
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties: {name: {type: string}, quantityLabel: {type: string}, note: {type: string}}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/targets:
     get:
       operationId: getNutritionTargets
-      summary: Read daily nutrition targets
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+      summary: Read nutrition targets
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveNutritionTargets
-      summary: Replace daily nutrition targets
+      summary: Replace nutrition targets
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [calories, proteinG, carbsG, fatG, fiberG, sodiumMg]
-              properties:
-                calories:
-                  type: number
-                  minimum: 0.000001
-                proteinG:
-                  type: number
-                  minimum: 0.000001
-                carbsG:
-                  type: number
-                  minimum: 0.000001
-                fatG:
-                  type: number
-                  minimum: 0.000001
-                fiberG:
-                  type: number
-                  minimum: 0.000001
-                sodiumMg:
-                  type: number
-                  minimum: 0.000001
-                label:
-                  type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+      requestBody: {$ref: '#/components/requestBodies/Targets'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/preferences:
     get:
       operationId: getFoodPreferences
-      summary: Read the private food preference and allergy profile
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+      summary: Read allergies and food preferences
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveFoodPreferences
-      summary: Replace the private food preference and allergy profile
-      description: >-
-        Stores allergies, dislikes, favorites, dietary rules, and free-form
-        planning notes. Allergies are hard safety constraints.
+      summary: Replace allergies and food preferences
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FoodPreferences'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/InvalidRequest'
+      requestBody: {$ref: '#/components/requestBodies/Preferences'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/routine:
     get:
       operationId: getPersonalRoutine
-      summary: Read wake, sleep, dinner, travel, and preparation preferences
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+      summary: Read routine and meal-planning availability
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: savePersonalRoutine
-      summary: Replace the private routine and availability profile
+      summary: Replace routine and meal-planning availability
       x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PersonalRoutine'
-      responses:
-        '200': {$ref: '#/components/responses/Success'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '422': {$ref: '#/components/responses/InvalidRequest'}
+      requestBody: {$ref: '#/components/requestBodies/Routine'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
+    bearerAuth: {type: http, scheme: bearer}
   responses:
     Success:
       description: Operation completed
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/AnyObject'
+      content: {application/json: {schema: {type: object, additionalProperties: true}}}
     Unauthorized:
       description: Bearer token is missing or invalid
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    InvalidRequest:
-      description: Validation failed and no partial write was applied
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Invalid:
+      description: Validation failed and the transaction was rolled back
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     NotFound:
-      description: The requested resource does not exist
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+      description: Resource not found
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  requestBodies:
+    Food: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Food'}}}}
+    Product: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Product'}}}}
+    GroceryHaul: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GroceryHaul'}}}}
+    InventoryReconciliation: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryReconciliation'}}}}
+    Recipe: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
+    OutsideFood: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OutsideFood'}}}}
+    MealLog: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MealLog'}}}}
+    WeeklyPlan: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyPlan'}}}}
+    Targets: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Targets'}}}}
+    Preferences: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
+    Routine: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Routine'}}}}
   schemas:
-    AnyObject:
-      type: object
-      properties:
-        status:
-          type: string
-          description: Optional operation status for write responses.
-        id:
-          type: string
-          description: Optional identifier created or updated by a write.
-        exportedAt:
-          type: string
-          format: date-time
-          description: Optional snapshot generation time for read responses.
-      additionalProperties: true
     Error:
       type: object
       required: [error]
-      properties:
-        error:
-          type: string
-    FoodNutrition:
+      properties: {error: {type: string}}
+    Nutrition:
       type: object
       additionalProperties: false
-      required: [basisBaseAmount, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+      required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
       properties:
-        basisBaseAmount:
-          type: number
-          minimum: 0.000001
-        calories: { type: number, minimum: 0 }
-        proteinG: { type: number, minimum: 0 }
-        carbsG: { type: number, minimum: 0 }
-        fatG: { type: number, minimum: 0 }
-        fiberG: { type: number, minimum: 0 }
-        sugarG: { type: number, minimum: 0 }
-        sodiumMg: { type: number, minimum: 0 }
-        source:
-          type: string
-        estimated:
-          type: boolean
-    RecipeNutrition:
+        basisQuantity: {type: number, exclusiveMinimum: 0}
+        calories: {type: number, minimum: 0}
+        proteinG: {type: number, minimum: 0}
+        carbsG: {type: number, minimum: 0}
+        fatG: {type: number, minimum: 0}
+        fiberG: {type: number, minimum: 0}
+        sugarG: {type: number, minimum: 0}
+        sodiumMg: {type: number, minimum: 0}
+        source: {type: string}
+        estimated: {type: boolean}
+    Food:
       type: object
       additionalProperties: false
-      required: [calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
-      description: Totals for the entire prepared recipe yield.
+      required: [name, measureStyle, displayUnit]
       properties:
-        calories: { type: number, minimum: 0 }
-        proteinG: { type: number, minimum: 0 }
-        carbsG: { type: number, minimum: 0 }
-        fatG: { type: number, minimum: 0 }
-        fiberG: { type: number, minimum: 0 }
-        sugarG: { type: number, minimum: 0 }
-        sodiumMg: { type: number, minimum: 0 }
-    FoodPreferences:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        plural: {type: string}
+        emoji: {type: string}
+        measureStyle: {type: string, enum: [discrete, weight, volume]}
+        displayUnit: {type: string, description: Unit UUID, full name, or short name.}
+        groceryCategory: {type: string}
+        ingredientRole: {type: string, enum: [main, supporting, staple]}
+        storeAisle: {type: string}
+        gPerFlOz: {type: number, exclusiveMinimum: 0}
+        gPerCount: {type: number, exclusiveMinimum: 0}
+        aliases: {type: array, items: {type: string}}
+        nutrition: {$ref: '#/components/schemas/Nutrition'}
+    Product:
       type: object
       additionalProperties: false
+      required: [foodId, name, packageQuantity, packageUnit]
       properties:
-        allergies:
-          type: array
-          items:
-            type: string
-        dislikes:
-          type: array
-          items:
-            type: string
-        favorites:
-          type: array
-          items:
-            type: string
-        dietaryRules:
-          type: array
-          items:
-            type: string
-        planningNotes:
-          type: string
-    UnitConversion:
+        id: {type: string, format: uuid}
+        foodId: {type: string, format: uuid}
+        name: {type: string}
+        brand: {type: string}
+        barcode: {type: string}
+        aliases: {type: array, items: {type: string}}
+        packageQuantity: {type: number, exclusiveMinimum: 0}
+        packageUnit: {type: string}
+        servingQuantity: {type: number, exclusiveMinimum: 0}
+        nutrition: {$ref: '#/components/schemas/Nutrition'}
+    GroceryLot:
       type: object
       additionalProperties: false
-      required: [unit, symbol, baseAmount]
+      required: [productId, quantity, unit]
       properties:
-        unit:
-          type: string
-        symbol:
-          type: string
-        baseAmount:
-          type: number
-          minimum: 0.000001
-    GrocerySection:
-      type: string
-      description: >-
-        Department stop in walking order at the Waugh Chapel Safeway, from the
-        produce-side entrance toward deli and bakery.
-      enum:
-        - produceDeli
-        - seafoodBreadInternational
-        - bakingMeat
-        - snacksDrinks
-        - seasonal
-        - householdPets
-        - dairyFrozenMeals
-        - frozen
-        - eggsCheeseDough
-        - deliBakery
-        - pantryOther
-    FoodDefinition:
-      type: object
-      additionalProperties: false
-      required: [name, quantityMode, baseUnit, defaultLocation, grocerySection, ingredientRole, conversions]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        emoji:
-          type: string
-        quantityMode:
-          type: string
-          enum: [counted, measured]
-        baseUnit:
-          type: string
-        displayUnit:
-          type: string
-        defaultLocation:
-          type: string
-          enum: [pantry, fridge, freezer]
-        grocerySection:
-          $ref: '#/components/schemas/GrocerySection'
-        ingredientRole:
-          type: string
-          enum: [main, supporting, staple]
-          description: Main ingredients are useful meal foundations; staples are seasonings and routine cooking supplies.
-        storeAisle:
-          type: string
-          description: Optional exact aisle or area note learned for this store.
-        conversions:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/UnitConversion'
-        nutrition:
-          $ref: '#/components/schemas/FoodNutrition'
-        aliases:
-          type: array
-          items:
-            type: string
-    ProductDefinition:
-      type: object
-      additionalProperties: false
-      required: [foodId, name]
-      properties:
-        id:
-          type: string
-        foodId:
-          type: string
-        name:
-          type: string
-        brand:
-          type: string
-        aliases:
-          type: array
-          items:
-            type: string
-        barcode:
-          type: string
-        conversions:
-          type: array
-          items:
-            $ref: '#/components/schemas/UnitConversion'
-        nutrition:
-          $ref: '#/components/schemas/FoodNutrition'
-    CanonicalProductMapping:
-      type: object
-      additionalProperties: false
-      required: [sourceFoodId, product]
-      properties:
-        sourceFoodId:
-          type: string
-        targetFoodId:
-          type: string
-        canonicalName:
-          type: string
-        canonicalDisplayUnit:
-          type: string
-        canonicalAliases:
-          type: array
-          items:
-            type: string
-        canonicalConversions:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/UnitConversion'
-        product:
-          $ref: '#/components/schemas/MigrationProductDefinition'
-    MigrationProductDefinition:
-      type: object
-      additionalProperties: false
-      required: [name]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        brand:
-          type: string
-        aliases:
-          type: array
-          items:
-            type: string
-        barcode:
-          type: string
-        conversions:
-          type: array
-          items:
-            $ref: '#/components/schemas/UnitConversion'
-    CanonicalProductMigration:
-      type: object
-      additionalProperties: false
-      required: [mappings]
-      properties:
-        dryRun:
-          type: boolean
-          default: true
-        mappings:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/CanonicalProductMapping'
-    GroceryLotInput:
-      type: object
-      additionalProperties: false
-      required: [amount, unit]
-      properties:
-        foodId:
-          type: string
-        food:
-          type: string
-        productId:
-          type: string
-        product:
-          type: string
-        barcode:
-          type: string
-        amount:
-          type: number
-          minimum: 0.000001
-        unit:
-          type: string
-        location:
-          type: string
-          enum: [pantry, fridge, freezer]
-        bestBy:
-          type: string
-          format: date
-        estimated:
-          type: boolean
-        note:
-          type: string
+        productId: {type: string, format: uuid}
+        quantity: {type: number, exclusiveMinimum: 0}
+        unit: {type: string}
+        location: {type: string, enum: [pantry, fridge, freezer]}
+        bestBy: {type: string, format: date}
+        totalCost: {type: number, minimum: 0}
+        costIsEstimated: {type: boolean}
+        note: {type: string}
     GroceryHaul:
       type: object
       additionalProperties: false
       required: [items]
       properties:
-        source:
-          type: string
-        items:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/GroceryLotInput'
-    InventoryReplacement:
-      type: object
-      additionalProperties: false
-      required: [foodId, lots]
-      properties:
-        foodId:
-          type: string
-        lots:
-          type: array
-          items:
-            $ref: '#/components/schemas/GroceryLotInput'
+        source: {type: string}
+        items: {type: array, minItems: 1, items: {$ref: '#/components/schemas/GroceryLot'}}
     InventoryReconciliation:
       type: object
       additionalProperties: false
       required: [replacements]
       properties:
-        source:
-          type: string
+        source: {type: string}
         replacements:
           type: array
           items:
-            $ref: '#/components/schemas/InventoryReplacement'
-        displayUnits:
-          type: object
-          properties: {}
-          additionalProperties:
-            type: string
-        deleteFoodIds:
-          type: array
-          items:
-            type: string
-    RecipeIngredient:
-      type: object
-      additionalProperties: false
-      required: [amount, unit]
-      properties:
-        foodId:
-          type: string
-        food:
-          type: string
-        amount:
-          type: number
-          minimum: 0.000001
-        unit:
-          type: string
-        optional:
-          type: boolean
-    RecipePortion:
-      type: object
-      additionalProperties: false
-      required: [name, servings]
-      properties:
-        name:
-          type: string
-        servings:
-          type: number
-          minimum: 0.000001
-    PreparationRule:
-      type: object
-      additionalProperties: false
-      required: [id, kind, label, leadHours]
-      properties:
-        id:
-          type: string
-        kind:
-          type: string
-        label:
-          type: string
-        leadHours:
-          type: number
-          minimum: 0.000001
-    PlannedPreparationTask:
-      type: object
-      additionalProperties: false
-      required: [kind, label]
-      properties:
-        id:
-          type: string
-        kind:
-          type: string
-          description: Use thaw for moving frozen food to the refrigerator.
-        label:
-          type: string
-        leadHours:
-          type: number
-          minimum: 0.000001
-          description: Defaults to 24 when kind is thaw.
-        durationMinutes:
-          type: integer
-          minimum: 1
-          maximum: 1440
-          default: 5
+            type: object
+            additionalProperties: false
+            required: [foodId, lots]
+            properties:
+              foodId: {type: string, format: uuid}
+              lots: {type: array, items: {$ref: '#/components/schemas/GroceryLot'}}
     Recipe:
       type: object
       additionalProperties: false
       required: [name, servings, ingredients]
       properties:
-        id:
-          type: string
-        name:
-          type: string
-        emoji:
-          type: string
-        servings:
-          type: number
-          minimum: 0.000001
-        sourceUrl:
-          type: string
-          format: uri
-        sourceNote:
-          type: string
-        promptForFeedback:
-          type: boolean
-          default: true
-          description: Ask for taste, ease, and actual time after making this recipe.
-        nutritionOverride:
-          $ref: '#/components/schemas/RecipeNutrition'
+        id: {type: string, format: uuid}
+        name: {type: string}
+        emoji: {type: string}
+        servings: {type: number, exclusiveMinimum: 0}
+        sourceUrl: {type: string, format: uri}
+        sourceNote: {type: string}
+        promptForFeedback: {type: boolean}
+        nutrition:
+          allOf:
+            - {$ref: '#/components/schemas/Nutrition'}
+          description: Whole-recipe totals; basisQuantity is ignored and may equal servings.
+        instructions: {type: array, items: {type: string}}
+        portions: {type: array, items: {type: object, additionalProperties: true}}
+        preparationRules: {type: array, items: {type: object, additionalProperties: true}}
         ingredients:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/RecipeIngredient'
-        instructions:
-          type: array
-          items:
-            type: string
-        portions:
-          type: array
-          items:
-            $ref: '#/components/schemas/RecipePortion'
-        preparationRules:
-          type: array
-          items:
-            $ref: '#/components/schemas/PreparationRule'
-    MealPlanEntry:
+            type: object
+            additionalProperties: false
+            required: [foodId, quantity, unit]
+            properties:
+              foodId: {type: string, format: uuid}
+              quantity: {type: number, exclusiveMinimum: 0}
+              unit: {type: string}
+              sortOrder: {type: integer, minimum: 0}
+              note: {type: string}
+    OutsideFood:
       type: object
       additionalProperties: false
-      required: [date, slot, source, servings]
+      required: [name, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
       properties:
-        id:
-          type: string
-        date:
-          type: string
-          format: date
-        slot:
-          type: string
-          enum: [breakfast, lunch, dinner, snack]
-        source:
-          type: string
-          enum: [recipe, meal, external, custom]
-        sourceId:
-          type: string
-        groupId:
-          type: string
-          description: Groups independent recipe entries into one planned meal.
-        leftoverOfGroupId:
-          type: string
-          description: References the groupId of an earlier planned meal that will supply these leftovers.
-        intent:
-          type: string
-          enum: [prepare, leftover]
-          default: prepare
-          description: Leftovers retain recipe identity without adding grocery demand. Pair with leftoverOfGroupId when referencing an earlier entry in the plan.
-        name:
-          type: string
-        emoji:
-          type: string
-        servings:
-          type: number
-          minimum: 0.000001
-        note:
-          type: string
-        scheduledTime:
-          type: string
-          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
-          description: Exact local meal time; overrides the configured slot time.
-        preparationTasks:
-          type: array
-          items:
-            $ref: '#/components/schemas/PlannedPreparationTask'
-    RoutineDay:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        brand: {type: string}
+        barcode: {type: string}
+        emoji: {type: string}
+        calories: {type: number, minimum: 0}
+        proteinG: {type: number, minimum: 0}
+        carbsG: {type: number, minimum: 0}
+        fatG: {type: number, minimum: 0}
+        fiberG: {type: number, minimum: 0}
+        sugarG: {type: number, minimum: 0}
+        sodiumMg: {type: number, minimum: 0}
+        source: {type: string}
+        estimated: {type: boolean}
+    MealLog:
       type: object
       additionalProperties: false
-      required: [wakeTime, bedTime]
       properties:
-        wakeTime:
-          type: string
-          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
-        bedTime:
-          type: string
-          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
-    PersonalRoutine:
-      type: object
-      additionalProperties: false
-      required: [timeZone, days, dinnerWindow, commuteMinutes, preparationBufferMinutes]
-      properties:
-        timeZone:
-          type: string
-        days:
-          type: object
-          additionalProperties: false
-          required: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
-          properties:
-            monday: {$ref: '#/components/schemas/RoutineDay'}
-            tuesday: {$ref: '#/components/schemas/RoutineDay'}
-            wednesday: {$ref: '#/components/schemas/RoutineDay'}
-            thursday: {$ref: '#/components/schemas/RoutineDay'}
-            friday: {$ref: '#/components/schemas/RoutineDay'}
-            saturday: {$ref: '#/components/schemas/RoutineDay'}
-            sunday: {$ref: '#/components/schemas/RoutineDay'}
-        dinnerWindow:
-          type: object
-          additionalProperties: false
-          required: [start, end]
-          properties:
-            start: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
-            end: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
-        commuteMinutes:
-          type: integer
-          minimum: 0
-          maximum: 1440
-        preparationBufferMinutes:
-          type: integer
-          minimum: 0
-          maximum: 1440
-        defaultThawHours:
-          type: number
-          minimum: 0.000001
-          maximum: 168
-          default: 24
-        notes:
-          type: string
+        externalFoodId: {type: string, format: uuid}
+        servings: {type: number, exclusiveMinimum: 0}
+        label: {type: string}
+        calories: {type: number, minimum: 0}
+        proteinG: {type: number, minimum: 0}
+        carbsG: {type: number, minimum: 0}
+        fatG: {type: number, minimum: 0}
+        fiberG: {type: number, minimum: 0}
+        sugarG: {type: number, minimum: 0}
+        sodiumMg: {type: number, minimum: 0}
+        estimated: {type: boolean}
+        timestamp: {type: string, format: date-time}
+        note: {type: string}
     WeeklyPlan:
       type: object
       additionalProperties: false
       required: [weekStart, entries]
       properties:
-        weekStart:
-          type: string
-          format: date
+        weekStart: {type: string, format: date}
         entries:
           type: array
           items:
-            $ref: '#/components/schemas/MealPlanEntry'
-    OutsideFood:
+            type: object
+            additionalProperties: false
+            required: [date, slot, source, sourceId, scaleFactor]
+            properties:
+              date: {type: string, format: date}
+              slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
+              source: {type: string, enum: [recipe, meal]}
+              sourceId: {type: string, format: uuid}
+              scaleFactor: {type: number, exclusiveMinimum: 0}
+              scheduledTime: {type: string}
+              groupId: {type: string}
+              leftoverOfGroupId: {type: string}
+              intent: {type: string, enum: [prepare, leftover]}
+              name: {type: string}
+              emoji: {type: string}
+              preparationTasks: {type: array, items: {type: object, additionalProperties: true}}
+              note: {type: string}
+    Targets:
       type: object
       additionalProperties: false
-      required: [name, servingLabel, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+      required: [calories, proteinG, carbsG, fatG, fiberG, sodiumMg]
       properties:
-        id:
-          type: string
-        barcode:
-          type: string
-        name:
-          type: string
-        brand:
-          type: string
-        emoji:
-          type: string
-        servingLabel:
-          type: string
-        calories: { type: number, minimum: 0 }
-        proteinG: { type: number, minimum: 0 }
-        carbsG: { type: number, minimum: 0 }
-        fatG: { type: number, minimum: 0 }
-        fiberG: { type: number, minimum: 0 }
-        sugarG: { type: number, minimum: 0 }
-        sodiumMg: { type: number, minimum: 0 }
-        source:
-          type: string
-        estimated:
-          type: boolean
-    MealLog:
+        calories: {type: number, exclusiveMinimum: 0}
+        proteinG: {type: number, minimum: 0}
+        carbsG: {type: number, minimum: 0}
+        fatG: {type: number, minimum: 0}
+        fiberG: {type: number, minimum: 0}
+        sodiumMg: {type: number, minimum: 0}
+        label: {type: string}
+    Preferences:
       type: object
       additionalProperties: false
       properties:
-        externalFoodId:
-          type: string
-        servings:
-          type: number
-          minimum: 0.000001
-        label:
-          type: string
-        calories: { type: number, minimum: 0 }
-        proteinG: { type: number, minimum: 0 }
-        carbsG: { type: number, minimum: 0 }
-        fatG: { type: number, minimum: 0 }
-        fiberG: { type: number, minimum: 0 }
-        sugarG: { type: number, minimum: 0 }
-        sodiumMg: { type: number, minimum: 0 }
-        note:
-          type: string
-        estimated:
-          type: boolean
-        timestamp:
-          type: string
-          format: date-time
+        allergies: {type: array, items: {type: string}}
+        dislikes: {type: array, items: {type: string}}
+        favorites: {type: array, items: {type: string}}
+        dietaryRules: {type: array, items: {type: string}}
+        planningNotes: {type: string}
+    Routine:
+      type: object
+      additionalProperties: false
+      required: [timeZone, days, dinnerWindow, commuteMinutes, preparationBufferMinutes]
+      properties:
+        timeZone: {type: string}
+        days: {type: object, additionalProperties: true}
+        dinnerWindow:
+          type: object
+          additionalProperties: false
+          required: [start, end]
+          properties: {start: {type: string}, end: {type: string}}
+        commuteMinutes: {type: integer, minimum: 0, maximum: 1440}
+        preparationBufferMinutes: {type: integer, minimum: 0, maximum: 1440}
+        defaultThawHours: {type: number, minimum: 0, maximum: 168}
+        notes: {type: string}

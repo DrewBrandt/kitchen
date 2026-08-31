@@ -36,6 +36,8 @@ The database tests run inside a transaction and roll back all fixture data:
 
 ```powershell
 npm run db:test -- --agent no
+npm run db:test:transactions -- --agent no
+npm run db:test:gpt -- --agent no
 npm run db:lint -- --agent no
 npx supabase db advisors --linked --type security --level warn --fail-on warn --agent no
 npx supabase db advisors --linked --type performance --level warn --fail-on warn --agent no
@@ -48,8 +50,27 @@ npx supabase gen types typescript --linked --schema public --agent no |
   Set-Content -LiteralPath src\database.types.ts -Encoding utf8
 ```
 
-The frontend uses a Supabase publishable key. Elevated secret keys and personal
-access tokens must never be included in browser code.
+The frontend uses a Supabase publishable key with owner-only RLS. Elevated
+secret keys and personal access tokens must never be included in browser code.
+
+## Pantry GPT Edge Function
+
+The private GPT calls `supabase/functions/pantry-api`. Its bearer credential is
+separate from Supabase client keys. Generate and deploy the credential without
+printing it, then deploy the function:
+
+```powershell
+.\tools\setup_api_secret.ps1
+npx supabase functions deploy pantry-api `
+  --no-verify-jwt `
+  --use-api `
+  --project-ref xaetuqdtnolzspfvqvja `
+  --agent no
+```
+
+The function uses the server-provided service-role credential only after its
+private integration token is verified. Never place the service-role key or GPT
+bearer token in the Vite application.
 
 ## Historical import
 

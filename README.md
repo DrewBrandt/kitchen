@@ -6,13 +6,15 @@ and nutrition application backed by Supabase PostgreSQL.
 ## Architecture
 
 - React + TypeScript + Vite frontend
-- Supabase PostgreSQL, Auth, Row Level Security, and database functions
+- Supabase PostgreSQL, Auth, Row Level Security, and transactional functions
 - Google sign-in through Supabase Auth
+- private Supabase Edge Function API for the Pantry Custom GPT
 - GitHub Pages deployment through `.github/workflows/deploy-pages.yml`
 
-Only the configured owner account can access application data. The public
-frontend contains a Supabase publishable key by design; database access is
-enforced by Row Level Security and a live authenticated Supabase session.
+Only the configured owner can access application data. The browser publishable
+key is public by design; owner-only RLS and a live authenticated session enforce
+database access. The GPT uses a separate bearer credential stored only in
+Supabase Edge Function secrets and its private Action configuration.
 
 ## Local development
 
@@ -24,23 +26,42 @@ npm run dev
 ```
 
 The production site is [DrewBrandt.github.io/kitchen](https://drewbrandt.github.io/kitchen/).
-Pushing `main` runs the test/build workflow and publishes GitHub Pages.
+Pushing `main` runs the verification/build workflow and publishes GitHub Pages.
 
 ## Database
 
-Schema changes live in `supabase/migrations/`. Validate linked database changes
-with:
+Schema changes live in `supabase/migrations/`. Validate linked changes with:
 
 ```sh
 npm run db:lint
 npm run db:test
 npm run db:test:transactions
+npm run db:test:gpt
 ```
 
-The migration chain contains one historical import migration whose name and
-columns record the original data source. It remains because applied Supabase
-migrations are immutable history; it does not connect to or depend on that
-service at runtime.
+The migration chain retains historical import metadata because applied Supabase
+migrations are immutable. No retired service is used at runtime.
+
+## Private Pantry GPT
+
+The GPT Action calls:
+
+```text
+https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
+```
+
+Create its private bearer credential with `tools/setup_api_secret.ps1`, then
+follow [docs/PANTRY_GPT_SETUP.md](docs/PANTRY_GPT_SETUP.md). The token must never
+be committed, placed in browser code, or pasted into GPT instructions, Knowledge,
+or conversations.
+
+The checked-in operator pack contains:
+
+- [GPT instructions](docs/PANTRY_GPT_INSTRUCTIONS.md)
+- [Action OpenAPI schema](docs/pantry-gpt-openapi.yaml)
+- [API contract](docs/API.md)
+
+Calendar synchronization remains planned and is not exposed to the GPT.
 
 ## Application verification
 
@@ -50,13 +71,5 @@ npm test
 npm run build
 ```
 
-## Planned integrations
-
-Google Calendar synchronization and a private Pantry GPT API remain planned
-features. Their UI/specification surfaces are retained, but no server
-integration is currently deployed for them. New implementations should use
-Supabase-backed server code and must preserve the database's transactional and
-owner-only access guarantees.
-
-See `docs/FEATURE_SPECIFICATION.md` for product behavior and `docs/SUPABASE.md`
-for database setup.
+See [docs/FEATURE_SPECIFICATION.md](docs/FEATURE_SPECIFICATION.md) for product
+behavior and [docs/SUPABASE.md](docs/SUPABASE.md) for database/deployment setup.

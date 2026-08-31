@@ -1,4 +1,8 @@
-# Google Calendar integration (planned)
+# Legacy Google Calendar integration
+
+Calendar tools are not exposed by the Supabase Pantry GPT API. Reintroducing
+Calendar requires a separate Supabase-native OAuth, encrypted credential, and
+reconciliation design.
 
 Calendar synchronization remains a planned feature. Its UI is intentionally
 visible but disabled until a new server-side implementation exists.

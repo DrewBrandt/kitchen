@@ -1,12 +1,15 @@
-# Planned Pantry API
+# Pantry GPT API
 
-> This contract is retained for future work. No private Pantry API is currently
-> deployed; the browser application talks directly to owner-protected Supabase
-> tables and database functions.
+The Pantry GPT API is a Supabase Edge Function backed by PostgreSQL. It is the
+stable boundary between plain-English requests and Pantry data: the GPT resolves
+intent and ambiguity, while the API accepts only structured JSON and performs
+validated database operations.
 
-The API is the durable boundary between plain-English requests and pantry data. Codex interprets the request, checks uncertainties with the user when necessary, converts it to this structured contract, and sends it with a private bearer token.
+```text
+https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
+```
 
-The API never accepts arbitrary natural language. This keeps interpretation separate from inventory mutation and makes every write reviewable.
+The complete Custom GPT contract is `docs/pantry-gpt-openapi.yaml`.
 
 ## Authentication
 
@@ -16,571 +19,179 @@ Every request uses:
 Authorization: Bearer <PANTRY_API_TOKEN>
 ```
 
-The future server must store this token in its own secret environment. Never
-store it in the browser client or commit it to Git.
+Generate and deploy the credential with `tools/setup_api_secret.ps1`. The script
+sends it to Supabase without printing it and stores a matching DPAPI-encrypted
+copy under the current Windows account. The plaintext belongs only in the Custom
+GPT Action authentication field—not browser code, Git, logs, GPT instructions,
+Knowledge files, or conversations.
 
-Supabase Auth and PostgreSQL Row Level Security own interactive Google-account
-authorization. This API must not provide a route that changes the owner.
+The Edge Function verifies this token before creating a server-only Supabase
+client. Its service-role key comes from the Edge Function environment and is
+never sent to ChatGPT.
 
-## Log food that does not use inventory
+## Transaction boundaries
 
-Restaurant meals, takeout, drinks, and packaged snacks can be added directly to
-the nutrition log without changing any inventory lots:
+Simple reads use Supabase's Data API. Compound writes call narrowly scoped
+PostgreSQL functions:
 
-```http
-POST /v1/meals
-Content-Type: application/json
+- grocery hauls insert all lots or none;
+- reconciliation records adjustment events and replacement lots together;
+- recipes and ingredients are replaced together;
+- weekly plans and generated groceries are rebuilt together;
+- preparation deducts ingredients and creates a prepared lot together;
+- consumption deducts FEFO lots and records nutrition together;
+- outside-food creation updates its food and product together.
 
-{
-  "label": "Restaurant cheeseburger",
-  "note": "Estimated from the restaurant menu",
-  "calories": 720,
-  "proteinG": 38,
-  "carbsG": 45,
-  "fatG": 42,
-  "fiberG": 3,
-  "sugarG": 9,
-  "sodiumMg": 1280,
-  "estimated": true,
-  "timestamp": "2026-08-23T19:30:00-04:00"
-}
-```
+GPT-only functions are executable by `service_role`, not browser roles. Owner RLS
+continues to protect direct browser access.
 
-Only `label` and at least one positive nutrition value are required. If
-`timestamp` is omitted, the server records the current time.
+## Routes
 
-## Save and reuse an outside food
+Reads:
 
-Restaurant orders and packaged snacks live in `external_foods`, entirely
-separate from pantry definitions and inventory lots:
-
-Search before saving so an existing definition can be reused without loading
-the complete pantry snapshot:
-
-```http
-GET /v1/external-foods?q=chicken%20sandwich&brand=Chick-fil-A
-```
-
-Omit both query parameters to list all saved outside foods. `q` partially
-matches the ID, name, brand, or serving label; `brand` is an exact normalized
-match.
-
-```http
-POST /v1/external-foods
-Content-Type: application/json
-
-{
-  "id": "chick-fil-a-chicken-sandwich",
-  "name": "Chicken Sandwich",
-  "brand": "Chick-fil-A",
-  "emoji": "🥪",
-  "servingLabel": "1 sandwich",
-  "calories": 420,
-  "proteinG": 29,
-  "carbsG": 41,
-  "fatG": 18,
-  "fiberG": 1,
-  "sugarG": 6,
-  "sodiumMg": 1460,
-  "source": "Restaurant nutrition page",
-  "estimated": false
-}
-```
-
-After it is saved, log any number of servings without resending nutrition:
-
-```http
-POST /v1/meals
-Content-Type: application/json
-
-{
-  "externalFoodId": "chick-fil-a-chicken-sandwich",
-  "servings": 1,
-  "timestamp": "2026-08-23T13:00:00-04:00"
-}
-```
-
-Neither request reads or changes inventory lots.
-
-Each call to `POST /v1/meals` creates one history event and retains the
-`externalFoodId` reference. Log repeated physical items with separate calls and
-`servings: 1` unless the user explicitly wants a grouped entry.
-
-## Consume a saved recipe
-
-This route deducts the recipe ingredients from the earliest-expiring inventory
-lots and records one nutrition-history event in the same PostgreSQL transaction:
-
-```http
-POST /v1/consume/recipe
-Content-Type: application/json
-
-{
-  "recipeId": "butter-chicken",
-  "servings": 1,
-  "timestamp": "2026-08-23T19:30:00-04:00",
-  "note": "Dinner"
-}
-```
-
-`timestamp`, `label`, and `note` are optional. The write fails without changing
-anything when a recipe is unknown or inventory is insufficient.
-
-## Consume an individual pantry item
-
-Use this for things such as one yogurt or a measured glass of milk. It deducts
-inventory and logs nutrition together:
-
-```http
-POST /v1/consume/inventory
-Content-Type: application/json
-
-{
-  "food": "Lucerne 2% milk",
-  "amount": 2.25,
-  "unit": "cup",
-  "label": "Tall glass of milk"
-}
-```
-
-`foodId` can be used instead of `food`. The requested unit must already exist
-in that food's conversion list.
-
-## Save daily nutrition targets
-
-Targets are private, editable, and used by the Food Log percentage displays:
-
-```http
-POST /v1/targets
-Content-Type: application/json
-
-{
-  "calories": 2500,
-  "proteinG": 130,
-  "carbsG": 300,
-  "fatG": 83,
-  "fiberG": 38,
-  "sodiumMg": 2300,
-  "label": "Age 28 · 6 ft · 180 lb · light activity · gradual loss"
-}
-```
-
-Calories and macronutrients are planning targets; sodium is displayed as a
-limit. Total sugar intentionally has no percentage because nutrition labels do
-not distinguish all naturally occurring sugar from added sugar consistently.
-
-## Save food preferences and allergies
-
-This private profile is returned with inventory reads so apps and Pantry GPT can
-apply it before suggesting recipes or planning meals:
-
-```http
-POST /v1/preferences
-Content-Type: application/json
-
-{
-  "allergies": ["Tree nuts"],
-  "dislikes": ["Raw tomatoes"],
-  "favorites": ["Indian food", "Cheeseburgers"],
-  "dietaryRules": ["Limit red meat to twice per week"],
-  "planningNotes": "Prefer simple weeknight dinners and planned leftovers."
-}
-```
-
-All arrays are optional and replace their previous values. Allergies are treated
-as hard safety constraints by the Pantry GPT instructions.
-
-## Save the personal routine
-
-`GET /v1/routine` reads the private routine used for schedule-aware planning.
-`POST /v1/routine` replaces it. Wake and bedtime are stored for every weekday;
-all times use local 24-hour `HH:mm` values in the named IANA time zone.
-
-```json
-{
-  "timeZone": "America/New_York",
-  "days": {
-    "monday": {"wakeTime": "07:00", "bedTime": "23:00"},
-    "tuesday": {"wakeTime": "07:00", "bedTime": "23:00"},
-    "wednesday": {"wakeTime": "07:00", "bedTime": "23:00"},
-    "thursday": {"wakeTime": "07:00", "bedTime": "23:00"},
-    "friday": {"wakeTime": "07:00", "bedTime": "23:30"},
-    "saturday": {"wakeTime": "08:00", "bedTime": "23:30"},
-    "sunday": {"wakeTime": "08:00", "bedTime": "23:00"}
-  },
-  "dinnerWindow": {"start": "18:00", "end": "20:30"},
-  "commuteMinutes": 30,
-  "preparationBufferMinutes": 30,
-  "defaultThawHours": 24,
-  "notes": "Avoid cooking after 9 PM."
-}
-```
-
-## Read current inventory
-
-```http
+```text
 GET /v1/inventory
-```
-
-Returns compact stock `items`. Each item contains the canonical food ID and name,
-quantity mode, base/display units, total quantity in the base unit, and its
-positive lots with location, best-by date, and optional product identity. Items
-are ordered for the Waugh Chapel Safeway and include their grocery section,
-store-order number, optional exact aisle note, and meal-planning role (`main`,
-`supporting`, or `staple`). It
-does not include full food or product definitions, history, targets, preferences,
-recipes, plans, groceries, or prepared foods. Use the focused endpoints below
-for that context.
-
-## Find a food definition
-
-```http
-GET /v1/foods?q=white%20rice
-GET /v1/foods/{id}
-```
-
-The search matches canonical IDs, names, and aliases and returns the complete
-definition, including supported units, conversions, and nutrition. Omit `q` only
-when the complete definition list is actually needed.
-
-## Find a recipe
-
-```http
-GET /v1/recipes?q=orange%20chicken
-GET /v1/recipes/{id}
-```
-
-The search matches recipe IDs and names. An exact-ID read avoids transferring
-the complete recipe collection.
-
-## Read prepared foods
-
-```http
+GET /v1/foods?q=<optional search>
+GET /v1/foods/{uuid}
+GET /v1/recipes?q=<optional search>
+GET /v1/recipes/{uuid}
 GET /v1/prepared-batches
-```
-
-Returns only prepared batches with servings remaining.
-
-## Read nutrition targets and food preferences
-
-```http
+GET /v1/external-foods?q=<optional search>&brand=<optional brand>
+GET /v1/history?days=30
+GET /v1/plans
 GET /v1/targets
 GET /v1/preferences
+GET /v1/routine
 ```
 
-These return the small private settings documents independently of inventory.
+Writes:
 
-## Read meal-planning history
-
-```http
-GET /v1/history?days=30
-```
-
-Returns active food-log events in the requested 1–365 day range plus a compact
-planning summary: distinct meal count, foods repeated three or more times, the
-most repeated foods, their last-eaten dates, and recent meal names. This is the
-preferred context for requests such as “plan my week” because it lets Codex
-avoid recent defaults without downloading the entire pantry. Undone events are
-excluded.
-
-## Read the current plan and grocery list
-
-```http
-GET /v1/plans
-```
-
-Returns dated meal-plan entries and the current grocery list. This is the
-preferred read before changing a plan because manually added groceries and
-checked shopping state are durable.
-
-Plan-generated grocery items include `first_needed_date`, the first planned
-meal date on which chronological ingredient demand exceeds current inventory.
-This field is intended for shopping deadlines and calendar synchronization;
-manual grocery items leave it unset.
-
-## Replace one week’s meal plan
-
-```http
-POST /v1/plans
-Content-Type: application/json
-
-{
-  "weekStart": "2026-08-24",
-  "entries": [
-    {
-      "date": "2026-08-24",
-      "slot": "dinner",
-      "source": "recipe",
-      "sourceId": "butter-chicken",
-      "groupId": "monday-dinner",
-      "intent": "prepare",
-      "servings": 4,
-      "note": "Use the naan"
-    },
-    {
-      "date": "2026-08-26",
-      "slot": "lunch",
-      "source": "recipe",
-      "sourceId": "butter-chicken",
-      "groupId": "wednesday-lunch",
-      "leftoverOfGroupId": "monday-dinner",
-      "intent": "leftover",
-      "servings": 1
-    }
-  ]
-}
-```
-
-The route validates every entry, replaces only the requested seven-day range,
-totals ingredients from referenced recipes, scales them to planned servings,
-subtracts positive inventory lots, and rebuilds plan-generated grocery items.
-Manual grocery items and checked state for unchanged foods are preserved.
-
-`source` may be `recipe`, `meal`, `external`, or `custom`. Recipe and external
-entries use `sourceId`; custom entries require `name`. Give recipe components
-the same `groupId` to display them as one meal. `intent` defaults to `prepare`;
-use `leftover` to retain recipe identity without adding grocery demand.
-Set `leftoverOfGroupId` to the earlier meal's `groupId` to link future
-leftovers directly to that planner meal before it has been cooked. The linked
-entries keep their underlying recipe components; no new saved recipe or meal
-template is created.
-
-## Add a manual grocery item
-
-```http
-POST /v1/grocery-items
-Content-Type: application/json
-
-{
-  "name": "Coffee filters",
-  "quantityLabel": "1 box"
-}
-```
-
-Manual items remain on the list independently of meal-plan recalculation.
-
-## Calendar synchronization
-
-Planning writes from the web app and `POST /v1/plans` will atomically update a
-planning-sync marker. A future server-side reconciler then updates only
-events carrying Pantry's private managed-event properties. A plan write remains
-successful when Google is temporarily unavailable.
-
-```http
-GET /v1/calendar/status
-GET /v1/calendar/calendars
-GET /v1/calendar/agenda?from=2026-09-01T00:00:00-04:00&to=2026-09-08T00:00:00-04:00
-POST /v1/calendar/calendars
-POST /v1/calendar/sync
-DELETE /v1/calendar/events
-```
-
-The status response never contains OAuth credentials. The POST route requests
-an idempotent reconciliation. The DELETE route requests removal of
-Pantry-managed events only and disables future synchronization; it cannot
-delete unrelated Calendar events.
-
-The OAuth connection keeps write access confined to the dedicated Pantry
-Planner calendar and separately requests read-only access to existing events.
-The calendar-selection route controls which readable calendars appear in the
-agenda. Agenda requests are bounded to 45 days and return event summary,
-description, location, start/end, and all-day status without exposing OAuth
-credentials. Reconnect once after upgrading from the earlier write-only scope.
-
-Recipe writes may include explicit preparation reminders:
-
-```json
-{
-  "preparationRules": [
-    {
-      "id": "thaw-chicken",
-      "kind": "thaw",
-      "label": "Move chicken to the refrigerator",
-      "leadHours": 24
-    }
-  ]
-}
-```
-
-The web recipe editor uses the equivalent line format
-`24 | thaw | Move chicken to the refrigerator`.
-
-One meal-plan entry may instead carry an exact time and plan-specific task:
-
-```json
-{
-  "date": "2026-09-03",
-  "slot": "dinner",
-  "scheduledTime": "20:15",
-  "source": "recipe",
-  "sourceId": "roast-chicken",
-  "servings": 2,
-  "preparationTasks": [
-    {
-      "id": "thaw-chicken",
-      "kind": "thaw",
-      "label": "Move chicken to the refrigerator",
-      "leadHours": 24,
-      "durationMinutes": 5
-    }
-  ]
-}
-```
-
-For a thaw task, `leadHours` defaults to 24 if omitted. Plan-specific tasks are
-preferred when the action depends on the current inventory lot; they do not
-modify the saved recipe.
-
-## Reconcile existing inventory
-
-Use this route for corrections where the submitted lots replace all current
-lots for the named foods. The entire request is validated before the atomic
-write. An empty `lots` array removes an item from inventory, while
-`deleteFoodIds` also removes obsolete food definitions.
-
-```http
+```text
 POST /v1/inventory
-Content-Type: application/json
-
-{
-  "source": "Pantry photo reconciliation",
-  "displayUnits": {
-    "butter": "stick",
-    "baking-powder": "tablespoon"
-  },
-  "foods": [
-    {
-      "id": "egg",
-      "name": "Eggs",
-      "emoji": "🥚",
-      "quantityMode": "counted",
-      "baseUnit": "each",
-      "defaultLocation": "fridge",
-      "conversions": [{"unit": "each", "symbol": "eggs", "baseAmount": 1}]
-    }
-  ],
-  "replacements": [
-    {
-      "foodId": "egg",
-      "lots": [
-        {"amount": 10, "unit": "each", "location": "fridge", "bestBy": "2026-08-09"},
-        {"amount": 16, "unit": "each", "location": "fridge", "bestBy": "2026-09-20"}
-      ]
-    }
-  ],
-  "deleteFoodIds": ["obsolete-food"]
-}
+POST /v1/foods
+POST /v1/products
+POST /v1/groceries
+POST /v1/recipes
+POST /v1/prepare/recipe
+POST /v1/consume/prepared
+POST /v1/consume/inventory
+POST /v1/external-foods
+POST /v1/meals
+POST /v1/plans
+POST /v1/grocery-items
+POST /v1/targets
+POST /v1/preferences
+POST /v1/routine
 ```
 
-## Define or update a food
+Food lookup returns supported measurement units and products. Inventory returns
+exact `foodId`, `productId`, and `lotId` values. The GPT must reuse these IDs.
 
-```http
-POST /v1/foods
-Content-Type: application/json
+## Definitions and groceries
 
+Create a canonical food before its branded product:
+
+```json
 {
-  "id": "butter",
-  "name": "Butter",
-  "emoji": "🧈",
-  "quantityMode": "measured",
-  "baseUnit": "gram",
-  "defaultLocation": "fridge",
-  "grocerySection": "dairyFrozenMeals",
-  "ingredientRole": "staple",
-  "storeAisle": "",
-  "conversions": [
-    {"unit": "gram", "symbol": "g", "baseAmount": 1},
-    {"unit": "tablespoon", "symbol": "tbsp", "baseAmount": 14.175},
-    {"unit": "cup", "symbol": "cups", "baseAmount": 226.8},
-    {"unit": "stick", "symbol": "sticks", "baseAmount": 113.4}
-  ],
+  "name": "Whole milk",
+  "measureStyle": "volume",
+  "displayUnit": "fl oz",
+  "gPerFlOz": 30.6,
+  "groceryCategory": "Eggs, yogurt, cheese & dough",
+  "ingredientRole": "supporting",
   "nutrition": {
-    "basisBaseAmount": 14.175,
-    "calories": 100,
-    "proteinG": 0,
-    "carbsG": 0,
-    "fatG": 11,
+    "basisQuantity": 240,
+    "calories": 149,
+    "proteinG": 7.7,
+    "carbsG": 11.7,
+    "fatG": 7.9,
     "fiberG": 0,
-    "sugarG": 0,
-    "sodiumMg": 90,
+    "sugarG": 12.3,
+    "sodiumMg": 105,
     "source": "Package label",
     "estimated": false
   }
 }
 ```
 
-## Add a grocery haul
+`POST /v1/products` accepts `foodId`, name, `packageQuantity`, and
+`packageUnit`. Package and serving quantities are converted to the food's base
+quantity on the server.
 
-Foods are canonical recipe ingredients. Branded items are stored separately in
-`products` and map back to a canonical `foodId`. Create or update a product with
-`POST /v1/products`; grocery items may then identify it with `productId`, an
-exact product name or alias, or a barcode. Product package conversions take
-precedence over generic food conversions.
+Add reviewed lots atomically:
 
-The entire request is validated before any lots are created.
-
-```http
-POST /v1/groceries
-Content-Type: application/json
-
+```json
 {
-  "source": "Sunday grocery run",
-  "items": [
-    {"food": "Eggs", "amount": 12, "unit": "each", "location": "fridge", "bestBy": "2026-09-08"},
-    {"food": "Milk", "amount": 1, "unit": "liter", "location": "fridge", "bestBy": "2026-08-30"}
-  ]
+  "source": "Safeway receipt",
+  "items": [{
+    "productId": "<product uuid>",
+    "quantity": 1,
+    "unit": "gal",
+    "location": "fridge",
+    "bestBy": "2026-09-12",
+    "totalCost": 4.99
+  }]
 }
 ```
 
-Unknown foods and unsupported units return `422` without a partial write. Codex should define a new food first or ask the user for the missing package amount.
+The unit may be a returned unit UUID, full name, or short name.
 
-## Save a recipe
+## Cooking and eating
 
-```http
-POST /v1/recipes
-Content-Type: application/json
+Cooking and eating are separate. `POST /v1/prepare/recipe` deducts raw
+ingredients FEFO and creates a prepared batch:
 
-{
-  "name": "Soft Scrambled Eggs",
-  "emoji": "🍳",
-  "servings": 1,
-  "portions": [
-    {"name": "Large plate", "servings": 1.5}
-  ],
-  "sourceUrl": "https://example.com/original-recipe",
-  "nutritionOverride": {
-    "calories": 600,
-    "proteinG": 8,
-    "carbsG": 90,
-    "fatG": 24,
-    "fiberG": 3,
-    "sugarG": 55,
-    "sodiumMg": 800
-  },
-  "ingredients": [
-    {"food": "Eggs", "amount": 2, "unit": "each"},
-    {"food": "Butter", "amount": 0.5, "unit": "tablespoon"}
-  ],
-  "instructions": ["Beat the eggs.", "Cook gently in butter."]
-}
+```json
+{"recipeId":"<recipe uuid>","servings":4,"location":"fridge","bestBy":"2026-09-04"}
 ```
 
-`nutritionOverride` is optional and represents the totals for the recipe's
-entire prepared yield. When present, recipe consumption scales these totals by
-the requested servings instead of adding ingredient nutrition. Inventory
-deduction still uses every ingredient. This is useful for packaged mixes whose
-label already includes the eggs, oil, or other preparation ingredients.
+Eat from its returned lot ID using `POST /v1/consume/prepared`:
 
-When importing an online recipe, retain its source URL and paraphrase instructions unless the source explicitly permits redistribution.
+```json
+{"batchId":"<prepared lot uuid>","servings":1,"timestamp":"2026-08-31T19:00:00-04:00"}
+```
 
-## Prepared food and combined meals
+Quick use of one food goes through `POST /v1/consume/inventory`:
 
-Cooking is a two-stage workflow. `POST /v1/prepare/recipe` deducts ingredients
-and creates a prepared batch. `POST /v1/consume/prepared` logs nutrition and
-reduces that batch's remaining servings. Use `POST /v1/prepared-batches` for a
-manual leftover or ready-made item that should not retroactively deduct raw
-inventory.
+```json
+{"foodId":"<food uuid>","quantity":1,"unit":"ct","label":"Apple"}
+```
 
-`POST /v1/meal-templates` stores a dinner as two or more component recipes, such
-as pork tenderloin, fried potatoes, and roasted carrots. Components remain
-separate prepared batches even when they are planned and eaten as one meal.
+All three operations roll back completely on insufficient inventory.
+
+## Outside food
+
+Search before saving. Saved outside foods are reusable products with nutrition
+per consumed unit. Log one through `POST /v1/meals`:
+
+```json
+{"externalFoodId":"<outside product uuid>","servings":1}
+```
+
+A one-off unidentified meal may instead provide a label and nutrition totals.
+
+## Planning and settings
+
+`POST /v1/plans` replaces exactly the seven dates beginning at `weekStart`, then
+rebuilds unchecked generated grocery shortages while preserving manual items.
+Recipe and meal entries use `sourceId` and `scaleFactor`.
+
+`POST /v1/grocery-items` adds a manual item. The target, preference, and routine
+POST routes replace their respective singleton settings.
+
+Calendar is not exposed yet. Planning uses the saved routine and any conflicts
+provided in conversation; the GPT must say external calendar conflicts were not
+checked.
+
+## Errors and testing
+
+- `401`: missing or invalid integration bearer token.
+- `404`: route or resource does not exist.
+- `422`: validation or a database constraint rejected the request.
+- `500`: unexpected server failure; never claim that a write succeeded.
+
+Test without exposing the token:
+
+```powershell
+.\tools\pantry_api.ps1 -Method GET -Path /v1/inventory
+```
