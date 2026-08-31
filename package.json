@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "check": "tsc -b --pretty false"
+    "check": "tsc -b --pretty false",
+    "db:push": "supabase db push",
+    "db:lint": "supabase db lint --linked --schema public --level warning --fail-on error",
+    "db:test": "supabase db query --linked --file supabase/tests/database.sql"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -24,6 +27,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "jsdom": "29.0.0",
+    "supabase": "2.116.0",
     "vitest": "latest"
   }
 }

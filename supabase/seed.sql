@@ -1,0 +1,2 @@
+-- Lookup values required by the application are installed by migrations.
+-- Keep this file free of personal or production data.

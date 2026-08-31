@@ -2180,9 +2180,12 @@ class _PlanningPageState extends State<_PlanningPage> {
   @override
   Widget build(BuildContext context) {
     final end = weekStart.add(const Duration(days: 6));
+    final endExclusive = weekStart.add(const Duration(days: 7));
     final meals = widget.store.plannedMeals
         .where(
-          (meal) => !meal.date.isBefore(weekStart) && !meal.date.isAfter(end),
+          (meal) =>
+              !meal.date.isBefore(weekStart) &&
+              meal.date.isBefore(endExclusive),
         )
         .toList();
     final groceries = widget.store.groceryItems
