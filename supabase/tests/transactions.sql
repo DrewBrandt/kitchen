@@ -120,6 +120,10 @@ insert into transaction_test_results select is(
   'Prepared inventory decreases by the consumed quantity'
 );
 
+-- Isolate the date under test from the owner's live plan. The surrounding
+-- transaction rolls this delete back with every other fixture change.
+delete from meal_plans where plan_date = current_date;
+
 insert into meal_plans(plan_date, daypart, recipe, scale_factor, status)
 values (current_date, 'dinner', '94000000-0000-0000-0000-000000000001', 2, 'planned');
 
