@@ -27,4 +27,26 @@ describe('Pantry GPT operator pack', () => {
     }
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
+
+  it('exposes saveOutsideFood inputs directly to the Action importer', () => {
+    const operation = schema.paths['/v1/external-foods'].post;
+    const bodySchema = operation.requestBody.content['application/json'].schema;
+
+    expect(operation.requestBody.$ref).toBeUndefined();
+    expect(bodySchema.$ref).toBeUndefined();
+    expect(bodySchema.type).toBe('object');
+    expect(bodySchema.required).toEqual([
+      'name',
+      'calories',
+      'proteinG',
+      'carbsG',
+      'fatG',
+      'fiberG',
+      'sugarG',
+      'sodiumMg',
+    ]);
+    expect(Object.keys(bodySchema.properties)).toEqual(
+      expect.arrayContaining(['name', 'brand', 'barcode', 'emoji', 'source', 'estimated']),
+    );
+  });
 });

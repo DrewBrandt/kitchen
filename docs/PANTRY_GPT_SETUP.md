@@ -58,9 +58,13 @@ Run these in Preview before relying on writes:
 2. `Search my saved outside foods for Chick-fil-A. Do not create anything.`
 3. `Show my current meal plan and grocery list.`
 4. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
+5. Inspect `saveOutsideFood` in the Action tester and confirm its request body
+   lists `name`, all seven nutrition values, and the optional metadata fields.
 
 The first three should call read Actions. The fourth must stop before writing.
-Then explicitly confirm the test write, verify it in the web app, and remove it.
+The fifth catches an imported empty `{}` tool contract before it can reach the
+database. Then explicitly confirm the test write, verify it in the web app, and
+remove it.
 
 `401` means the Action bearer value does not match the Supabase secret. `422`
 means validation rejected the request without a partial compound write.
