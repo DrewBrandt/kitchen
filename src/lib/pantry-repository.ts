@@ -55,6 +55,8 @@ const nutrientFields = {
 const nutritionValues = (row: Partial<Record<(typeof nutrientFields)[NutrientName], number | null>>): NutritionValues =>
   Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, Number(row[field] ?? 0)])) as NutritionValues;
 
+const emptyNutrition = (): NutritionValues => ({ Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 });
+
 const pluralize = (name: string, plural: string | null | undefined, quantity: number) => {
   if (Math.abs(quantity - 1) < 0.001) return name;
   if (plural) return plural;
@@ -205,6 +207,30 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
   const recipeRows = recipesResult.data ?? [];
   const unitRows = unitsResult.data ?? [];
+  const recipeNutrition = new Map<string, NutritionValues>();
+  for (const recipe of recipeRows) {
+    const totals = emptyNutrition();
+    const recipeIngredients = (ingredientsResult.data ?? []).filter((ingredient) => ingredient.recipe === recipe.id);
+    for (const ingredient of recipeIngredients) {
+      const food = foods.get(ingredient.ingredient);
+      const unit = units.get(ingredient.unit);
+      if (!food || !unit) continue;
+      const product = ingredient.pinned_product ? products.get(ingredient.pinned_product) : undefined;
+      const quantity = toFoodBase(food, Number(ingredient.qty), unit);
+      for (const [label, field] of Object.entries(nutrientFields) as Array<[NutrientName, (typeof nutrientFields)[NutrientName]]>) {
+        const sourceValue = product?.[field] ?? food[field];
+        const basis = product?.[field] !== null && product?.[field] !== undefined ? product.nutrition_basis_qty : food.nutrition_basis_qty;
+        if (sourceValue !== null && sourceValue !== undefined && Number(basis) > 0) totals[label] += quantity * Number(sourceValue) / Number(basis);
+      }
+    }
+    const overrideBasis = Number(recipe.override_basis_qty ?? 0);
+    const servings = Number(recipe.servings);
+    for (const [label, field] of Object.entries(nutrientFields) as Array<[NutrientName, (typeof nutrientFields)[NutrientName]]>) {
+      const override = recipe[`override_${field}` as keyof typeof recipe];
+      if (override !== null && override !== undefined && overrideBasis > 0) totals[label] = Number(override) / overrideBasis * servings;
+    }
+    recipeNutrition.set(recipe.id, totals);
+  }
   const costForFoodQuantity = (foodId: string, quantity: number, pinnedProduct: string | null): CostValue => {
     let remaining = quantity;
     let total = 0;
@@ -234,8 +260,9 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const recipes = recipeRows.map((recipe) => {
     const recipeIngredients = (ingredientsResult.data ?? []).filter((ingredient) => ingredient.recipe === recipe.id);
     const steps = Array.isArray(recipe.instructions) ? recipe.instructions.map(String) : [];
-    const kcal = Number(recipe.override_kcal ?? 0);
-    const protein = Number(recipe.override_protein_g ?? 0);
+    const nutrition = recipeNutrition.get(recipe.id) ?? emptyNutrition();
+    const kcal = nutrition.Calories;
+    const protein = nutrition.Protein;
     const recipePreps = (prepsResult.data ?? []).filter((prep) => prep.recipe === recipe.id);
     const easeRatings = recipePreps.map((prep) => prep.ease_rating).filter((rating) => rating > 0);
     const tasteRatings = recipePreps.map((prep) => prep.taste_rating).filter((rating) => rating > 0);
@@ -272,7 +299,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       promptForFeedback: recipe.prompt_for_feedback,
       ingredientText: recipeIngredients.map((ingredient) => `${Number(ingredient.qty)} ${units.get(ingredient.unit)?.short_name ?? ''} ${foods.get(ingredient.ingredient)?.name ?? 'Ingredient'}`).join('\n'),
       instructionText: steps.join('\n'),
-      nutritionValues: { Calories: kcal, Protein: protein, Carbs: Number(recipe.override_carbs_g ?? 0), Fat: Number(recipe.override_fat_g ?? 0), Fiber: Number(recipe.override_fiber_g ?? 0), Sodium: Number(recipe.override_sodium_mg ?? 0) },
+      nutritionValues: nutrition,
       cookable: recipeIngredients.every((ingredient) => {
         const unit = units.get(ingredient.unit);
         const food = foods.get(ingredient.ingredient);
@@ -532,12 +559,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     foods: dayLogs.map((log) => ({ label: log.label, values: nutritionValues(log) })),
   }));
   const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey).reduce((totals, plan) => {
-    const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
+    const recipe = plan.recipe ? recipeCosts.get(plan.recipe) : undefined;
     if (!recipe) return totals;
-    const values = nutritionValues({ kcal: recipe.override_kcal, protein_g: recipe.override_protein_g, carbs_g: recipe.override_carbs_g, fat_g: recipe.override_fat_g, fiber_g: recipe.override_fiber_g, sodium_mg: recipe.override_sodium_mg });
+    const values = recipe.nutritionValues;
     for (const label of Object.keys(totals) as NutrientName[]) totals[label] += values[label] * Number(plan.scale_factor);
     return totals;
-  }, { Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 } as NutritionValues);
+  }, emptyNutrition());
 
   return {
     inventorySections,

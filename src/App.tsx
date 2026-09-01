@@ -323,7 +323,7 @@ function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, pinnedRecip
           })}
         </nav>
       ))}
-      {pinnedRecipes.length > 0 && <nav className="nav-group pinned-recipes" aria-label="Pinned cooking"><div className="nav-label">On deck</div>{pinnedRecipes.slice(0, 4).map((recipe) => <button className="nav-item" key={recipe.id} onClick={() => onPinnedRecipe(recipe)}><span className="pin-emoji">{recipe.emoji}</span><span>{recipe.name}</span><small>Open</small></button>)}</nav>}
+      {pinnedRecipes.length > 0 && <nav className="nav-group pinned-recipes" aria-label="Pinned cooking"><div className="nav-label">On deck</div>{pinnedRecipes.slice(0, 4).map((recipe) => <button className="nav-item" key={recipe.id} title={recipe.name} onClick={() => onPinnedRecipe(recipe)}><span className="pin-emoji">{recipe.emoji}</span><span className="nav-item-label">{recipe.name}</span><small>Open</small></button>)}</nav>}
       <div className="sidebar-spacer" />
       <button className="profile-row" aria-label={`${ownerName} — Routine & food profile`} onClick={onProfile}>
         <span className="avatar">{initials}</span><span><strong>{ownerName}</strong><small>Routine & food profile</small></span><Settings2 />
@@ -367,12 +367,14 @@ function SectionTitle({ title, subtitle, action, onAction }: { title: string; su
   );
 }
 
-function Progress({ value, color }: { value: number; color?: string }) {
-  return <div className="progress"><span style={{ width: `${Math.min(value, 100)}%`, background: color }} /></div>;
+function Progress({ value, projected = 0, color }: { value: number; projected?: number; color?: string }) {
+  const actual = Math.min(Math.max(value, 0), 100);
+  const plan = Math.min(Math.max(projected, 0), Math.max(0, 100 - actual));
+  return <div className="progress"><span style={{ width: `${actual}%`, background: color }} />{plan > 0 && <i className="projection-segment" style={{ width: `${plan}%` }} />}</div>;
 }
 
 function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, undo }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void; notify: Notify; onConsumePrepared?: (id: string) => Promise<string | null>; undo: Reversals }) {
-  const { foodLog, inventorySections, nutrients, preparedLots, recipes, settings, weekDays } = usePantryData();
+  const { foodLog, inventorySections, nutrients, preparedLots, recipes, settings, todayProjection, weekDays } = usePantryData();
   const todayIndex = weekDays.findIndex((day) => day.today);
   const relevantDays = todayIndex >= 0 ? weekDays.slice(todayIndex) : weekDays;
   const nextMeal = relevantDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day }))).find(Boolean);
@@ -392,7 +394,7 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
           <div className="headline-metrics">
             <div className="headline-metric">
               <div className="metric-total"><strong>{nutrients[0]?.value ?? '0'}</strong><span>{nutrients[0]?.target ?? ''}</span></div>
-              <Progress value={nutrients[0]?.pct ?? 0} />
+              <Progress value={nutrients[0]?.pct ?? 0} projected={todayProjection.Calories / Math.max(settings.calories, 1) * 100} />
               <em>{Math.max(0, 100 - (nutrients[0]?.pct ?? 0))}% LEFT</em>
             </div>
             <div className="headline-metric spend-metric">
@@ -401,7 +403,8 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
               <em>{usd(Math.max(0, dailyBudget - spentToday))} LEFT</em>
             </div>
           </div>
-          <div className="macro-list">{nutrients.slice(1, 6).map((row) => <MacroRow key={row.label} {...row} />)}</div>
+          {Object.values(todayProjection).some(Boolean) && <div className="plan-projection-key"><i className="projection-swatch" /> Includes today’s planned meals</div>}
+          <div className="macro-list">{nutrients.slice(1, 6).map((row) => <MacroRow key={row.label} {...row} projected={todayProjection[row.label as keyof typeof todayProjection] / Math.max(Number(row.target.replace(/[^\d.]/g, '')), 1) * 100} />)}</div>
         </Card>
         <Card className="next-card">
           <div className="card-kicker"><span>NEXT UP</span><button onClick={() => onNavigate('week')}>Week</button></div>
@@ -436,8 +439,8 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
   );
 }
 
-function MacroRow({ label, value, target, pct, color }: { label: string; value: string; target: string; pct: number; color: string }) {
-  return <div className="macro-row"><div><span>{label}</span><strong>{value}</strong><small>{target}</small></div><Progress value={pct} color={color} /></div>;
+function MacroRow({ label, value, target, pct, projected, color }: { label: string; value: string; target: string; pct: number; projected?: number; color: string }) {
+  return <div className="macro-row"><div><span>{label}</span><strong>{value}</strong><small>{target}</small></div><Progress value={pct} projected={projected} color={color} /></div>;
 }
 
 function PreparedRow({ emoji, name, where, servings, due, progress, costPerServing, costIsEstimated, onEat }: { emoji: string; name: string; where: string; servings: string; due: string; progress: number; costPerServing: number | null; costIsEstimated: boolean; onEat: () => void }) {
