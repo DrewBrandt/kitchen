@@ -30,7 +30,28 @@ paths:
       operationId: saveFoodDefinition
       summary: Create or update a canonical food
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Food'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, measureStyle, displayUnit]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+                plural: {type: string}
+                emoji: {type: string}
+                measureStyle: {type: string, enum: [discrete, weight, volume]}
+                displayUnit: {type: string, description: Unit UUID, full name, or short name.}
+                groceryCategory: {type: string}
+                ingredientRole: {type: string, enum: [main, supporting, staple]}
+                storeAisle: {type: string}
+                gPerFlOz: {type: number, exclusiveMinimum: 0}
+                gPerCount: {type: number, exclusiveMinimum: 0}
+                aliases: {type: array, items: {type: string}}
+                nutrition: {$ref: '#/components/schemas/Nutrition'}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods/{id}:
     get:
@@ -44,7 +65,25 @@ paths:
       operationId: saveProductDefinition
       summary: Create or update a purchasable product mapped to a canonical food
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Product'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [foodId, name, packageQuantity, packageUnit]
+              properties:
+                id: {type: string, format: uuid}
+                foodId: {type: string, format: uuid}
+                name: {type: string}
+                brand: {type: string}
+                barcode: {type: string}
+                aliases: {type: array, items: {type: string}}
+                packageQuantity: {type: number, exclusiveMinimum: 0}
+                packageUnit: {type: string}
+                servingQuantity: {type: number, exclusiveMinimum: 0}
+                nutrition: {$ref: '#/components/schemas/Nutrition'}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/groceries:
     post:
@@ -139,17 +178,10 @@ paths:
                 label: {type: string}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
-  /v1/external-foods:
-    get:
-      operationId: searchOutsideFoods
-      summary: Search reusable restaurant and packaged outside foods
-      parameters:
-        - {in: query, name: q, required: false, schema: {type: string}}
-        - {in: query, name: brand, required: false, schema: {type: string}}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /v1/consume/product:
     post:
-      operationId: saveOutsideFood
-      summary: Save or update a reusable outside food
+      operationId: consumePurchasedProduct
+      summary: Atomically acquire a product lot, consume any reported portion, and retain the remainder
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -158,29 +190,18 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [name, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+              required: [productId, purchasedQuantity, consumedQuantity]
               properties:
-                id: {type: string, format: uuid}
-                name: {type: string, minLength: 1}
-                brand: {type: string}
-                barcode: {type: string}
-                emoji: {type: string}
-                calories: {type: number, minimum: 0}
-                proteinG: {type: number, minimum: 0}
-                carbsG: {type: number, minimum: 0}
-                fatG: {type: number, minimum: 0}
-                fiberG: {type: number, minimum: 0}
-                sugarG: {type: number, minimum: 0}
-                sodiumMg: {type: number, minimum: 0}
-                source: {type: string}
-                estimated: {type: boolean}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
-  /v1/meals:
-    post:
-      operationId: logMealWithoutInventoryDeduction
-      summary: Log one outside or custom food without changing inventory
-      x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/MealLog'}
+                productId: {type: string, format: uuid}
+                purchasedQuantity: {type: number, exclusiveMinimum: 0, description: Total quantity acquired in the product's base unit.}
+                consumedQuantity: {type: number, minimum: 0, description: Quantity eaten now; must not exceed purchasedQuantity.}
+                location: {type: string, enum: [pantry, fridge, freezer], description: Where the remainder was stored; required when consumedQuantity is less than purchasedQuantity.}
+                timestamp: {type: string, format: date-time}
+                totalCost: {type: number, minimum: 0}
+                costIsEstimated: {type: boolean}
+                costSource: {type: string}
+                label: {type: string}
+                note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/history:
     get:
@@ -265,12 +286,9 @@ components:
       description: Resource not found
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   requestBodies:
-    Food: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Food'}}}}
-    Product: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Product'}}}}
     GroceryHaul: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GroceryHaul'}}}}
     InventoryReconciliation: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryReconciliation'}}}}
     Recipe: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
-    MealLog: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MealLog'}}}}
     WeeklyPlan: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyPlan'}}}}
     Targets: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Targets'}}}}
     Preferences: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
@@ -295,39 +313,6 @@ components:
         sodiumMg: {type: number, minimum: 0}
         source: {type: string}
         estimated: {type: boolean}
-    Food:
-      type: object
-      additionalProperties: false
-      required: [name, measureStyle, displayUnit]
-      properties:
-        id: {type: string, format: uuid}
-        name: {type: string}
-        plural: {type: string}
-        emoji: {type: string}
-        measureStyle: {type: string, enum: [discrete, weight, volume]}
-        displayUnit: {type: string, description: Unit UUID, full name, or short name.}
-        groceryCategory: {type: string}
-        ingredientRole: {type: string, enum: [main, supporting, staple]}
-        storeAisle: {type: string}
-        gPerFlOz: {type: number, exclusiveMinimum: 0}
-        gPerCount: {type: number, exclusiveMinimum: 0}
-        aliases: {type: array, items: {type: string}}
-        nutrition: {$ref: '#/components/schemas/Nutrition'}
-    Product:
-      type: object
-      additionalProperties: false
-      required: [foodId, name, packageQuantity, packageUnit]
-      properties:
-        id: {type: string, format: uuid}
-        foodId: {type: string, format: uuid}
-        name: {type: string}
-        brand: {type: string}
-        barcode: {type: string}
-        aliases: {type: array, items: {type: string}}
-        packageQuantity: {type: number, exclusiveMinimum: 0}
-        packageUnit: {type: string}
-        servingQuantity: {type: number, exclusiveMinimum: 0}
-        nutrition: {$ref: '#/components/schemas/Nutrition'}
     GroceryLot:
       type: object
       additionalProperties: false
@@ -395,23 +380,6 @@ components:
               unit: {type: string}
               sortOrder: {type: integer, minimum: 0}
               note: {type: string}
-    MealLog:
-      type: object
-      additionalProperties: false
-      properties:
-        externalFoodId: {type: string, format: uuid}
-        servings: {type: number, exclusiveMinimum: 0}
-        label: {type: string}
-        calories: {type: number, minimum: 0}
-        proteinG: {type: number, minimum: 0}
-        carbsG: {type: number, minimum: 0}
-        fatG: {type: number, minimum: 0}
-        fiberG: {type: number, minimum: 0}
-        sugarG: {type: number, minimum: 0}
-        sodiumMg: {type: number, minimum: 0}
-        estimated: {type: boolean}
-        timestamp: {type: string, format: date-time}
-        note: {type: string}
     WeeklyPlan:
       type: object
       additionalProperties: false

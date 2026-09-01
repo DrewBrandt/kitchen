@@ -40,7 +40,6 @@ export interface ProductView {
   costSource: string;
   costAsOf: string;
   emoji: string;
-  isExternal: boolean;
   nutrition: NutritionValues;
   useCount: number;
   lastUsedAt: string;
@@ -90,9 +89,8 @@ export interface PantryData {
     planningNotes: string;
     weeklyFoodBudget: number;
   };
-  externalProducts: Array<{ id: string; emoji: string; name: string; place: string; nutrition: string; cost: number | null }>;
   preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; batchCost: number | null; servingsTotal: number; servingsLeft: number; costPerServing: number | null; valueRemaining: number | null; costIsEstimated: boolean }>;
-  spendHistory: Array<{ dateKey: string; spend: number; waste: number }>;
+  spendHistory: Array<{ dateKey: string; spend: number; waste: number; away: number }>;
   wasteCauses: Array<{ label: string; note: string; amount: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
@@ -135,9 +133,9 @@ export const previewPantryData: PantryData = {
   history: HISTORY,
   foods: [],
   products: [
-    { id: 'preview-product-1', foodId: 'preview-food-milk', foodName: 'Chocolate milk', name: 'Chocolate milk', label: 'Chocolate milk', brand: 'Fairlife', barcode: '811620020657', emoji: '🥛', isExternal: false, nutrition: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, useCount: 8, lastUsedAt: '2026-08-30T12:00:00Z', estimatedCost: 4.49, costSource: 'Store estimate', costAsOf: '2026-08-30' },
-    { id: 'preview-product-2', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Salted caramel mix-in yogurt', label: 'Salted caramel mix-in yogurt', brand: 'Oikos', barcode: '036632019742', emoji: '🥣', isExternal: false, nutrition: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, useCount: 5, lastUsedAt: '2026-08-29T12:00:00Z', estimatedCost: 1.79, costSource: 'Store estimate', costAsOf: '2026-08-29' },
-    { id: 'preview-product-3', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Vanilla Greek yogurt', label: 'Vanilla Greek yogurt', brand: 'Oikos', barcode: '036632032093', emoji: '🥣', isExternal: false, nutrition: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, useCount: 3, lastUsedAt: '2026-08-27T12:00:00Z', estimatedCost: 1.49, costSource: 'Store estimate', costAsOf: '2026-08-27' },
+    { id: 'preview-product-1', foodId: 'preview-food-milk', foodName: 'Chocolate milk', name: 'Chocolate milk', label: 'Chocolate milk', brand: 'Fairlife', barcode: '811620020657', emoji: '🥛', nutrition: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, useCount: 8, lastUsedAt: '2026-08-30T12:00:00Z', estimatedCost: 4.49, costSource: 'Store estimate', costAsOf: '2026-08-30' },
+    { id: 'preview-product-2', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Salted caramel mix-in yogurt', label: 'Salted caramel mix-in yogurt', brand: 'Oikos', barcode: '036632019742', emoji: '🥣', nutrition: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, useCount: 5, lastUsedAt: '2026-08-29T12:00:00Z', estimatedCost: 1.79, costSource: 'Store estimate', costAsOf: '2026-08-29' },
+    { id: 'preview-product-3', foodId: 'preview-food-yogurt', foodName: 'Vanilla Greek yogurt', name: 'Vanilla Greek yogurt', label: 'Vanilla Greek yogurt', brand: 'Oikos', barcode: '036632032093', emoji: '🥣', nutrition: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, useCount: 3, lastUsedAt: '2026-08-27T12:00:00Z', estimatedCost: 1.49, costSource: 'Store estimate', costAsOf: '2026-08-27' },
   ],
   units: [],
   categories: [],
@@ -157,7 +155,6 @@ export const previewPantryData: PantryData = {
     planningNotes: '',
     weeklyFoodBudget: DEFAULT_WEEKLY_FOOD_BUDGET,
   },
-  externalProducts: [],
   preparedLots: [
     { id: 'preview-prep-1', emoji: '🥞', name: 'Simple Pancakes', location: 'fridge', remaining: '2 of 4 servings', due: '3 days left', progress: 50, batchCost: 4.72, servingsTotal: 4, servingsLeft: 2, costPerServing: perServingCost(4.72, 4), valueRemaining: remainingValue(4.72, 4, 2), costIsEstimated: true },
     { id: 'preview-prep-2', emoji: '🍳', name: 'Soft Scrambled Eggs', location: 'fridge', remaining: '1 of 1 serving', due: '1 day left', progress: 100, batchCost: 1.14, servingsTotal: 1, servingsLeft: 1, costPerServing: perServingCost(1.14, 1), valueRemaining: remainingValue(1.14, 1, 1), costIsEstimated: true },

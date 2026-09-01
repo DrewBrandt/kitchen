@@ -40,7 +40,7 @@ PostgreSQL functions:
 - weekly plans and generated groceries are rebuilt together;
 - preparation deducts ingredients and creates a prepared lot together;
 - consumption deducts FEFO lots and records nutrition together;
-- outside-food creation updates its food and product together.
+- purchased-product logging creates a lot and consumes its reported portion together.
 
 GPT-only functions are executable by `service_role`, not browser roles. Owner RLS
 continues to protect direct browser access.
@@ -56,7 +56,6 @@ GET /v1/foods/{uuid}
 GET /v1/recipes?q=<optional search>
 GET /v1/recipes/{uuid}
 GET /v1/prepared-batches
-GET /v1/external-foods?q=<optional search>&brand=<optional brand>
 GET /v1/history?days=30
 GET /v1/plans
 GET /v1/targets
@@ -75,8 +74,7 @@ POST /v1/recipes
 POST /v1/prepare/recipe
 POST /v1/consume/prepared
 POST /v1/consume/inventory
-POST /v1/external-foods
-POST /v1/meals
+POST /v1/consume/product
 POST /v1/plans
 POST /v1/grocery-items
 POST /v1/targets
@@ -159,16 +157,28 @@ Quick use of one food goes through `POST /v1/consume/inventory`:
 
 All three operations roll back completely on insufficient inventory.
 
-## Outside food
+## Purchased food and retained leftovers
 
-Search before saving. Saved outside foods are reusable products with nutrition
-per consumed unit. Log one through `POST /v1/meals`:
+Restaurant, takeout, and other away-from-home items use the same food and product
+definitions as groceries. Search first, then create only a missing canonical food
+or exact product variant. Acquire and consume it through `POST /v1/consume/product`:
 
 ```json
-{"externalFoodId":"<outside product uuid>","servings":1}
+{
+  "productId": "<product uuid>",
+  "purchasedQuantity": 1,
+  "consumedQuantity": 0.5,
+  "location": "fridge",
+  "timestamp": "2026-09-01T08:30:00-04:00",
+  "totalCost": 7.49,
+  "costSource": "Receipt"
+}
 ```
 
-A one-off unidentified meal may instead provide a label and nutrition totals.
+This atomically creates a lot classified as an away-from-home purchase, consumes
+half through the ordinary inventory ledger, and leaves half in the fridge. When
+the full purchase was eaten, set both quantities to the same value. Distinct
+products use distinct calls; repeated units of one exact product can use quantity.
 
 ## Planning and settings
 

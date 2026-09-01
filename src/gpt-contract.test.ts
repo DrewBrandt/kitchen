@@ -28,25 +28,34 @@ describe('Pantry GPT operator pack', () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
 
-  it('exposes saveOutsideFood inputs directly to the Action importer', () => {
-    const operation = schema.paths['/v1/external-foods'].post;
+  it('exposes purchased-product consumption inputs directly to the Action importer', () => {
+    const operation = schema.paths['/v1/consume/product'].post;
     const bodySchema = operation.requestBody.content['application/json'].schema;
 
     expect(operation.requestBody.$ref).toBeUndefined();
     expect(bodySchema.$ref).toBeUndefined();
     expect(bodySchema.type).toBe('object');
-    expect(bodySchema.required).toEqual([
-      'name',
-      'calories',
-      'proteinG',
-      'carbsG',
-      'fatG',
-      'fiberG',
-      'sugarG',
-      'sodiumMg',
-    ]);
+    expect(bodySchema.required).toEqual(['productId', 'purchasedQuantity', 'consumedQuantity']);
     expect(Object.keys(bodySchema.properties)).toEqual(
-      expect.arrayContaining(['name', 'brand', 'barcode', 'emoji', 'source', 'estimated']),
+      expect.arrayContaining(['productId', 'purchasedQuantity', 'consumedQuantity', 'location', 'timestamp', 'totalCost', 'costIsEstimated', 'costSource', 'label', 'note']),
     );
+  });
+
+  it.each([
+    ['/v1/foods', ['name', 'measureStyle', 'displayUnit']],
+    ['/v1/products', ['foodId', 'name', 'packageQuantity', 'packageUnit']],
+  ])('exposes definition inputs directly for %s', (route, required) => {
+    const requestBody = schema.paths[route].post.requestBody;
+    expect(requestBody.$ref).toBeUndefined();
+    expect(requestBody.content['application/json'].schema.type).toBe('object');
+    expect(requestBody.content['application/json'].schema.required).toEqual(required);
+  });
+
+  it('contains no legacy outside-food or direct custom-log operations', () => {
+    expect(schema.paths['/v1/external-foods']).toBeUndefined();
+    expect(schema.paths['/v1/meals']).toBeUndefined();
+    expect(schemaText).not.toContain('externalFoodId');
+    expect(schemaText).not.toContain('saveOutsideFood');
+    expect(schemaText).not.toContain('logMealWithoutInventoryDeduction');
   });
 });

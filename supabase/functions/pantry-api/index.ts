@@ -19,6 +19,11 @@ const positiveNumber = (value: unknown, name: string) => {
   if (!Number.isFinite(parsed) || parsed <= 0) throw new ApiError(`${name} must be positive`);
   return parsed;
 };
+const nonnegativeNumber = (value: unknown, name: string) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new ApiError(`${name} must be nonnegative`);
+  return parsed;
+};
 const bodyObject = async (request: Request): Promise<Json> => {
   try {
     const value = await request.json();
@@ -56,7 +61,7 @@ async function resolveUnitId(db: Supabase, input: unknown) {
 async function foods(db: Supabase, query?: string, id?: string) {
   const [foodResult, productResult, unitResult] = await Promise.all([
     db.from("base_foods").select("*").order("name"),
-    db.from("products").select("*").eq("is_external", false).order("name"),
+    db.from("products").select("*").order("name"),
     db.from("measure_conversions").select("*").order("full_name"),
   ]);
   let foodRows = unwrap(foodResult) as Json[];
@@ -76,7 +81,7 @@ async function foods(db: Supabase, query?: string, id?: string) {
 async function inventory(db: Supabase) {
   const [lotResult, productResult, foodResult, unitResult] = await Promise.all([
     db.from("inventory_lots").select("*").gt("remaining_qty", 0).order("use_by"),
-    db.from("products").select("*").eq("is_external", false),
+    db.from("products").select("*"),
     db.from("base_foods").select("*"), db.from("measure_conversions").select("*"),
   ]);
   const lots = unwrap(lotResult) as Json[]; const products = unwrap(productResult) as Json[];
@@ -171,29 +176,9 @@ async function saveProduct(db: Supabase, input: Json) {
     nutrition_basis_qty: Number(nutrition.basisQuantity ?? 1), kcal: Number(nutrition.calories ?? 0),
     protein_g: Number(nutrition.proteinG ?? 0), carbs_g: Number(nutrition.carbsG ?? 0), fat_g: Number(nutrition.fatG ?? 0),
     fiber_g: Number(nutrition.fiberG ?? 0), sugar_g: Number(nutrition.sugarG ?? 0), sodium_mg: Number(nutrition.sodiumMg ?? 0),
-    nutrition_source: nutrition.source ?? null, nutrition_is_estimated: Boolean(nutrition.estimated), is_external: false };
+    nutrition_source: nutrition.source ?? null, nutrition_is_estimated: Boolean(nutrition.estimated) };
   const result = await db.from("products").upsert(row).select("id").single();
   return { status: "saved", id: unwrap(result).id };
-}
-
-async function logMeal(db: Supabase, input: Json) {
-  const servings = positiveNumber(input.servings ?? 1, "servings"); let row: Json;
-  if (typeof input.externalFoodId === "string") {
-    const product = unwrap(await db.from("products").select("*").eq("id", input.externalFoodId).eq("is_external", true).single()) as Json;
-    row = { label: [product.brand, product.name].filter(Boolean).join(" · "), kind: "external", product: product.id, servings,
-      kcal: Number(product.kcal ?? 0) * servings, protein_g: Number(product.protein_g ?? 0) * servings,
-      carbs_g: Number(product.carbs_g ?? 0) * servings, fat_g: Number(product.fat_g ?? 0) * servings,
-      fiber_g: Number(product.fiber_g ?? 0) * servings, sugar_g: Number(product.sugar_g ?? 0) * servings,
-      sodium_mg: Number(product.sodium_mg ?? 0) * servings, nutrition_is_estimated: Boolean(product.nutrition_is_estimated) };
-  } else {
-    row = { label: requiredString(input.label, "label"), kind: "custom", servings, kcal: Number(input.calories ?? 0),
-      protein_g: Number(input.proteinG ?? 0), carbs_g: Number(input.carbsG ?? 0), fat_g: Number(input.fatG ?? 0),
-      fiber_g: Number(input.fiberG ?? 0), sugar_g: Number(input.sugarG ?? 0), sodium_mg: Number(input.sodiumMg ?? 0),
-      nutrition_is_estimated: Boolean(input.estimated) };
-  }
-  row.occurred_at = input.timestamp ?? new Date().toISOString(); row.note = input.note ?? null;
-  const result = await db.from("food_logs").insert(row).select("id").single();
-  return { status: "logged", id: unwrap(result).id };
 }
 
 async function route(request: Request, db: Supabase) {
@@ -214,12 +199,19 @@ async function route(request: Request, db: Supabase) {
   if (method === "GET" && path.startsWith("/v1/recipes/")) { const rows = await recipes(db, undefined, decodeURIComponent(path.slice(12)));
     if (!rows.length) throw new ApiError("Recipe does not exist", 404); return reply({ recipe: rows[0] }); }
   if (method === "POST" && path === "/v1/recipes") return reply(unwrap(await db.rpc("gpt_save_recipe", { p_recipe: await bodyObject(request) })));
-  if (method === "GET" && path === "/v1/external-foods") { let query = db.from("products").select("*").eq("is_external", true).order("name");
-    if (url.searchParams.get("q")) query = query.ilike("name", `%${url.searchParams.get("q")}%`);
-    if (url.searchParams.get("brand")) query = query.ilike("brand", url.searchParams.get("brand")!);
-    return reply({ foods: unwrap(await query) }); }
-  if (method === "POST" && path === "/v1/external-foods") return reply(unwrap(await db.rpc("gpt_save_external_food", { p_food: await bodyObject(request) })));
-  if (method === "POST" && path === "/v1/meals") return reply(await logMeal(db, await bodyObject(request)), 201);
+  if (method === "POST" && path === "/v1/consume/product") { const input = await bodyObject(request);
+    return reply(unwrap(await db.rpc("consume_product_purchase", {
+      p_product: requiredString(input.productId, "productId"),
+      p_purchased_quantity: positiveNumber(input.purchasedQuantity, "purchasedQuantity"),
+      p_consumed_quantity: nonnegativeNumber(input.consumedQuantity, "consumedQuantity"),
+      p_location: input.location ?? null,
+      p_occurred_at: input.timestamp ?? new Date().toISOString(),
+      p_total_cost: input.totalCost ?? null,
+      p_cost_is_estimated: Boolean(input.costIsEstimated),
+      p_cost_source: input.costSource ?? null,
+      p_label: input.label ?? null,
+      p_note: input.note ?? null,
+    })), 201); }
   if (method === "POST" && path === "/v1/prepare/recipe") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_prepare_recipe", { p_recipe: requiredString(input.recipeId, "recipeId"),
       p_servings: positiveNumber(input.servings, "servings"), p_location: input.location ?? "fridge",

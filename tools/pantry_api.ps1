@@ -4,7 +4,7 @@ param(
   [string]$Method,
 
   [Parameter(Mandatory)]
-  [ValidateSet('/v1/inventory', '/v1/history', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/products', '/v1/groceries', '/v1/recipes', '/v1/external-foods', '/v1/meals', '/v1/prepare/recipe', '/v1/prepared-batches', '/v1/consume/prepared', '/v1/consume/inventory', '/v1/targets', '/v1/preferences', '/v1/routine')]
+  [ValidateSet('/v1/inventory', '/v1/history', '/v1/plans', '/v1/grocery-items', '/v1/foods', '/v1/products', '/v1/groceries', '/v1/recipes', '/v1/prepare/recipe', '/v1/prepared-batches', '/v1/consume/prepared', '/v1/consume/inventory', '/v1/consume/product', '/v1/targets', '/v1/preferences', '/v1/routine')]
   [string]$Path,
 
   [string]$BodyFile,
@@ -15,8 +15,6 @@ param(
   [int]$Days = 30,
 
   [string]$Query,
-
-  [string]$Brand,
 
   [string]$Id,
 
@@ -65,16 +63,6 @@ try {
     } else {
       "$Path`?q=$([uri]::EscapeDataString($Query))"
     }
-  }
-  elseif ($Method -eq 'GET' -and $Path -eq '/v1/external-foods') {
-    $queryParts = @()
-    if (-not [string]::IsNullOrWhiteSpace($Query)) {
-      $queryParts += "q=$([uri]::EscapeDataString($Query))"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($Brand)) {
-      $queryParts += "brand=$([uri]::EscapeDataString($Brand))"
-    }
-    $requestPath = if ($queryParts.Count -eq 0) { $Path } else { "$Path`?$($queryParts -join '&')" }
   }
   else {
     $requestPath = $Path

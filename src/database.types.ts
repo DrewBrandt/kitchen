@@ -338,6 +338,7 @@ export type Database = {
           created_at: string
           id: string
           initial_qty: number
+          is_external: boolean
           legacy_firebase_id: string | null
           location: string | null
           note: string | null
@@ -354,6 +355,7 @@ export type Database = {
           created_at?: string
           id?: string
           initial_qty: number
+          is_external?: boolean
           legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
@@ -370,6 +372,7 @@ export type Database = {
           created_at?: string
           id?: string
           initial_qty?: number
+          is_external?: boolean
           legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
@@ -768,7 +771,6 @@ export type Database = {
           fiber_g: number | null
           food: string
           id: string
-          is_external: boolean
           kcal: number | null
           last_used_at: string | null
           legacy_firebase_id: string | null
@@ -799,7 +801,6 @@ export type Database = {
           fiber_g?: number | null
           food: string
           id?: string
-          is_external?: boolean
           kcal?: number | null
           last_used_at?: string | null
           legacy_firebase_id?: string | null
@@ -830,7 +831,6 @@ export type Database = {
           fiber_g?: number | null
           food?: string
           id?: string
-          is_external?: boolean
           kcal?: number | null
           last_used_at?: string | null
           legacy_firebase_id?: string | null
@@ -1146,6 +1146,21 @@ export type Database = {
         Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
         Returns: string
       }
+      consume_product_purchase: {
+        Args: {
+          p_cost_is_estimated?: boolean
+          p_cost_source?: string
+          p_label?: string
+          p_location?: string
+          p_note?: string
+          p_occurred_at?: string
+          p_product: string
+          p_purchased_quantity: number
+          p_consumed_quantity: number
+          p_total_cost?: number
+        }
+        Returns: Json
+      }
       save_prep_feedback: {
         Args: { p_actual_minutes?: number; p_ease?: number; p_prep: string; p_taste?: number }
         Returns: undefined
@@ -1221,7 +1236,6 @@ export type Database = {
         Args: { p_entries: Json; p_week_start: string }
         Returns: Json
       }
-      gpt_save_external_food: { Args: { p_food: Json }; Returns: Json }
       gpt_save_recipe: { Args: { p_recipe: Json }; Returns: Json }
       is_app_owner: { Args: never; Returns: boolean }
       lot_nutrition_json: {

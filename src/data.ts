@@ -12,10 +12,9 @@ export type PageId =
 export type PanelKind =
   | 'lot'
   | 'groceries'
-  | 'food'
+  | 'product'
   | 'recipe'
   | 'recipe-edit'
-  | 'external'
   | 'log'
   | 'item'
   | 'meal'
