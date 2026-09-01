@@ -37,6 +37,27 @@ const formatQuantity = (value: number, unit?: string | null) => {
   return `${rounded} ${unit ?? ''}`.trim();
 };
 
+const recipeFractions: Array<[number, string]> = [
+  [1 / 8, '⅛'], [1 / 4, '¼'], [1 / 3, '⅓'], [3 / 8, '⅜'],
+  [1 / 2, '½'], [5 / 8, '⅝'], [2 / 3, '⅔'], [3 / 4, '¾'], [7 / 8, '⅞'],
+];
+
+export const formatRecipeQuantity = (value: number, unit?: string | null) => {
+  if (!Number.isFinite(value)) return `${value} ${unit ?? ''}`.trim();
+  const sign = value < 0 ? '-' : '';
+  const absolute = Math.abs(value);
+  let whole = Math.floor(absolute);
+  const remainder = absolute - whole;
+  const fraction = recipeFractions.find(([candidate]) => Math.abs(candidate - remainder) < 0.01)?.[1];
+  if (Math.abs(1 - remainder) < 0.01) whole += 1;
+  const quantity = fraction
+    ? `${whole || ''}${fraction}`
+    : Math.abs(1 - remainder) < 0.01 || remainder < 0.01
+      ? String(whole)
+      : String(Number(absolute.toFixed(3)));
+  return `${sign}${quantity} ${unit ?? ''}`.trim();
+};
+
 const formatCost = (value: CostValue) => value.cost === null ? 'price unavailable' : `${value.estimated ? '~' : ''}$${value.cost.toFixed(2)}`;
 
 const formatUsStock = (baseValue: number, unit?: Database['public']['Tables']['measure_conversions']['Row']) => {
@@ -90,17 +111,6 @@ const fromFoodBase = (food: FoodRow, base: number, unit: UnitRow) => {
   else if (food.measure_style === 'volume' && unit.measure_style === 'discrete') unitBase = base * Number(food.g_per_fl_oz) / Number(food.g_per_count);
   else if (food.measure_style === 'discrete' && unit.measure_style === 'volume') unitBase = base * Number(food.g_per_count) / Number(food.g_per_fl_oz);
   return unitBase * Number(unit.base_to_this_ratio);
-};
-
-const usMeasurement = (quantity: number, source: UnitRow, unitRows: UnitRow[]) => {
-  const base = quantity / Number(source.base_to_this_ratio);
-  const wanted = source.measure_style === 'weight'
-    ? (base >= 453.592 ? 'lb' : 'oz')
-    : source.measure_style === 'volume'
-      ? (base >= 4 ? 'cup' : base >= 1 ? 'tbsp' : 'tsp')
-      : 'ct';
-  const unit = unitRows.find((candidate) => candidate.short_name.toLowerCase() === wanted) ?? source;
-  return { quantity: base * Number(unit.base_to_this_ratio), unit };
 };
 
 const daysUntil = (date: string | null) => {
@@ -208,7 +218,6 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   }));
 
   const recipeRows = recipesResult.data ?? [];
-  const unitRows = unitsResult.data ?? [];
   const recipeNutrition = new Map<string, NutritionValues>();
   for (const recipe of recipeRows) {
     const totals = emptyNutrition();
@@ -284,14 +293,14 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       ingredients: recipeIngredients.map((ingredient) => {
         const food = foods.get(ingredient.ingredient);
         const unit = units.get(ingredient.unit);
-        if (!food || !unit) return { label: `${formatQuantity(Number(ingredient.qty))} Ingredient`, stock: 'Unit unavailable · short' };
-        const display = usMeasurement(Number(ingredient.qty), unit, unitRows);
+        const requestedQuantity = Number(ingredient.qty);
+        if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
         const enough = availableBase + 0.0000001 >= neededBase;
-        const availableInDisplayStyle = fromFoodBase(food, availableBase, display.unit);
-        const ingredientName = pluralize(food.name, food.plural, display.quantity);
-        return { label: `${formatQuantity(display.quantity, display.unit.short_name)} ${ingredientName}`, stock: `${formatQuantity(availableInDisplayStyle, display.unit.short_name)} in stock${enough ? '' : ' · short'}` };
+        const availableInRequestedUnit = fromFoodBase(food, availableBase, unit);
+        const ingredientName = pluralize(food.name, food.plural, requestedQuantity);
+        return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
       ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,
