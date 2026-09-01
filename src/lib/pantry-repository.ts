@@ -18,6 +18,16 @@ const formatQuantity = (value: number, unit?: string | null) => {
   return `${rounded} ${unit ?? ''}`.trim();
 };
 
+const formatUsStock = (baseValue: number, unit?: Database['public']['Tables']['measure_conversions']['Row']) => {
+  const converted = baseValue * Number(unit?.base_to_this_ratio ?? 1);
+  if (unit?.short_name === 'oz' && converted >= 16) {
+    const pounds = Math.floor(converted / 16);
+    const ounces = converted - pounds * 16;
+    return `${pounds} lb${ounces >= 0.05 ? ` ${formatQuantity(ounces, 'oz')}` : ''}`;
+  }
+  return formatQuantity(converted, unit?.short_name);
+};
+
 const nutrientFields = {
   Calories: 'kcal', Protein: 'protein_g', Carbs: 'carbs_g', Fat: 'fat_g', Fiber: 'fiber_g', Sodium: 'sodium_mg',
 } as const;
@@ -73,7 +83,7 @@ const usMeasurement = (quantity: number, source: UnitRow, unitRows: UnitRow[]) =
 const daysUntil = (date: string | null) => {
   if (!date) return { label: 'Unknown', tone: 'muted' };
   const days = Math.ceil((new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86_400_000);
-  if (days < 0) return { label: `${Math.abs(days)} days overdue`, tone: 'urgent' };
+  if (days < 0) return { label: `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} past date`, tone: 'urgent' };
   if (days === 0) return { label: 'Today', tone: 'urgent' };
   return { label: `${days} days`, tone: days <= 3 ? 'urgent' : days <= 7 ? 'warn' : 'safe' };
 };
@@ -148,16 +158,19 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       const due = daysUntil(earliest);
       const firstProduct = products.get(stockLots[0].product ?? '');
       const displayUnit = food.display_unit ? units.get(food.display_unit) : undefined;
-      const ratio = Number(displayUnit?.base_to_this_ratio ?? 1);
       return {
         productId: firstProduct?.id,
         emoji: food.emoji ?? '🍽️',
         name: food.name,
         sub: [food.ingredient_role, food.grocery_category].filter(Boolean).join(' · ') || 'Pantry item',
-        total: formatQuantity(total * ratio, displayUnit?.short_name),
+        total: formatUsStock(total, displayUnit),
         due: due.label,
         tone: due.tone,
-        lots: stockLots.map((lot) => `${formatQuantity(Number(lot.remaining_qty) * ratio, displayUnit?.short_name)} ${lot.location ?? 'unassigned'}`),
+        lots: stockLots.map((lot) => `${formatUsStock(Number(lot.remaining_qty), displayUnit)} ${lot.location ?? 'unassigned'}`),
+        lotDetails: stockLots.map((lot) => {
+          const lotDue = daysUntil(lot.use_by);
+          return { id: lot.id, quantity: formatUsStock(Number(lot.remaining_qty), displayUnit), location: lot.location ?? 'unassigned', dateLabel: lotDue.label, tone: lotDue.tone, remainingBase: Number(lot.remaining_qty) };
+        }),
       };
     }),
   }));
@@ -195,6 +208,10 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,
       taste: tasteRatings.length ? Number((tasteRatings.reduce((total, value) => total + value, 0) / tasteRatings.length).toFixed(1)) : 0,
       prepCount: recipePreps.length,
+      sourceUrl: recipe.source_url ?? '',
+      promptForFeedback: recipe.prompt_for_feedback,
+      ingredientText: recipeIngredients.map((ingredient) => `${Number(ingredient.qty)} ${units.get(ingredient.unit)?.short_name ?? ''} ${foods.get(ingredient.ingredient)?.name ?? 'Ingredient'}`).join('\n'),
+      instructionText: steps.join('\n'),
       nutritionValues: { Calories: kcal, Protein: protein, Carbs: Number(recipe.override_carbs_g ?? 0), Fat: Number(recipe.override_fat_g ?? 0), Fiber: Number(recipe.override_fiber_g ?? 0), Sodium: Number(recipe.override_sodium_mg ?? 0) },
       cookable: recipeIngredients.every((ingredient) => {
         const unit = units.get(ingredient.unit);
@@ -325,14 +342,14 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const key = dateKeyInZone(date, settings.time_zone);
     const meals = (plansResult.data ?? []).filter((plan) => plan.plan_date === key).map((plan) => {
       const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-      return { id: plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
+      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover' };
     });
     return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
   });
 
   const plannedMeals = (plansResult.data ?? []).map((plan) => {
     const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-    return { id: plan.id, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id };
+    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover' };
   });
   const nutritionHistory = [...byDay.entries()].map(([dateKey, dayLogs]) => ({
     dateKey,
@@ -373,6 +390,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
       isExternal: product.is_external,
       nutrition: nutritionValues(product),
+      useCount: product.use_count,
+      lastUsedAt: product.last_used_at ?? '',
     })),
     units: [...units.values()].map((unit) => ({ id: unit.id, label: `${unit.full_name} (${unit.short_name})`, shortName: unit.short_name, measureStyle: unit.measure_style })),
     categories: (categoriesResult.data ?? []).map((category) => category.category),
@@ -443,6 +462,31 @@ export async function savePrepFeedback(client: Client, prepId: string, ease: num
 
 export async function removePlannedMeal(client: Client, planId: string) {
   const { error } = await client.from('meal_plans').delete().eq('id', planId);
+  if (error) throw error;
+}
+
+export async function removePlannedMeals(client: Client, planIds: string[]) {
+  const { error } = await client.from('meal_plans').delete().in('id', planIds);
+  if (error) throw error;
+}
+
+export async function setPlannedMealsMade(client: Client, planIds: string[], made: boolean) {
+  const { error } = await client.from('meal_plans').update({ status: made ? 'made' : 'planned', made_at: made ? new Date().toISOString() : null }).in('id', planIds);
+  if (error) throw error;
+}
+
+export async function removeShoppingItem(client: Client, itemId: string) {
+  const { error } = await client.from('shopping_items').delete().eq('id', itemId);
+  if (error) throw error;
+}
+
+export async function consumeInventoryLot(client: Client, lotId: string, quantity: number) {
+  const { error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
+  if (error) throw error;
+}
+
+export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false) {
+  const { error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
   if (error) throw error;
 }
 

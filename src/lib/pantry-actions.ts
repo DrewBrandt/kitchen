@@ -64,8 +64,9 @@ async function createProductAndFood(client: Client, form: FormData, external: bo
   }
 }
 
-async function createRecipe(client: Client, form: FormData) {
+async function saveRecipe(client: Client, form: FormData) {
   const name = text(form, 'name');
+  const recipeId = optionalText(form, 'recipe_id');
   if (!name) throw new Error('Recipe name is required.');
 
   const { data: foods, error: foodsError } = await client.from('base_foods').select('id,name');
@@ -85,20 +86,29 @@ async function createRecipe(client: Client, form: FormData) {
   });
 
   const steps = text(form, 'instructions').split(/\r?\n/).map((step) => step.trim()).filter(Boolean);
-  const { data: recipe, error: recipeError } = await client.from('recipes').insert({
+  const recipeValues = {
     name,
     emoji: optionalText(form, 'emoji'),
     servings: number(form, 'servings', 1),
     instructions: steps,
     source_url: optionalText(form, 'source_url'),
     prompt_for_feedback: form.get('prompt_for_feedback') === 'on',
-  }).select('id').single();
+  };
+  const recipeResult = recipeId
+    ? await client.from('recipes').update(recipeValues).eq('id', recipeId).select('id').single()
+    : await client.from('recipes').insert(recipeValues).select('id').single();
+  const { data: recipe, error: recipeError } = recipeResult;
   if (recipeError) throw recipeError;
+
+  if (recipeId) {
+    const { error } = await client.from('recipe_ingredients').delete().eq('recipe', recipeId);
+    if (error) throw error;
+  }
 
   if (ingredients.length) {
     const { error } = await client.from('recipe_ingredients').insert(ingredients.map((ingredient) => ({ ...ingredient, recipe: recipe.id })));
     if (error) {
-      await client.from('recipes').delete().eq('id', recipe.id);
+      if (!recipeId) await client.from('recipes').delete().eq('id', recipe.id);
       throw error;
     }
   }
@@ -138,9 +148,9 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
     return 'Product saved.';
   }
 
-  if (kind === 'recipe') {
-    await createRecipe(client, form);
-    return 'Recipe saved.';
+  if (kind === 'recipe' || kind === 'recipe-edit') {
+    await saveRecipe(client, form);
+    return kind === 'recipe-edit' ? 'Recipe updated.' : 'Recipe saved.';
   }
 
   if (kind === 'item') {
@@ -182,12 +192,47 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'meal') {
+    const intent = text(form, 'intent') || 'prepare';
+    const groupId = crypto.randomUUID();
+    if (intent === 'leftover') {
+      const sourceGroupId = text(form, 'source_group_id');
+      if (!sourceGroupId) throw new Error('Choose the meal that will provide the leftovers.');
+      let { data: sourceRows, error: sourceError } = await client.from('meal_plans').select('*').eq('group_id', sourceGroupId);
+      if (sourceError) throw sourceError;
+      if (!sourceRows?.length) {
+        const fallback = await client.from('meal_plans').select('*').eq('id', sourceGroupId);
+        sourceRows = fallback.data;
+        sourceError = fallback.error;
+      }
+      if (sourceError) throw sourceError;
+      if (!sourceRows?.length) throw new Error('The original meal could not be found.');
+      const { error } = await client.from('meal_plans').insert(sourceRows.map((row) => ({
+        plan_date: text(form, 'plan_date'),
+        daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
+        meal: row.meal,
+        recipe: row.recipe,
+        scale_factor: row.scale_factor,
+        status: 'planned' as const,
+        name: row.name,
+        emoji: row.emoji,
+        group_id: groupId,
+        leftover_of_group_id: sourceGroupId,
+        intent: 'leftover',
+        preparation_tasks: [],
+        note: optionalText(form, 'note'),
+      })));
+      if (error) throw error;
+      return 'Leftovers added to the plan.';
+    }
+    if (!text(form, 'recipe')) throw new Error('Choose a recipe for the meal.');
     const { error } = await client.from('meal_plans').insert({
       recipe: text(form, 'recipe'),
       plan_date: text(form, 'plan_date'),
       daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
       scale_factor: number(form, 'scale_factor', 1),
       status: 'planned',
+      group_id: groupId,
+      intent: 'prepare',
       note: optionalText(form, 'note'),
     });
     if (error) throw error;

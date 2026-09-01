@@ -428,6 +428,7 @@ export type Database = {
           id: string
           intent: string
           leftover_of_group_id: string | null
+          made_at: string | null
           legacy_firebase_id: string | null
           meal: string | null
           name: string | null
@@ -449,6 +450,7 @@ export type Database = {
           id?: string
           intent?: string
           leftover_of_group_id?: string | null
+          made_at?: string | null
           legacy_firebase_id?: string | null
           meal?: string | null
           name?: string | null
@@ -470,6 +472,7 @@ export type Database = {
           id?: string
           intent?: string
           leftover_of_group_id?: string | null
+          made_at?: string | null
           legacy_firebase_id?: string | null
           meal?: string | null
           name?: string | null
@@ -1136,8 +1139,16 @@ export type Database = {
         Returns: string
       }
       cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
+      consume_inventory_lot: {
+        Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
+        Returns: string
+      }
       save_prep_feedback: {
         Args: { p_actual_minutes?: number; p_ease?: number; p_prep: string; p_taste?: number }
+        Returns: undefined
+      }
+      set_inventory_lot_quantity: {
+        Args: { p_discard?: boolean; p_lot: string; p_remaining: number }
         Returns: undefined
       }
       food_accepts_unit: {
