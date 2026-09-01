@@ -753,8 +753,11 @@ export type Database = {
           barcode: string | null
           brand: string | null
           carbs_g: number | null
+          cost_as_of: string | null
+          cost_source: string | null
           created_at: string
           emoji: string | null
+          estimated_cost: number | null
           fat_g: number | null
           fiber_g: number | null
           food: string
@@ -781,8 +784,11 @@ export type Database = {
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
+          cost_as_of?: string | null
+          cost_source?: string | null
           created_at?: string
           emoji?: string | null
+          estimated_cost?: number | null
           fat_g?: number | null
           fiber_g?: number | null
           food: string
@@ -809,8 +815,11 @@ export type Database = {
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
+          cost_as_of?: string | null
+          cost_source?: string | null
           created_at?: string
           emoji?: string | null
+          estimated_cost?: number | null
           fat_g?: number | null
           fiber_g?: number | null
           food?: string

@@ -588,6 +588,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .product-title em { margin-top: 4px; color: var(--faint); font: normal 9px 'JetBrains Mono', monospace; }
 .product-macros { padding: 0 18px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
 .product-macros span { padding: 5px 8px; border-radius: 6px; background: var(--card-2); color: var(--muted); font-size: 10px; }
+.product-cost-detail { display: grid; gap: 4px; margin-bottom: 16px; padding: 14px; border-radius: 10px; background: var(--card-2); }
+.product-cost-detail span, .product-cost-detail small { color: var(--muted); }
+.product-cost-detail strong { font-size: 22px; }
 .button.selected { color: var(--mint); border-color: var(--mint); }
 .comparison-card { overflow: auto; }
 .comparison-grid { min-width: 520px; padding: 14px 20px 20px; display: grid; grid-template-columns: 100px 1fr 1fr; gap: 0; }
