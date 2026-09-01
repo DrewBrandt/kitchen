@@ -121,6 +121,27 @@ describe('Pantry web UI', () => {
     expect(within(dialog).getByText('1 of 8 complete')).toBeInTheDocument();
   });
 
+  it('switches between on-deck recipes without closing the cooking workspace', async () => {
+    localStorage.setItem('mise.recipe-progress.pancakes', JSON.stringify(['i0']));
+    localStorage.setItem('mise.recipe-progress.eggs', JSON.stringify(['i0']));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const pinned = screen.getByRole('navigation', { name: 'Pinned cooking' });
+    await user.click(within(pinned).getByRole('button', { name: /Simple Pancakes/ }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'On deck' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Simple Pancakes/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(dialog).getByText('1½ cups all-purpose flour')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('tab', { name: /Soft Scrambled Eggs/ }));
+    const switchedDialog = screen.getByRole('dialog');
+    expect(within(switchedDialog).getByRole('tab', { name: /Soft Scrambled Eggs/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(switchedDialog).getByText('⅛ tsp salt')).toBeInTheDocument();
+    expect(within(switchedDialog).getByText('1 of 6 complete')).toBeInTheDocument();
+  });
+
   it('edits recipes and pins started cooking to the sidebar', async () => {
     localStorage.clear();
     const user = userEvent.setup();
