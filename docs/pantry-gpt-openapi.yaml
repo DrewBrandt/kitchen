@@ -60,6 +60,34 @@ paths:
       parameters:
         - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      operationId: editFoodDefinition
+      summary: Correct selected fields on an existing canonical food
+      x-openai-isConsequential: true
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: {type: string}
+                plural: {type: [string, 'null']}
+                emoji: {type: [string, 'null']}
+                measureStyle: {type: string, enum: [discrete, weight, volume]}
+                displayUnit: {type: string}
+                groceryCategory: {type: [string, 'null']}
+                ingredientRole: {type: [string, 'null'], enum: [main, supporting, staple, null]}
+                storeAisle: {type: [string, 'null']}
+                gPerFlOz: {type: [number, 'null'], exclusiveMinimum: 0}
+                gPerCount: {type: [number, 'null'], exclusiveMinimum: 0}
+                aliases: {type: array, items: {type: string}}
+                nutrition: {$ref: '#/components/schemas/Nutrition'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/products:
     post:
       operationId: saveProductDefinition
@@ -84,6 +112,35 @@ paths:
                 packageUnit: {type: string}
                 servingQuantity: {type: number, exclusiveMinimum: 0}
                 nutrition: {$ref: '#/components/schemas/Nutrition'}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/products/{id}:
+    patch:
+      operationId: editProductDefinition
+      summary: Correct selected fields on an existing product without creating another
+      x-openai-isConsequential: true
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: {type: string}
+                brand: {type: [string, 'null']}
+                barcode: {type: [string, 'null']}
+                emoji: {type: [string, 'null']}
+                aliases: {type: array, items: {type: string}}
+                packageQuantity: {type: number, exclusiveMinimum: 0, description: Supply together with packageUnit.}
+                packageUnit: {type: string, description: Supply together with packageQuantity.}
+                servingQuantity: {type: [number, 'null'], exclusiveMinimum: 0}
+                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                estimatedCost: {type: [number, 'null'], minimum: 0}
+                costSource: {type: [string, 'null']}
+                costAsOf: {type: [string, 'null'], format: date}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/groceries:
     post:
@@ -112,6 +169,71 @@ paths:
       parameters:
         - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      operationId: editRecipe
+      summary: Correct selected recipe fields and optionally replace all ingredients
+      x-openai-isConsequential: true
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: {type: string}
+                emoji: {type: [string, 'null']}
+                servings: {type: number, exclusiveMinimum: 0}
+                sourceUrl: {type: [string, 'null'], format: uri}
+                sourceNote: {type: [string, 'null']}
+                promptForFeedback: {type: boolean}
+                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                instructions: {type: array, items: {type: string}}
+                portions: {type: array, items: {type: object, additionalProperties: true}}
+                preparationRules: {type: array, items: {type: object, additionalProperties: true}}
+                ingredients:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [foodId, quantity, unit]
+                    properties:
+                      foodId: {type: string, format: uuid}
+                      quantity: {type: number, exclusiveMinimum: 0}
+                      unit: {type: string}
+                      sortOrder: {type: integer, minimum: 0}
+                      note: {type: string}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/lots/{id}:
+    patch:
+      operationId: editInventoryLot
+      summary: Correct inventory-lot quantity, location, date, acquisition classification, or cost
+      x-openai-isConsequential: true
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                remainingQuantity: {type: number, minimum: 0, description: Corrected remaining base quantity; records a ledger adjustment.}
+                location: {type: [string, 'null'], enum: [pantry, fridge, freezer, null]}
+                bestBy: {type: [string, 'null'], format: date}
+                acquiredAt: {type: string, format: date-time}
+                totalCost: {type: [number, 'null'], minimum: 0, description: Cost of the complete acquired lot.}
+                costIsEstimated: {type: boolean}
+                costSource: {type: [string, 'null']}
+                awayFromHome: {type: boolean}
+                note: {type: [string, 'null']}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/prepare/recipe:
     post:
       operationId: prepareSavedRecipe
@@ -210,6 +332,30 @@ paths:
       parameters:
         - {in: query, name: days, required: false, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /v1/history/{id}:
+    patch:
+      operationId: editConsumptionEvent
+      summary: Correct an existing consumption and its single linked away-from-home purchase cost without relogging it
+      x-openai-isConsequential: true
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                label: {type: string}
+                timestamp: {type: string, format: date-time}
+                note: {type: [string, 'null']}
+                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                purchaseTotalCost: {type: [number, 'null'], minimum: 0, description: Corrected total cost of the single away-from-home lot linked to this consumption.}
+                costIsEstimated: {type: boolean}
+                costSource: {type: [string, 'null']}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/plans:
     get:
       operationId: getMealPlanAndGroceries

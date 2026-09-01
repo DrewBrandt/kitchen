@@ -5,7 +5,7 @@ type Supabase = ReturnType<typeof createClient>;
 const headers = {
   "access-control-allow-origin": "https://chatgpt.com",
   "access-control-allow-headers": "authorization, content-type",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
   "content-type": "application/json; charset=utf-8",
 };
 class ApiError extends Error { constructor(message: string, readonly status = 422) { super(message); } }
@@ -139,6 +139,33 @@ async function planning(db: Supabase) {
   })), groceries: unwrap(groceryResult) };
 }
 
+async function history(db: Supabase, days: number) {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const logs = unwrap(await db.from("food_logs").select("*").is("voided_at", null)
+    .gte("occurred_at", cutoff).order("occurred_at", { ascending: false })) as Json[];
+  if (!logs.length) return { exportedAt: new Date().toISOString(), days, events: [] };
+  const logIds = logs.map((log) => String(log.id));
+  const inventoryEvents = unwrap(await db.from("inventory_events").select("*").in("food_log", logIds)) as Json[];
+  const lotIds = [...new Set(inventoryEvents.map((event) => String(event.lot)))];
+  const [lotResult, costResult] = await Promise.all([
+    lotIds.length ? db.from("inventory_lots").select("*").in("id", lotIds) : Promise.resolve({ data: [], error: null }),
+    lotIds.length ? db.from("inventory_event_costs").select("*").in("inventory_event_id", inventoryEvents.map((event) => String(event.id))) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const lots = unwrap(lotResult) as Json[];
+  const costs = unwrap(costResult) as Json[];
+  return { exportedAt: new Date().toISOString(), days, events: logs.map((log) => {
+    const deductions = inventoryEvents.filter((event) => event.food_log === log.id).map((event) => ({
+      ...event,
+      cost: costs.find((cost) => cost.inventory_event_id === event.id)?.cost ?? null,
+      lot: lots.find((lot) => lot.id === event.lot) ?? null,
+    }));
+    const cost = deductions.length > 0 && deductions.every((event) => event.cost !== null)
+      ? deductions.reduce((total, event) => total + Number(event.cost), 0)
+      : null;
+    return { ...log, cost, inventoryEvents: deductions };
+  }) };
+}
+
 async function saveFood(db: Supabase, input: Json) {
   const nutrition = (input.nutrition as Json | undefined) ?? {};
   let id = typeof input.id === "string" ? input.id : undefined;
@@ -192,13 +219,25 @@ async function route(request: Request, db: Supabase) {
   if (method === "GET" && path.startsWith("/v1/foods/")) { const rows = await foods(db, undefined, decodeURIComponent(path.slice(10)));
     if (!rows.length) throw new ApiError("Food does not exist", 404); return reply({ food: rows[0] }); }
   if (method === "POST" && path === "/v1/foods") return reply(await saveFood(db, await bodyObject(request)));
+  if (method === "PATCH" && path.startsWith("/v1/foods/")) return reply(unwrap(await db.rpc("gpt_update_food", {
+    p_food: decodeURIComponent(path.slice(10)), p_patch: await bodyObject(request),
+  })));
   if (method === "POST" && path === "/v1/products") return reply(await saveProduct(db, await bodyObject(request)));
+  if (method === "PATCH" && path.startsWith("/v1/products/")) return reply(unwrap(await db.rpc("gpt_update_product", {
+    p_product: decodeURIComponent(path.slice(13)), p_patch: await bodyObject(request),
+  })));
   if (method === "POST" && path === "/v1/groceries") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_add_grocery_lots", { p_items: input.items, p_source: input.source ?? null })), 201); }
   if (method === "GET" && path === "/v1/recipes") return reply({ recipes: await recipes(db, url.searchParams.get("q") ?? undefined) });
   if (method === "GET" && path.startsWith("/v1/recipes/")) { const rows = await recipes(db, undefined, decodeURIComponent(path.slice(12)));
     if (!rows.length) throw new ApiError("Recipe does not exist", 404); return reply({ recipe: rows[0] }); }
   if (method === "POST" && path === "/v1/recipes") return reply(unwrap(await db.rpc("gpt_save_recipe", { p_recipe: await bodyObject(request) })));
+  if (method === "PATCH" && path.startsWith("/v1/recipes/")) return reply(unwrap(await db.rpc("gpt_update_recipe", {
+    p_recipe: decodeURIComponent(path.slice(12)), p_patch: await bodyObject(request),
+  })));
+  if (method === "PATCH" && path.startsWith("/v1/lots/")) return reply(unwrap(await db.rpc("gpt_update_inventory_lot", {
+    p_lot: decodeURIComponent(path.slice(9)), p_patch: await bodyObject(request),
+  })));
   if (method === "POST" && path === "/v1/consume/product") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("consume_product_purchase", {
       p_product: requiredString(input.productId, "productId"),
@@ -226,9 +265,10 @@ async function route(request: Request, db: Supabase) {
       p_quantity: positiveNumber(input.quantity, "quantity"), p_unit: requiredString(input.unit, "unit"),
       p_occurred_at: input.timestamp ?? new Date().toISOString(), p_label: input.label ?? null, p_note: input.note ?? null })), 201); }
   if (method === "GET" && path === "/v1/history") { const days = Math.min(365, Math.max(1, Number(url.searchParams.get("days") ?? 30)));
-    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString(); const result = await db.from("food_logs").select("*")
-      .is("voided_at", null).gte("occurred_at", cutoff).order("occurred_at", { ascending: false });
-    return reply({ exportedAt: new Date().toISOString(), days, events: unwrap(result) }); }
+    return reply(await history(db, days)); }
+  if (method === "PATCH" && path.startsWith("/v1/history/")) return reply(unwrap(await db.rpc("gpt_update_consumption", {
+    p_food_log: decodeURIComponent(path.slice(12)), p_patch: await bodyObject(request),
+  })));
   if (method === "GET" && path === "/v1/plans") return reply(await planning(db));
   if (method === "POST" && path === "/v1/plans") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_replace_weekly_plan", { p_week_start: input.weekStart, p_entries: input.entries }))); }
