@@ -32,6 +32,9 @@ export interface ProductView {
   label: string;
   brand: string;
   barcode: string;
+  estimatedCost: number | null;
+  costSource: string;
+  costAsOf: string;
   emoji: string;
   isExternal: boolean;
   nutrition: NutritionValues;
