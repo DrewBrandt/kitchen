@@ -145,12 +145,12 @@ export const GROCERY_SECTIONS = [
 ];
 
 export const NUTRIENTS = [
-  { label: 'Calories', value: '1,180', target: '/ 2,300 cal', pct: 51, color: '#86d7ac' },
-  { label: 'Protein', value: '74 g', target: '/ 130 g', pct: 57, color: '#86d7ac' },
-  { label: 'Carbs', value: '118 g', target: '/ 260 g', pct: 45, color: '#8fbce6' },
-  { label: 'Fat', value: '42 g', target: '/ 75 g', pct: 56, color: '#b0a6e0' },
-  { label: 'Fiber', value: '17 g', target: '/ 30 g', pct: 57, color: '#e5c07b' },
-  { label: 'Sodium', value: '1,420 mg', target: '/ 2,300 mg', pct: 62, color: '#e88592' },
+  { label: 'Calories', value: '1,180', target: '/ 2,300 cal', pct: 51, color: '#5fe0a0' },
+  { label: 'Protein', value: '74 g', target: '/ 130 g', pct: 57, color: '#5fe0a0' },
+  { label: 'Carbs', value: '118 g', target: '/ 260 g', pct: 45, color: '#57a8f2' },
+  { label: 'Fat', value: '42 g', target: '/ 75 g', pct: 56, color: '#a184f5' },
+  { label: 'Fiber', value: '17 g', target: '/ 30 g', pct: 57, color: '#f0b13f' },
+  { label: 'Sodium', value: '1,420 mg', target: '/ 2,300 mg', pct: 62, color: '#f2637a' },
 ];
 
 export const WEEK_DAYS = [
@@ -164,9 +164,9 @@ export const WEEK_DAYS = [
 ];
 
 export const FOOD_LOG = [
-  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#53d7a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
-  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#5eb5f5', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
-  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a78bfa', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
+  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#5fe0a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#57a8f2', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
+  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a184f5', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
 ];
 
 export const HISTORY = [

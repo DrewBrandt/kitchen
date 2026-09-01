@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { NutritionValues, NutrientName, PantryData } from '../pantry-data';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 
 type Client = SupabaseClient<Database>;
 type FoodLogRow = Database['public']['Tables']['food_logs']['Row'];
@@ -296,21 +297,31 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
     const recipe = prep ? recipeRows.find((candidate) => candidate.id === prep.recipe) : undefined;
-    const directValue = lotCost(lot, Number(lot.remaining_qty));
+    const servingsTotal = Number(lot.initial_qty);
+    const servingsLeft = Number(lot.remaining_qty);
+    // One unambiguous number per batch: what the whole batch cost. Per-serving and
+    // value-remaining are derived from it in src/lib/cost.ts and nowhere else.
+    const directBatch = lotCost(lot, servingsTotal);
     const recipeEstimate = prep ? recipeCosts.get(prep.recipe) : undefined;
-    const value = directValue.cost !== null || recipeEstimate?.costPerServing === null || recipeEstimate?.costPerServing === undefined
-      ? directValue
-      : { cost: recipeEstimate.costPerServing * Number(lot.remaining_qty), estimated: true, source: 'Recipe estimate' };
+    const batch: CostValue = directBatch.cost !== null
+      ? directBatch
+      : recipeEstimate?.costPerServing !== null && recipeEstimate?.costPerServing !== undefined
+        ? { cost: recipeEstimate.costPerServing * servingsTotal, estimated: true, source: 'Recipe estimate' }
+        : { cost: null, estimated: true, source: 'Price unavailable' };
     return {
       id: lot.id,
       emoji: recipe?.emoji ?? '🥘',
       name: recipe?.name ?? 'Prepared batch',
       location: lot.location ?? 'unassigned',
-      remaining: `${formatQuantity(Number(lot.remaining_qty))} of ${formatQuantity(Number(lot.initial_qty))} servings`,
+      remaining: `${formatQuantity(servingsLeft)} of ${formatQuantity(servingsTotal)} servings`,
       due: daysUntil(lot.use_by).label,
-      progress: Number(lot.initial_qty) ? Number(lot.remaining_qty) / Number(lot.initial_qty) * 100 : 0,
-      cost: value.cost,
-      costIsEstimated: value.estimated,
+      progress: servingsTotal ? servingsLeft / servingsTotal * 100 : 0,
+      batchCost: batch.cost,
+      servingsTotal,
+      servingsLeft,
+      costPerServing: perServingCost(batch.cost, servingsTotal),
+      valueRemaining: remainingValue(batch.cost, servingsTotal, servingsLeft),
+      costIsEstimated: batch.estimated,
     };
   });
 
@@ -343,18 +354,18 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const todayKey = dateKeyInZone(new Date(), settings.time_zone);
   const todayLogs = logs.filter((log) => dateKeyInZone(new Date(log.occurred_at), settings.time_zone) === todayKey);
   const nutrientSpec = [
-    ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#86d7ac'],
-    ['Protein', 'protein_g', settings.nutrition_protein_g, 'g', '#86d7ac'],
-    ['Carbs', 'carbs_g', settings.nutrition_carbs_g, 'g', '#8fbce6'],
-    ['Fat', 'fat_g', settings.nutrition_fat_g, 'g', '#b0a6e0'],
-    ['Fiber', 'fiber_g', settings.nutrition_fiber_g, 'g', '#e5c07b'],
-    ['Sodium', 'sodium_mg', settings.nutrition_sodium_mg, 'mg', '#e88592'],
+    ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#5fe0a0'],
+    ['Protein', 'protein_g', settings.nutrition_protein_g, 'g', '#5fe0a0'],
+    ['Carbs', 'carbs_g', settings.nutrition_carbs_g, 'g', '#57a8f2'],
+    ['Fat', 'fat_g', settings.nutrition_fat_g, 'g', '#a184f5'],
+    ['Fiber', 'fiber_g', settings.nutrition_fiber_g, 'g', '#f0b13f'],
+    ['Sodium', 'sodium_mg', settings.nutrition_sodium_mg, 'mg', '#f2637a'],
   ] as const;
   const buildNutrients = (dayLogs: FoodLogRow[]) => nutrientSpec.map(([label, field, target, unit, color]) => {
     const value = sum(dayLogs, field);
     return { label, value: `${Math.round(value).toLocaleString()}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
   });
-  const palette = ['#53d7a0', '#5eb5f5', '#a78bfa', '#f59e6b', '#f472b6', '#f2d06b', '#4fd1c5', '#ef7d7d'];
+  const palette = ['#5fe0a0', '#57a8f2', '#a184f5', '#f0b13f', '#f2637a', '#35d6c8', '#f59e6b', '#f472b6'];
   const eventCostById = new Map((eventCostsResult.data ?? []).map((row) => [row.inventory_event_id ?? '', row.cost === null ? null : Number(row.cost)]));
   const eventsByLog = new Map<string, NonNullable<typeof eventsResult.data>>();
   for (const event of eventsResult.data ?? []) if (event.food_log) eventsByLog.set(event.food_log, [...(eventsByLog.get(event.food_log) ?? []), event]);
@@ -518,6 +529,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       favorites: settings.favorites,
       timeZone: settings.time_zone,
       planningNotes: settings.planning_notes ?? '',
+      weeklyFoodBudget: Number(settings.weekly_food_budget ?? DEFAULT_WEEKLY_FOOD_BUDGET),
     },
     externalProducts,
     preparedLots,

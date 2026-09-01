@@ -71,7 +71,7 @@ describe('Pantry web UI', () => {
     expect(screen.getByText(/~\$4\.72 batch · ~\$1\.18\/serving/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
-    expect(screen.getByText(/~\$13\.25 total/)).toBeInTheDocument();
+    expect(screen.getByText(/3 entries · ~\$13\.25/)).toBeInTheDocument();
     expect(screen.getByText('~$8.49')).toBeInTheDocument();
   });
 

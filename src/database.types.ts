@@ -627,6 +627,7 @@ export type Database = {
           singleton: boolean
           time_zone: string
           updated_at: string
+          weekly_food_budget: number
         }
         Insert: {
           allergies?: string[]
@@ -652,6 +653,7 @@ export type Database = {
           singleton?: boolean
           time_zone?: string
           updated_at?: string
+          weekly_food_budget?: number
         }
         Update: {
           allergies?: string[]
@@ -677,6 +679,7 @@ export type Database = {
           singleton?: boolean
           time_zone?: string
           updated_at?: string
+          weekly_food_budget?: number
         }
         Relationships: []
       }
