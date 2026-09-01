@@ -16,6 +16,10 @@
 - Before integrating, update the feature branch from the latest committed `main`, resolve conflicts in the feature worktree, and rerun the feature tests plus the full regression suite. Verify that previously working behavior still works with the new feature.
 - A completed change is not delivered until it is merged into `main`, pushed to GitHub, and the GitHub Pages Actions deployment succeeds. Deploy changed Supabase migrations before or alongside application code that depends on them.
 
+## Custom GPT maintenance
+
+- To open the **My Pantry** GPT editor in ChatGPT, use the short UI path: click the pinned **My Pantry** item in the left sidebar, click **My Pantry** again at the upper-left of the main pane, then select **Edit GPT**. Do not take the longer **More → GPTs → My GPTs** route unless this shortcut is unavailable.
+
 ### `main` merge lock
 
 - The repository root on `main` uses `merging.lock` as a cooperative merge mutex. The file is intentionally untracked and must never be committed.
