@@ -77,6 +77,18 @@ describe('Pantry web UI', () => {
     expect(screen.getByText('~$8.49')).toBeInTheDocument();
   });
 
+  it('shows planned nutrition as patterned projections in the food log and Today', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    expect(screen.getByText('Includes today’s planned meals')).toBeInTheDocument();
+    expect(container.querySelectorAll('.nutrition-card .projection-segment')).toHaveLength(6);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    expect(screen.getByText("Today's plan")).toBeInTheDocument();
+    expect(container.querySelectorAll('.contribution-card .projection-segment').length).toBeGreaterThan(0);
+  });
+
   it('opens recipe detail and tracks cooking steps', async () => {
     const user = userEvent.setup();
     render(<App />);

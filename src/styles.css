@@ -52,7 +52,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .nav-item.active::before { background: var(--mint); }
 .nav-item svg { width: 16px; height: 16px; stroke-width: 1.8; }
 .nav-item span { flex: 1; }
-.nav-item small { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--faint); }
+.nav-item .nav-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item small { flex: 0 0 auto; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--faint); }
 .sidebar-spacer { flex: 1; min-height: 20px; }
 .profile-row { width: 100%; background: transparent; border: 0; border-top: 1px solid #191f1d; border-radius: 8px; padding: 10px 4px 2px; display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; }
 .profile-row:hover { background: #121715; }
@@ -118,8 +119,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .macro-row span { flex: 1; color: var(--text-2); font-size: 12.5px; }
 .macro-row strong, .macro-row small { font: 11.5px 'JetBrains Mono', monospace; }
 .macro-row small { color: var(--faint); }
-.progress { height: 4px; background: var(--track); border-radius: 3px; overflow: hidden; margin-top: 5px; }
-.progress span { display: block; height: 100%; border-radius: 3px; background: var(--mint); }
+.progress { height: 4px; background: var(--track); border-radius: 3px; overflow: hidden; margin-top: 5px; display: flex; }
+.progress span, .progress i { display: block; height: 100%; flex: 0 0 auto; }
+.progress span { border-radius: 3px; background: var(--mint); }
+.plan-projection-key { display: flex; align-items: center; gap: 7px; margin: -3px 0 12px; color: var(--faint); font-size: 10.5px; }
+.plan-projection-key i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 2px; }
 .featured-meal { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .featured-meal > span { font-size: 28px; }
 .featured-meal div { flex: 1; }
