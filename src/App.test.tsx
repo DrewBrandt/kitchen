@@ -44,6 +44,21 @@ describe('Pantry web UI', () => {
     expect(screen.queryByText('All-purpose flour')).not.toBeInTheDocument();
   });
 
+  it('carries estimated costs through inventory, recipes, and the food log', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Inventory' }));
+    expect(screen.getAllByText('~$3.18').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    expect(screen.getByText(/~\$4\.72 batch · ~\$1\.18\/serving/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    expect(screen.getByText(/~\$13\.25 total/)).toBeInTheDocument();
+    expect(screen.getByText('~$8.49')).toBeInTheDocument();
+  });
+
   it('opens recipe detail and tracks cooking steps', async () => {
     const user = userEvent.setup();
     render(<App />);

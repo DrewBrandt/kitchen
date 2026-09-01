@@ -654,6 +654,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .lot-actions input { width: 100%; height: 36px; padding: 0 9px; border: 1px solid #2b3430; border-radius: 8px; background: #111513; color: var(--text); }
 .button.danger { border: 1px solid #593036; background: #281719; color: #f0a0aa; }
 .button.danger:hover { background: #351d20; }
+.inventory-total .cost-inline { display: block; margin-top: 3px; color: var(--mint); font: 9px 'JetBrains Mono', monospace; }
+.log-cost { min-width: 58px; color: var(--mint); font: 11px 'JetBrains Mono', monospace; text-align: right; }
 
 @media (max-width: 720px) {
   .product-grid { grid-template-columns: 1fr; }
