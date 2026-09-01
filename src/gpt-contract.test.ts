@@ -69,6 +69,8 @@ describe('Pantry GPT operator pack', () => {
   it('maps weekly-plan body fields to the parameterized database function', () => {
     expect(edgeFunction).toContain('p_week_start: requiredString(input.weekStart, "weekStart")');
     expect(edgeFunction).toContain('p_entries: requiredArray(input.entries, "entries")');
+    expect(schema.paths['/v1/plans'].post.requestBody.content['application/json'].schema.properties.entries.items.required)
+      .toContain('plannedServings');
   });
 
   it('exposes purchased-product consumption inputs directly to the Action importer', () => {

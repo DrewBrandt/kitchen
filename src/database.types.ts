@@ -563,6 +563,51 @@ export type Database = {
           },
         ]
       }
+      planned_consumptions: {
+        Row: {
+          created_at: string
+          food_log: string | null
+          id: string
+          meal_plan: string
+          servings: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          food_log?: string | null
+          id?: string
+          meal_plan: string
+          servings: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          food_log?: string | null
+          id?: string
+          meal_plan?: string
+          servings?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_consumptions_food_log_fkey"
+            columns: ["food_log"]
+            isOneToOne: true
+            referencedRelation: "food_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_consumptions_meal_plan_fkey"
+            columns: ["meal_plan"]
+            isOneToOne: true
+            referencedRelation: "meal_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_recipes: {
         Row: {
           meal: string

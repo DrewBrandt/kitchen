@@ -224,6 +224,8 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   if (kind === 'meal') {
     const intent = text(form, 'intent') || 'prepare';
     const groupId = crypto.randomUUID();
+    const plannedServings = number(form, 'planned_servings', 1);
+    if (plannedServings <= 0) throw new Error('Planned servings must be positive.');
     if (intent === 'leftover') {
       const sourceGroupId = text(form, 'source_group_id');
       if (!sourceGroupId) throw new Error('Choose the meal that will provide the leftovers.');
@@ -236,7 +238,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       }
       if (sourceError) throw sourceError;
       if (!sourceRows?.length) throw new Error('The original meal could not be found.');
-      const { error } = await client.from('meal_plans').insert(sourceRows.map((row) => ({
+      const { data: insertedPlans, error } = await client.from('meal_plans').insert(sourceRows.map((row) => ({
         plan_date: text(form, 'plan_date'),
         daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
         meal: row.meal,
@@ -250,12 +252,14 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
         intent: 'leftover',
         preparation_tasks: [],
         note: optionalText(form, 'note'),
-      })));
+      }))).select('id');
       if (error) throw error;
+      const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).in('meal_plan', (insertedPlans ?? []).map((plan) => plan.id));
+      if (consumptionError) throw consumptionError;
       return 'Leftovers added to the plan.';
     }
     if (!text(form, 'recipe')) throw new Error('Choose a recipe for the meal.');
-    const { error } = await client.from('meal_plans').insert({
+    const { data: insertedPlan, error } = await client.from('meal_plans').insert({
       recipe: text(form, 'recipe'),
       plan_date: text(form, 'plan_date'),
       daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
@@ -264,8 +268,10 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       group_id: groupId,
       intent: 'prepare',
       note: optionalText(form, 'note'),
-    });
+    }).select('id').single();
     if (error) throw error;
+    const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).eq('meal_plan', insertedPlan.id);
+    if (consumptionError) throw consumptionError;
     return 'Meal added to the plan.';
   }
 

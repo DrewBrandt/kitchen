@@ -252,7 +252,9 @@ products use distinct calls; repeated units of one exact product can use quantit
 
 `POST /v1/plans` replaces exactly the seven dates beginning at `weekStart`, then
 rebuilds unchecked generated grocery shortages while preserving manual items.
-Recipe and meal entries use `sourceId` and `scaleFactor`.
+Recipe and meal entries use `sourceId`, preparation `scaleFactor`, and
+`plannedServings`. Preparation scale drives ingredient demand; planned servings
+drive projected nutrition and must describe only the expected eaten portion.
 
 `POST /v1/grocery-items` adds a manual item. The target, preference, and routine
 POST routes replace their respective singleton settings.
