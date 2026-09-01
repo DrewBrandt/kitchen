@@ -63,7 +63,7 @@ select is(
 );
 
 select is(
-  (select cost from inventory_event_costs event_cost join inventory_events event on event.id = event_cost.inventory_event_id join food_logs log on log.id = event.food_log where log.label = 'Away apple'),
+  (select event_cost.cost from inventory_event_costs event_cost join inventory_events event on event.id = event_cost.inventory_event_id join food_logs log on log.id = event.food_log where log.label = 'Away apple'),
   0.6250::numeric,
   'Partial consumption allocates only the consumed share of purchase cost'
 );
@@ -92,7 +92,7 @@ select is(
 );
 
 select is(
-  (select cost from inventory_event_costs event_cost join inventory_events event on event.id = event_cost.inventory_event_id join food_logs log on log.id = event.food_log where log.label = 'Away apple'),
+  (select event_cost.cost from inventory_event_costs event_cost join inventory_events event on event.id = event_cost.inventory_event_id join food_logs log on log.id = event.food_log where log.label = 'Away apple'),
   2.0250::numeric,
   'Corrected purchase cost is allocated to the consumed portion'
 );
