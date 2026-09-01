@@ -102,12 +102,16 @@ export interface Recipe {
   ingredientText?: string;
   instructionText?: string;
   cookable?: boolean;
+  estimatedCost?: number | null;
+  costPerServing?: number | null;
+  costIsEstimated?: boolean;
 }
 
 export const RECIPES: Recipe[] = [
   {
     id: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', servings: 4, minutes: 24,
-    nutrition: '310 cal · 9 g protein per serving', ease: 0, taste: 0, cookable: true,
+    nutrition: '310 cal · 9 g protein per serving · ~$4.72 batch', ease: 0, taste: 0, cookable: true,
+    estimatedCost: 4.72, costPerServing: 1.18, costIsEstimated: true,
     ingredientText: '1.5 cup All-purpose flour\n1.25 cup Milk\n1 ct Egg\n2 tbsp Butter\n0.5 tsp Salt',
     instructionText: 'Whisk the dry ingredients.\nWhisk in milk and egg until just combined.\nCook portions in butter on a hot skillet.',
     ingredients: [
@@ -121,7 +125,8 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', servings: 1, minutes: 9,
-    nutrition: '220 cal · 13 g protein per serving', ease: 0, taste: 0, cookable: true,
+    nutrition: '220 cal · 13 g protein per serving · ~$1.14 batch', ease: 0, taste: 0, cookable: true,
+    estimatedCost: 1.14, costPerServing: 1.14, costIsEstimated: true,
     ingredientText: '2 ct Egg\n0.5 tbsp Butter\n0.125 tsp Salt',
     instructionText: 'Beat the eggs with a pinch of salt.\nMelt butter over medium-low heat.\nStir gently until softly set.',
     ingredients: [
@@ -150,22 +155,22 @@ export const NUTRIENTS = [
 
 export const WEEK_DAYS = [
   { day: 'MON', date: '25', meals: [] },
-  { day: 'TUE', date: '26', meals: [{ slot: 'BREAKFAST', name: 'Soft Scrambled Eggs', emoji: '🍳' }] },
-  { day: 'WED', date: '27', today: true, meals: [{ slot: 'DINNER', name: 'Simple Pancakes', emoji: '🥞' }] },
+  { day: 'TUE', date: '26', meals: [{ slot: 'BREAKFAST', name: 'Soft Scrambled Eggs', emoji: '🍳', cost: 1.14, costIsEstimated: true }] },
+  { day: 'WED', date: '27', today: true, meals: [{ slot: 'DINNER', name: 'Simple Pancakes', emoji: '🥞', cost: 4.72, costIsEstimated: true }] },
   { day: 'THU', date: '28', meals: [] },
-  { day: 'FRI', date: '29', meals: [{ slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳' }] },
+  { day: 'FRI', date: '29', meals: [{ slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', cost: 1.14, costIsEstimated: true }] },
   { day: 'SAT', date: '30', meals: [] },
   { day: 'SUN', date: '31', meals: [] },
 ];
 
 export const FOOD_LOG = [
-  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#53d7a0', nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
-  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#5eb5f5', nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
-  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a78bfa', nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
+  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#53d7a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#5eb5f5', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
+  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a78bfa', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
 ];
 
 export const HISTORY = [
-  { day: 'Thursday', date: 'AUG 27', meals: ['Simple Pancakes', '2× Greek yogurt', 'Chicken sandwich'], totals: '1,180 cal\n74 g protein' },
+  { day: 'Thursday', date: 'AUG 27', meals: ['Simple Pancakes', '2× Greek yogurt', 'Chicken sandwich'], totals: '1,180 cal\n74 g protein', cost: 13.25 },
   { day: 'Wednesday', date: 'AUG 26', meals: ['Soft Scrambled Eggs', 'Chicken sandwich'], totals: '1,640 cal\n102 g protein' },
   { day: 'Monday', date: 'AUG 24', meals: ['Simple Pancakes', 'Greek yogurt'], totals: '1,420 cal\n88 g protein' },
   { day: 'Saturday', date: 'AUG 22', meals: ['Weekend brunch', 'Chicken sandwich'], totals: '1,830 cal\n111 g protein' },

@@ -68,6 +68,7 @@ interface PanelState {
 }
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ');
+const costLabel = (value: number | null | undefined, estimated = false) => value === null || value === undefined ? 'Price unavailable' : `${estimated ? '~' : ''}$${value.toFixed(2)}`;
 
 export function greetingFor(date: Date, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   let hour = date.getHours();
@@ -352,7 +353,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
         </Card>
         <Card className="next-card">
           <div className="card-kicker"><span>NEXT UP</span><button onClick={() => onNavigate('week')}>Week</button></div>
-          <div className="featured-meal"><span>{nextMeal?.emoji ?? '📅'}</span><div><strong>{nextMeal?.name ?? 'Nothing planned'}</strong><small>{nextMeal ? `${nextMeal.slot.toLowerCase()} · ${nextMeal.day.today ? 'today' : nextMeal.day.day}` : 'Add a meal to this week'}</small></div></div>
+          <div className="featured-meal"><span>{nextMeal?.emoji ?? '📅'}</span><div><strong>{nextMeal?.name ?? 'Nothing planned'}</strong><small>{nextMeal ? `${nextMeal.slot.toLowerCase()} · ${nextMeal.day.today ? 'today' : nextMeal.day.day} · ${costLabel(nextMeal.cost, nextMeal.costIsEstimated)}` : 'Add a meal to this week'}</small></div></div>
           <div className="split-actions"><button className="button primary" disabled={!nextRecipe} onClick={() => nextRecipe && onOpen('cook', nextRecipe)}>Cook it</button><button className="button secondary" onClick={() => onOpen('meal', undefined, nextMeal?.day.dateKey ? { plan_date: nextMeal.day.dateKey, daypart: nextMeal.slot.toLowerCase() } : undefined)}>{nextMeal ? 'Plan another' : 'Plan meal'}</button></div>
         </Card>
         <Card>
@@ -365,7 +366,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
 
       <Card>
         <SectionTitle title="Ready to eat" />
-        {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} progress={lot.progress} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One serving of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
+        {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} progress={lot.progress} cost={lot.cost} costIsEstimated={lot.costIsEstimated} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One serving of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
         {!preparedLots.length && <div className="empty-ready"><CookingPot /><div><strong>Nothing prepared yet</strong><small>Cook a recipe to keep ready-to-eat servings here.</small></div><button className="button secondary compact" onClick={() => onNavigate('recipes')}>Find a recipe</button></div>}
       </Card>
 
@@ -374,7 +375,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
         <div className="cookable-grid">
           {popularRecipes.map((recipe) => (
             <button className="cookable-row" key={recipe.id} onClick={() => onOpen('recipe-detail', recipe)}>
-              <span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {servingLabel(recipe.servings)}</small></div><ChevronRight />
+              <span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {servingLabel(recipe.servings)} · {costLabel(recipe.estimatedCost, recipe.costIsEstimated)}</small></div><ChevronRight />
             </button>
           ))}
         </div>
@@ -387,8 +388,8 @@ function MacroRow({ label, value, target, pct, color }: { label: string; value: 
   return <div className="macro-row"><div><span>{label}</span><strong>{value}</strong><small>{target}</small></div><Progress value={pct} color={color} /></div>;
 }
 
-function PreparedRow({ emoji, name, where, servings, due, progress, onEat }: { emoji: string; name: string; where: string; servings: string; due: string; progress: number; onEat: () => void }) {
-  return <div className="prepared-row"><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong><small>{where}</small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><button className="button compact" onClick={onEat}>Eat</button></div>;
+function PreparedRow({ emoji, name, where, servings, due, progress, cost, costIsEstimated, onEat }: { emoji: string; name: string; where: string; servings: string; due: string; progress: number; cost: number | null; costIsEstimated: boolean; onEat: () => void }) {
+  return <div className="prepared-row"><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong><small>{where} · {costLabel(cost, costIsEstimated)} remaining</small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><button className="button compact" onClick={onEat}>Eat</button></div>;
 }
 
 function InventoryPage({ filter, search, onFilter, onSearch, onOpen, onOpenFood }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void }) {
@@ -414,7 +415,7 @@ function InventoryPage({ filter, search, onFilter, onSearch, onOpen, onOpenFood 
             <button className="inventory-row" key={food.name} onClick={() => onOpenFood(food)}>
               <span className="row-emoji">{food.emoji}</span><div className="inventory-name"><strong>{food.name}</strong><small>{food.sub}</small></div>
               <div className="lot-meter"><div>{food.lots.map((lot, index) => <span key={lot} className={cx('lot-bar', index === 0 && food.tone)} />)}</div><small>{food.lots.join(' · ')}</small></div>
-              <strong className="inventory-total">{food.total}</strong><small className={cx('inventory-due', food.tone)}>{food.due}</small>
+              <strong className="inventory-total">{food.total}<small className="cost-inline">{costLabel(food.cost, food.costIsEstimated)}</small></strong><small className={cx('inventory-due', food.tone)}>{food.due}</small>
               <ChevronRight className="row-chevron" />
             </button>
           ))}
@@ -440,7 +441,7 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
           <Card className="recipe-card" key={recipe.id}>
             <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2></div><small>{recipe.minutes} min · {servingLabel(recipe.servings)} · {recipe.prepCount ?? 0} preparation{recipe.prepCount === 1 ? '' : 's'}</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
             <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label}</span>; })}</div>
-            <p className="recipe-nutrition">{recipe.nutrition}</p>
+            <p className="recipe-nutrition">{recipe.nutrition} · {costLabel(recipe.costPerServing, recipe.costIsEstimated)}/serving</p>
             <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-edit', recipe)}>Edit recipe</button></div>
           </Card>
         ))}
@@ -449,7 +450,7 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
       <div className="inline-heading"><h2>Meals</h2><p>Cook one recipe or prepare several recipes as one meal.</p><button className="button secondary" onClick={() => onOpen('combined-meal')}>Build a meal</button></div>
       <Card className="combined-meal">
         <div className="combined-summary"><span>🍽️</span><div className="grow"><strong>Build a meal</strong><small>Select one or more recipes and cook them in one inventory transaction.</small></div><button className="button primary" onClick={() => onOpen('combined-meal')}>Choose recipes</button></div>
-        <div className="combined-components">{recipes.map((recipe) => <button key={recipe.id} onClick={() => onOpen('recipe-detail', recipe)}><span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · independently prepared</small></div><ChevronRight /></button>)}</div>
+        <div className="combined-components">{recipes.map((recipe) => <button key={recipe.id} onClick={() => onOpen('recipe-detail', recipe)}><span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {costLabel(recipe.estimatedCost, recipe.costIsEstimated)}</small></div><ChevronRight /></button>)}</div>
       </Card>
     </div>
   );
@@ -459,6 +460,7 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, 
   const { grocerySections, inventorySections } = usePantryData();
   const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const total = grocerySections.flatMap((section) => section.items).length;
+  const groceryCost = grocerySections.flatMap((section) => section.items).reduce((sum, item) => sum + Number(item.cost ?? 0), 0);
   const done = checked.size;
   const next = grocerySections.find((section) => section.items.some((item) => !checked.has(itemKey(item))));
   const alreadyInKitchen = inventorySections.flatMap((section) => section.foods).slice(0, 6);
@@ -466,14 +468,14 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, 
     <div className={cx(shoppingMode && 'shopping-mode')}>
       <Card className="grocery-summary">
         <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /></div>
-        <div className="next-aisle"><span>{next ? 'NEXT AISLE' : 'ALL DONE'}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
+        <div className="next-aisle"><span>{next ? `NEXT AISLE · ${costLabel(groceryCost, true)}` : `ALL DONE · ${costLabel(groceryCost, true)}`}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
       </Card>
       <div className="grocery-grid">
         {grocerySections.map((section) => (
           <Card className={cx('grocery-section', section.items.every((item) => checked.has(itemKey(item))) && 'complete')} key={section.label}>
             <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.items.filter((item) => !checked.has(itemKey(item))).length} left</small></div>
             {section.items.map((item) => (
-              <div className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} key={itemKey(item)}><button className="grocery-toggle" onClick={() => toggle(item)}><span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity}</small></button>{item.id && <button className="grocery-remove" aria-label={`Remove ${item.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(item.id!).then(() => notify(`${item.name} removed from the grocery list.`)).catch(() => notify(`Could not remove ${item.name}.`)); }}><Trash2 /></button>}</div>
+              <div className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} key={itemKey(item)}><button className="grocery-toggle" onClick={() => toggle(item)}><span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity} · {costLabel(item.cost, true)}</small></button>{item.id && <button className="grocery-remove" aria-label={`Remove ${item.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(item.id!).then(() => notify(`${item.name} removed from the grocery list.`)).catch(() => notify(`Could not remove ${item.name}.`)); }}><Trash2 /></button>}</div>
             ))}
           </Card>
         ))}
@@ -500,7 +502,7 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
         const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
         dateKey = `${value('year')}-${value('month')}-${value('day')}`;
       } catch { /* device date is a safe fallback */ }
-      return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey, today: date.toDateString() === now.toDateString(), meals: plannedMeals.filter((meal) => meal.dateKey === dateKey) };
+      return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey, today: date.toDateString() === now.toDateString(), meals: plannedMeals.filter((meal) => meal.dateKey === dateKey).map((meal) => ({ ...meal, slot: `${meal.slot} · ${costLabel(meal.cost, meal.costIsEstimated)}` })) };
     });
   }, [plannedMeals, settings.timeZone, weekOffset]);
   const weekLabel = `${new Date(`${weekDays[0].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(`${weekDays[6].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
@@ -558,8 +560,8 @@ function FoodLogPage({ onOpen, notify, onVoid }: { onOpen: (kind: PanelKind) => 
         })}
       </Card>
       <Card>
-        <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'}`} />
-        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small>{entry.id && onVoid && <button onClick={() => { void onVoid(entry.id!).then(() => notify(`${entry.label} removed from the food log.`)).catch(() => notify(`Could not remove ${entry.label}.`)); }}>Remove</button>}</div>)}
+        <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'} · ${costLabel(foodLog.every((entry) => entry.cost !== null && entry.cost !== undefined) ? foodLog.reduce((sum, entry) => sum + Number(entry.cost), 0) : null, foodLog.some((entry) => entry.costIsEstimated))} total`} />
+        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small>{entry.id && onVoid && <button onClick={() => { void onVoid(entry.id!).then(() => notify(`${entry.label} removed from the food log.`)).catch(() => notify(`Could not remove ${entry.label}.`)); }}>Remove</button>}</div>)}
       </Card>
     </div>
   );
@@ -575,7 +577,7 @@ function HistoryPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
     <div className="history-layout">
       <Card className="grow">
         <SectionTitle title="Day by day" />
-        {history.map((day) => <div className="history-day" key={day.date}><div><strong>{day.day}</strong><small>{day.date}</small></div><div>{day.meals.map((meal, index) => <span key={`${meal}-${index}`}>{meal}</span>)}</div><small>{day.totals}</small></div>)}
+        {history.map((day) => <div className="history-day" key={day.date}><div><strong>{day.day}</strong><small>{day.date}</small></div><div>{day.meals.map((meal, index) => <span key={`${meal}-${index}`}>{meal}</span>)}</div><small>{day.totals}\n{costLabel(day.cost, true)}</small></div>)}
       </Card>
       <Card className="repeats-card">
         <SectionTitle title="Most repeated" subtitle="Context for planning more variety." />
