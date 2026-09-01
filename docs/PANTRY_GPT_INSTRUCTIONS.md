@@ -68,7 +68,7 @@ because its quantity is zero.
   `productId`, quantity, and supported unit. If only the product is new, create
   only it; create a food only for a new ingredient.
 - New foods need a grocery category and `main`, `supporting`, or `staple` role.
-  Keep exact aisles. Mark household water `alwaysAvailable`; it needs no lots
+  Keep aisles. Mark household water `alwaysAvailable`; it needs no lots
   or groceries.
 - Prefer label nutrition. Otherwise use a reputable source, preserve its source,
   and mark estimates. Ask only for missing data that blocks a safe conversion or
