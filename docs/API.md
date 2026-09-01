@@ -80,10 +80,43 @@ POST /v1/grocery-items
 POST /v1/targets
 POST /v1/preferences
 POST /v1/routine
+PATCH /v1/foods/{uuid}
+PATCH /v1/products/{uuid}
+PATCH /v1/recipes/{uuid}
+PATCH /v1/lots/{uuid}
+PATCH /v1/history/{uuid}
 ```
 
 Food lookup returns supported measurement units and products. Inventory returns
 exact `foodId`, `productId`, and `lotId` values. The GPT must reuse these IDs.
+
+## Editing existing records
+
+Partial edits preserve record identity and write before/after state to
+`record_edits`:
+
+```text
+PATCH /v1/foods/{uuid}
+PATCH /v1/products/{uuid}
+PATCH /v1/recipes/{uuid}
+PATCH /v1/lots/{uuid}
+PATCH /v1/history/{uuid}
+```
+
+Read the record first and send only changed fields. Recipe `ingredients`, when
+present, replace the complete ingredient list. Lot `remainingQuantity` creates a
+ledger adjustment instead of overwriting stock history.
+
+History reads include each consumption's linked inventory events, lots, and
+derived cost. Correct a purchased-food cost without relogging it:
+
+```json
+{"purchaseTotalCost":4.05,"costIsEstimated":false,"costSource":"Receipt"}
+```
+
+`purchaseTotalCost` updates the single away-from-home purchase lot linked to that
+history event. It is rejected when there is not exactly one such lot; use the
+specific lot edit in that case. Nutrition and history remain unduplicated.
 
 ## Definitions and groceries
 
