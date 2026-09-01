@@ -359,4 +359,66 @@ describe('Pantry web UI', () => {
     const tabs = screen.getAllByRole('button', { name: /^Spend$/ });
     expect(tabs.every((tab) => tab.closest('.driver-tabs') === null)).toBe(true);
   });
+
+  it('fills an over-budget cost bar and labels the overage', async () => {
+    const user = userEvent.setup();
+    const foodLog = [{ ...previewPantryData.foodLog[0], cost: 10.9, costIsEstimated: false }];
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const data = { ...previewPantryData, foodLog, foodLogByDate: { ...previewPantryData.foodLogByDate, [todayKey]: { nutrients: previewPantryData.nutrients, foodLog, nutritionIncompleteEntries: 0 } }, settings: { ...previewPantryData.settings, weeklyFoodBudget: 70 } };
+    const { container } = render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
+
+    expect(screen.getByText('$0.90 OVER')).toBeInTheDocument();
+    const progress = container.querySelector('.spend-metric .progress') as HTMLElement;
+    expect(progress).toHaveAttribute('data-value', '100');
+    expect(progress.querySelector('span')).toHaveStyle({ width: '100%' });
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    const costRow = screen.getByText('Cost', { selector: 'strong' }).closest('.contribution-row')!;
+    const costSegment = costRow.querySelector('.segment-bar i') as HTMLElement;
+    expect(Number.parseFloat(costSegment.style.width)).toBeGreaterThan(82);
+    expect(costSegment.style.maxWidth).toBe('none');
+  });
+
+  it('shows every planned meal and every use-soon item on Today, with day arrows', async () => {
+    const user = userEvent.setup();
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const plannedMeals = [
+      { id: 'plan-pancakes', groupId: 'plan-pancakes', dateKey: todayKey, slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true },
+      { id: 'plan-eggs', groupId: 'plan-eggs', dateKey: todayKey, slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
+    ];
+    const data = { ...previewPantryData, plannedMeals };
+    const { container } = render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
+
+    expect(container.querySelectorAll('.today-plan-row')).toHaveLength(2);
+    expect(container.querySelectorAll('.soon-row')).toHaveLength(3);
+    await user.click(screen.getByRole('button', { name: 'Previous day' }));
+    expect(container.querySelector('.today-date-switcher strong')).not.toHaveTextContent('Today');
+    expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled();
+  });
+
+  it('opens recipe composition from a planned meal and details from a consumption event', async () => {
+    const user = userEvent.setup();
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const data = { ...previewPantryData, plannedMeals: [{ id: 'plan-pancakes', groupId: 'plan-pancakes', dateKey: todayKey, slot: 'DINNER', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true }] };
+    render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    await user.click(screen.getByRole('button', { name: 'View Simple Pancakes details' }));
+    expect(within(screen.getByRole('dialog')).getByText('INGREDIENTS')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' }).at(-1)!);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    await user.click(screen.getByRole('button', { name: 'View Simple Pancakes consumption event' }));
+    const eventDialog = screen.getByRole('dialog');
+    expect(within(eventDialog).getByText('Consumption event')).toBeInTheDocument();
+    expect(within(eventDialog).getByText('preview-log-1')).toBeInTheDocument();
+  });
+
+  it('describes history spend as an average on logged days', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'History' }));
+    expect(screen.getByText(/avg \$\d+\.\d{2} on logged days/)).toBeInTheDocument();
+    expect(screen.queryByText(/a logged day/)).not.toBeInTheDocument();
+  });
 });

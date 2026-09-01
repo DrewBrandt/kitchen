@@ -27,7 +27,8 @@ export type PanelKind =
   | 'recipe-detail'
   | 'cook'
   | 'combined-meal'
-  | 'inventory-detail';
+  | 'inventory-detail'
+  | 'consumption-detail';
 
 export interface NavItem {
   id: PageId;

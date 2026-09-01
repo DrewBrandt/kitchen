@@ -290,7 +290,7 @@ button.soon-row:hover { background: #121715; }
 .contribution-row > strong { width: 74px; font-size: 12.5px; color: var(--text-2); }
 .contribution-row > span { width: 120px; text-align: right; font: 10.5px 'JetBrains Mono', monospace; }
 .segment-bar { flex: 1; height: 10px; background: #181d1b; position: relative; display: flex; overflow: hidden; border-radius: 3px; }
-.segment-bar i { height: 10px; max-width: 33%; }
+.segment-bar i { height: 10px; max-width: none; }
 .segment-bar b { position: absolute; width: 1px; top: -2px; bottom: -2px; background: var(--muted); }
 .log-row { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
 .log-row > i { width: 2px; align-self: stretch; border-radius: 2px; }
@@ -698,7 +698,7 @@ button.soon-row:hover { background: #121715; }
 .empty-ready small { margin-top: 4px; }
 .rating { align-items: center; }
 .rating > em { margin-left: 5px; color: var(--muted); font: 9px 'JetBrains Mono', monospace; }
-.projection-swatch, .projection-segment { background: repeating-linear-gradient(135deg, #f2d06b 0 5px, #705f32 5px 10px) !important; }
+.projection-swatch, .projection-segment { background: repeating-linear-gradient(135deg, #78817d 0 5px, #343b38 5px 10px) !important; }
 .segment-bar > i { min-width: 0; transition: width .2s ease; }
 .week-switcher { min-height: 48px; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 16px; }
 .week-switcher strong { min-width: 190px; text-align: center; font-size: 13px; }
@@ -792,6 +792,38 @@ button.soon-row:hover { background: #121715; }
 .button.danger:hover { background: #351d20; }
 .inventory-total .cost-inline { display: block; margin-top: 3px; color: var(--mint); font: 9px 'JetBrains Mono', monospace; }
 .log-cost { min-width: 58px; color: var(--mint); font: 11px 'JetBrains Mono', monospace; text-align: right; }
+.progress.over-budget span { background: var(--urgent) !important; }
+.spend-metric:has(.over-budget) em { color: var(--urgent); }
+.today-date-switcher { justify-content: flex-end; }
+.today-plan-list { margin: 10px -8px 14px; display: flex; flex-direction: column; }
+.today-plan-row { width: 100%; min-height: 52px; padding: 9px 8px; display: flex; align-items: center; gap: 10px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.today-plan-row:hover { background: #1a201d; }
+.today-plan-row > span { font-size: 23px; }
+.today-plan-row > div { flex: 1; min-width: 0; }
+.today-plan-row strong, .today-plan-row small { display: block; }
+.today-plan-row strong { font-size: 13px; }
+.today-plan-row small { margin-top: 3px; color: var(--faint); font-size: 11px; }
+.today-plan-row svg { width: 15px; color: var(--faint); }
+.week-meal-detail { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.week-meal-detail:not(:disabled) { cursor: pointer; }
+.week-meal-detail:not(:disabled):hover strong { color: var(--mint); }
+.log-event-button { flex: 1; min-width: 0; padding: 0; display: flex; align-items: center; gap: 14px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.log-event-button:hover .grow strong { color: var(--mint); }
+.log-event-button > span:not(.row-emoji) { width: 90px; text-align: right; font: 11px 'JetBrains Mono', monospace; }
+.log-event-button > small { width: 64px; text-align: right; color: var(--faint); font: 10.5px 'JetBrains Mono', monospace; }
+.consumption-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-bottom: 20px; background: var(--line); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.consumption-summary > div { min-width: 0; padding: 13px; background: var(--card-2); }
+.consumption-summary span, .consumption-summary strong { display: block; }
+.consumption-summary span { color: var(--muted); font-size: 10px; }
+.consumption-summary strong { margin-top: 6px; font: 500 12px/1.4 'JetBrains Mono', monospace; overflow-wrap: anywhere; }
+.consumption-nutrition { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.consumption-nutrition > div:not(.empty-inline) { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--card-2); }
+.consumption-nutrition span, .consumption-nutrition strong { display: block; }
+.consumption-nutrition span { color: var(--muted); font-size: 10px; }
+.consumption-nutrition strong { margin-top: 5px; font: 500 12px 'JetBrains Mono', monospace; }
+.event-reference { margin-top: 20px; display: grid; gap: 6px; }
+.event-reference span { color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; }
+.event-reference code { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 
 @media (max-width: 720px) {
   .product-grid { grid-template-columns: 1fr; }
@@ -804,4 +836,12 @@ button.soon-row:hover { background: #121715; }
   .product-toolbar select { flex: 1; }
   .lot-actions { align-items: stretch; flex-wrap: wrap; }
   .lot-actions label { flex-basis: 100%; }
+  .today-date-switcher { justify-content: center; }
+  .week-meal-card { align-items: flex-start; flex-wrap: wrap; }
+  .week-meal-card > .grow { flex-basis: calc(100% - 46px); }
+  .week-meal-cost { margin-left: 46px; }
+  .week-meal-actions { flex: 1; justify-content: flex-end; }
+  .log-event-button { gap: 9px; }
+  .log-event-button > span:not(.row-emoji), .log-event-button > small { display: none; }
+  .consumption-summary { grid-template-columns: 1fr; }
 }

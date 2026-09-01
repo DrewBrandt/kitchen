@@ -28,6 +28,21 @@ export interface InventoryFood {
 export type NutrientName = 'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium';
 export type NutritionValues = Record<NutrientName, number>;
 
+export interface FoodLogEntry {
+  id?: string;
+  emoji: string;
+  label: string;
+  serving: string;
+  calories: string;
+  protein: string;
+  time: string;
+  color: string;
+  nutrition?: NutritionValues;
+  nutritionStatus?: 'complete' | 'partial' | 'unknown';
+  cost?: number | null;
+  costIsEstimated?: boolean;
+}
+
 export interface ProductView {
   id: string;
   foodId: string;
@@ -52,11 +67,11 @@ export interface PantryData {
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean; plannedServings?: number; consumptionStatus?: string; cost?: number | null; costIsEstimated?: boolean }> }>;
   plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean; plannedServings: number; consumptionStatus: string; cost: number | null; costIsEstimated: boolean }>;
-  foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; nutritionStatus?: 'complete' | 'partial' | 'unknown'; cost?: number | null; costIsEstimated?: boolean }>;
+  foodLog: FoodLogEntry[];
   nutritionIncompleteEntries: number;
   foodLogByDate: Record<string, {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; nutritionStatus?: 'complete' | 'partial' | 'unknown'; cost?: number | null; costIsEstimated?: boolean }>;
+    foodLog: FoodLogEntry[];
     nutritionIncompleteEntries: number;
   }>;
   history: Array<{
@@ -101,6 +116,13 @@ export interface PantryData {
   todayProjection: NutritionValues;
 }
 
+const previewDateKey = (daysFromToday = 0) => {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + daysFromToday);
+  return date.toLocaleDateString('en-CA');
+};
+
 export const previewPantryData: PantryData = {
   inventorySections: INVENTORY_SECTIONS.map((section) => ({
     ...section,
@@ -128,7 +150,11 @@ export const previewPantryData: PantryData = {
   })),
   nutrients: NUTRIENTS,
   weekDays: WEEK_DAYS,
-  plannedMeals: [],
+  plannedMeals: [
+    { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true },
+    { id: 'preview-plan-eggs', groupId: 'preview-plan-eggs', dateKey: previewDateKey(), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
+    { id: 'preview-plan-eggs-later', groupId: 'preview-plan-eggs-later', dateKey: previewDateKey(2), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
+  ],
   foodLog: FOOD_LOG,
   nutritionIncompleteEntries: 0,
   foodLogByDate: {
