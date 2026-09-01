@@ -49,6 +49,9 @@ In **Actions**, create an Action:
 5. Save, then clear the clipboard with `Set-Clipboard -Value ''`.
 
 Never place the token in the schema, instructions, Knowledge, Git, or a chat.
+The GPT-facing schema is intentionally capped at 30 operations for the Action
+importer. Backend routes that are redundant for the GPT may remain available
+without appearing in this schema.
 
 ## 4. Preview tests
 
