@@ -546,7 +546,22 @@ export async function setShoppingItemChecked(client: Client, id: string, checked
 }
 
 export async function voidFoodLog(client: Client, id: string) {
-  const { error } = await client.from('food_logs').update({ voided_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await client.rpc('void_food_log', { p_food_log: id });
+  if (error) throw error;
+}
+
+export async function restoreFoodLog(client: Client, id: string) {
+  const { error } = await client.rpc('restore_food_log', { p_food_log: id });
+  if (error) throw error;
+}
+
+export async function undoInventoryAdjustment(client: Client, eventId: string) {
+  const { error } = await client.rpc('undo_inventory_adjustment', { p_event: eventId });
+  if (error) throw error;
+}
+
+export async function undoPrep(client: Client, prepId: string) {
+  const { error } = await client.rpc('undo_prep', { p_prep: prepId });
   if (error) throw error;
 }
 
@@ -602,13 +617,15 @@ export async function removeShoppingItem(client: Client, itemId: string) {
 }
 
 export async function consumeInventoryLot(client: Client, lotId: string, quantity: number) {
-  const { error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
+  const { data, error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
+  return data;
 }
 
 export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false) {
-  const { error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
+  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
   if (error) throw error;
+  return data;
 }
 
 export async function cookRecipes(client: Client, recipeIds: string[]) {
@@ -617,8 +634,9 @@ export async function cookRecipes(client: Client, recipeIds: string[]) {
 }
 
 export async function consumePreparedLot(client: Client, lotId: string, quantity = 1) {
-  const { error } = await client.rpc('consume_prepared_lot', { p_lot: lotId, p_quantity: quantity });
+  const { data, error } = await client.rpc('consume_prepared_lot', { p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
+  return data;
 }
 
 export async function rebuildShoppingFromPlan(client: Client) {

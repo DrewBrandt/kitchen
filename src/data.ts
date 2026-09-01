@@ -164,9 +164,9 @@ export const WEEK_DAYS = [
 ];
 
 export const FOOD_LOG = [
-  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#5fe0a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
-  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#57a8f2', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
-  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a184f5', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
+  { id: 'preview-log-1', emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#5fe0a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+  { id: 'preview-log-2', emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#57a8f2', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
+  { id: 'preview-log-3', emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a184f5', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
 ];
 
 export const HISTORY = [

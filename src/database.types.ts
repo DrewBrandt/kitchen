@@ -1152,6 +1152,22 @@ export type Database = {
       }
       set_inventory_lot_quantity: {
         Args: { p_discard?: boolean; p_lot: string; p_remaining: number }
+        Returns: string
+      }
+      void_food_log: {
+        Args: { p_food_log: string }
+        Returns: undefined
+      }
+      restore_food_log: {
+        Args: { p_food_log: string }
+        Returns: undefined
+      }
+      undo_inventory_adjustment: {
+        Args: { p_event: string }
+        Returns: undefined
+      }
+      undo_prep: {
+        Args: { p_prep: string }
         Returns: undefined
       }
       food_accepts_unit: {

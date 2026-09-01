@@ -220,4 +220,34 @@ describe('Pantry web UI', () => {
     expect(await within(dialog).findByRole('status')).toHaveTextContent('Firefox blocked the camera');
     expect(within(dialog).getByRole('button', { name: 'Enable camera' })).toBeEnabled();
   });
+
+  it('offers undo on a reversible action and runs the compensating call', async () => {
+    const user = userEvent.setup();
+    const onVoidFoodLog = vi.fn().mockResolvedValue(undefined);
+    const onRestoreFoodLog = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<App onVoidFoodLog={onVoidFoodLog} onRestoreFoodLog={onRestoreFoodLog} />);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    const row = container.querySelectorAll('.log-row')[0] as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Remove' }));
+
+    const toast = await screen.findByRole('status');
+    expect(within(toast).getByText(/removed from the food log/)).toBeInTheDocument();
+    expect(onVoidFoodLog).toHaveBeenCalledWith('preview-log-1');
+
+    await user.click(within(toast).getByRole('button', { name: 'Undo' }));
+    expect(onRestoreFoodLog).toHaveBeenCalledWith('preview-log-1');
+  });
+
+  it('does not offer undo on an action that cannot be reversed', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /all-purpose flour/i }));
+
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
 });
