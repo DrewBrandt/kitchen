@@ -193,6 +193,8 @@ insert into transaction_test_results select is(
 
 insert into transaction_test_results select throws_ok(
   $$select undo_inventory_adjustment((select id from inventory_events where reason = 'eaten' and voided_at is null limit 1))$$,
+  'P0001',
+  'Only a discard or adjustment can be undone this way',
   'Undoing an adjustment cannot be aimed at an eaten event'
 );
 
@@ -222,7 +224,17 @@ insert into transaction_test_results select is(
 -- Undoing a cook: refused once the batch has been eaten from, allowed otherwise.
 insert into transaction_test_results select throws_ok(
   $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty < initial_qty limit 1))$$,
+  'P0001',
+  'This batch has already been eaten from and can no longer be undone',
   'A batch that has been eaten from can no longer be uncooked'
+);
+
+-- Earlier transaction tests intentionally consume and recount the ingredient lot.
+-- Restock it here so this case tests undoing a cook rather than stock validation.
+select set_inventory_lot_quantity(
+  '93000000-0000-0000-0000-000000000001'::uuid,
+  180::numeric,
+  false
 );
 
 insert into transaction_test_results select lives_ok(
@@ -231,7 +243,7 @@ insert into transaction_test_results select lives_ok(
 );
 
 insert into transaction_test_results select lives_ok(
-  $$select undo_prep((select id from preps where voided_at is null order by prepped_at desc limit 1))$$,
+  $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty = initial_qty limit 1))$$,
   'An untouched batch can be uncooked'
 );
 
