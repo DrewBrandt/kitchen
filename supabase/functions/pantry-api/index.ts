@@ -24,6 +24,18 @@ const nonnegativeNumber = (value: unknown, name: string) => {
   if (!Number.isFinite(parsed) || parsed < 0) throw new ApiError(`${name} must be nonnegative`);
   return parsed;
 };
+const requiredArray = (value: unknown, name: string) => {
+  if (!Array.isArray(value)) throw new ApiError(`${name} must be an array`);
+  return value;
+};
+const requiredObject = (value: unknown, name: string): Json => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new ApiError(`${name} must be an object`);
+  return value as Json;
+};
+const requiredText = (value: unknown, name: string) => {
+  if (typeof value !== "string") throw new ApiError(`${name} must be a string`);
+  return value;
+};
 const bodyObject = async (request: Request): Promise<Json> => {
   try {
     const value = await request.json();
@@ -214,7 +226,9 @@ async function route(request: Request, db: Supabase) {
   const method = request.method;
   if (method === "GET" && path === "/v1/inventory") return reply(await inventory(db));
   if (method === "POST" && path === "/v1/inventory") { const input = await bodyObject(request);
-    return reply(unwrap(await db.rpc("gpt_reconcile_inventory", { p_replacements: input.replacements, p_source: input.source ?? null }))); }
+    return reply(unwrap(await db.rpc("gpt_reconcile_inventory", {
+      p_replacements: requiredArray(input.replacements, "replacements"), p_source: input.source ?? null,
+    }))); }
   if (method === "GET" && path === "/v1/foods") return reply({ foods: await foods(db, url.searchParams.get("q") ?? undefined) });
   if (method === "GET" && path.startsWith("/v1/foods/")) { const rows = await foods(db, undefined, decodeURIComponent(path.slice(10)));
     if (!rows.length) throw new ApiError("Food does not exist", 404); return reply({ food: rows[0] }); }
@@ -227,7 +241,9 @@ async function route(request: Request, db: Supabase) {
     p_product: decodeURIComponent(path.slice(13)), p_patch: await bodyObject(request),
   })));
   if (method === "POST" && path === "/v1/groceries") { const input = await bodyObject(request);
-    return reply(unwrap(await db.rpc("gpt_add_grocery_lots", { p_items: input.items, p_source: input.source ?? null })), 201); }
+    return reply(unwrap(await db.rpc("gpt_add_grocery_lots", {
+      p_items: requiredArray(input.items, "items"), p_source: input.source ?? null,
+    })), 201); }
   if (method === "GET" && path === "/v1/recipes") return reply({ recipes: await recipes(db, url.searchParams.get("q") ?? undefined) });
   if (method === "GET" && path.startsWith("/v1/recipes/")) { const rows = await recipes(db, undefined, decodeURIComponent(path.slice(12)));
     if (!rows.length) throw new ApiError("Recipe does not exist", 404); return reply({ recipe: rows[0] }); }
@@ -271,7 +287,9 @@ async function route(request: Request, db: Supabase) {
   })));
   if (method === "GET" && path === "/v1/plans") return reply(await planning(db));
   if (method === "POST" && path === "/v1/plans") { const input = await bodyObject(request);
-    return reply(unwrap(await db.rpc("gpt_replace_weekly_plan", { p_week_start: input.weekStart, p_entries: input.entries }))); }
+    return reply(unwrap(await db.rpc("gpt_replace_weekly_plan", {
+      p_week_start: requiredString(input.weekStart, "weekStart"), p_entries: requiredArray(input.entries, "entries"),
+    }))); }
   if (method === "POST" && path === "/v1/grocery-items") { const input = await bodyObject(request);
     const result = await db.from("shopping_items").insert({ free_text: requiredString(input.name, "name"),
       quantity_label: input.quantityLabel ?? null, source: "manual", note: input.note ?? null }).select("id").single();
@@ -289,14 +307,16 @@ async function route(request: Request, db: Supabase) {
       notes: settings.routine_notes });
   }
   if (method === "POST" && ["/v1/targets", "/v1/preferences", "/v1/routine"].includes(path)) {
-    const input = await bodyObject(request); const dinner = (input.dinnerWindow as Json | undefined) ?? {};
-    const update = path === "/v1/targets" ? { nutrition_calories: input.calories, nutrition_protein_g: input.proteinG,
-      nutrition_carbs_g: input.carbsG, nutrition_fat_g: input.fatG, nutrition_fiber_g: input.fiberG,
-      nutrition_sodium_mg: input.sodiumMg, nutrition_label: input.label ?? null }
-      : path === "/v1/preferences" ? { allergies: input.allergies ?? [], dislikes: input.dislikes ?? [], favorites: input.favorites ?? [],
-        dietary_rules: input.dietaryRules ?? [], planning_notes: input.planningNotes ?? null }
-      : { time_zone: input.timeZone, routine_days: input.days, dinner_start: dinner.start, dinner_end: dinner.end,
-        commute_minutes: input.commuteMinutes, preparation_buffer_minutes: input.preparationBufferMinutes,
+    const input = await bodyObject(request);
+    const update = path === "/v1/targets" ? { nutrition_calories: positiveNumber(input.calories, "calories"), nutrition_protein_g: nonnegativeNumber(input.proteinG, "proteinG"),
+      nutrition_carbs_g: nonnegativeNumber(input.carbsG, "carbsG"), nutrition_fat_g: nonnegativeNumber(input.fatG, "fatG"), nutrition_fiber_g: nonnegativeNumber(input.fiberG, "fiberG"),
+      nutrition_sodium_mg: nonnegativeNumber(input.sodiumMg, "sodiumMg"), nutrition_label: input.label ?? null }
+      : path === "/v1/preferences" ? { allergies: requiredArray(input.allergies, "allergies"), dislikes: requiredArray(input.dislikes, "dislikes"), favorites: requiredArray(input.favorites, "favorites"),
+        dietary_rules: requiredArray(input.dietaryRules, "dietaryRules"), planning_notes: requiredText(input.planningNotes, "planningNotes") }
+      : { time_zone: requiredString(input.timeZone, "timeZone"), routine_days: requiredObject(input.days, "days"),
+        dinner_start: requiredString(requiredObject(input.dinnerWindow, "dinnerWindow").start, "dinnerWindow.start"),
+        dinner_end: requiredString(requiredObject(input.dinnerWindow, "dinnerWindow").end, "dinnerWindow.end"),
+        commute_minutes: nonnegativeNumber(input.commuteMinutes, "commuteMinutes"), preparation_buffer_minutes: nonnegativeNumber(input.preparationBufferMinutes, "preparationBufferMinutes"),
         default_thaw_hours: input.defaultThawHours ?? 24, routine_notes: input.notes ?? null };
     unwrap(await db.from("personal_settings").update(update).eq("singleton", true)); return reply({ status: "saved" });
   }
