@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { IScannerControls } from '@zxing/browser';
 import {
   Archive,
   BarChart3,
@@ -940,40 +941,49 @@ function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity }:
 
 function BarcodeScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const frameRef = useRef<number>(0);
+  const controlsRef = useRef<IScannerControls | null>(null);
+  const scanSessionRef = useRef(0);
   const [barcode, setBarcode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState('Use your phone camera or enter the UPC / EAN.');
-  const stop = () => {
-    cancelAnimationFrame(frameRef.current);
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setScanning(false);
+  const stop = (updateState = true) => {
+    scanSessionRef.current += 1;
+    controlsRef.current?.stop();
+    controlsRef.current = null;
+    if (updateState) setScanning(false);
   };
-  useEffect(() => stop, []);
+  useEffect(() => () => stop(false), []);
   async function start() {
-    const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector;
-    if (!Detector) { setMessage('This browser does not support live barcode detection. Enter the number below.'); return; }
+    const video = videoRef.current;
+    if (!video) return;
+    const session = scanSessionRef.current + 1;
+    scanSessionRef.current = session;
+    setScanning(true);
+    setMessage('Starting camera…');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      streamRef.current = stream;
-      if (!videoRef.current) return;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-      setScanning(true);
+      const { BarcodeFormat, BrowserMultiFormatReader } = await import('@zxing/browser');
+      if (scanSessionRef.current !== session) return;
+      const reader = new BrowserMultiFormatReader();
+      reader.possibleFormats = [BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.EAN_8, BarcodeFormat.EAN_13, BarcodeFormat.CODE_128];
+      const controls = await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        video,
+        (result, _error, activeControls) => {
+          if (!result || scanSessionRef.current !== session) return;
+          const found = result.getText();
+          scanSessionRef.current += 1;
+          activeControls.stop();
+          controlsRef.current = null;
+          setBarcode(found);
+          setMessage(`Found ${found}`);
+          setScanning(false);
+        },
+      );
+      if (scanSessionRef.current !== session) { controls.stop(); return; }
+      controlsRef.current = controls;
       setMessage('Point the camera at the barcode.');
-      const detector = new Detector({ formats: ['upc_a', 'upc_e', 'ean_8', 'ean_13', 'code_128'] });
-      const detect = async () => {
-        if (!videoRef.current || !streamRef.current) return;
-        try {
-          const found = await detector.detect(videoRef.current);
-          if (found[0]?.rawValue) { setBarcode(found[0].rawValue); setMessage(`Found ${found[0].rawValue}`); stop(); return; }
-        } catch { /* keep scanning through transient camera frames */ }
-        frameRef.current = requestAnimationFrame(() => void detect());
-      };
-      void detect();
     } catch (cause) {
+      if (scanSessionRef.current !== session) return;
       setMessage(cause instanceof Error ? cause.message : 'Camera access was not available.');
       stop();
     }

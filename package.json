@@ -17,6 +17,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.112.4",
     "@vitejs/plugin-react": "latest",
+    "@zxing/browser": "0.2.1",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",

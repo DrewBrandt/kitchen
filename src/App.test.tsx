@@ -3,6 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App, greetingFor } from './App';
 
+const scannerMocks = vi.hoisted(() => ({ decodeFromConstraints: vi.fn() }));
+
+vi.mock('@zxing/browser', () => ({
+  BarcodeFormat: { UPC_A: 1, UPC_E: 2, EAN_8: 3, EAN_13: 4, CODE_128: 5 },
+  BrowserMultiFormatReader: class {
+    possibleFormats: number[] = [];
+    decodeFromConstraints = scannerMocks.decodeFromConstraints;
+  },
+}));
+
 describe('Pantry web UI', () => {
   it('renders the mockup-inspired dashboard and complete navigation', () => {
     render(<App />);
@@ -160,5 +170,31 @@ describe('Pantry web UI', () => {
     expect(kind).toBe('item');
     expect(form.get('name')).toBe('Fresh basil');
     expect(form.get('quantity_label')).toBe('1 bunch');
+  });
+
+  it('scans and submits a barcode without the native BarcodeDetector API', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Found Oikos · Vanilla Greek yogurt.');
+    const stop = vi.fn();
+    scannerMocks.decodeFromConstraints.mockImplementationOnce(async (_constraints, _video, callback) => {
+      const controls = { stop };
+      callback({ getText: () => '036632032093' }, undefined, controls);
+      return controls;
+    });
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Look up barcode' })[0]);
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Scan with camera' }));
+
+    await waitFor(() => expect(within(dialog).getByLabelText('UPC / EAN')).toHaveValue('036632032093'));
+    expect(within(dialog).getByText('Found 036632032093')).toBeInTheDocument();
+    expect(stop).toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Look up' }));
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('scan');
+    expect(form.get('barcode')).toBe('036632032093');
   });
 });
