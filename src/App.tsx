@@ -641,20 +641,91 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
   const [viewing, setViewing] = useState<(typeof products)[number] | null>(null);
   const [comparison, setComparison] = useState<string[]>([]);
   const brands = [...new Set(products.map((product) => product.brand || 'Unbranded'))].sort();
-  const visible = products.filter((product) => `${product.label} ${product.foodName} ${product.barcode}`.toLowerCase().includes(query.toLowerCase()) && (brandFilter === 'All brands' || (product.brand || 'Unbranded') === brandFilter));
-  const brandGroups = [...visible.reduce((groups, product) => { const brand = product.brand || 'Unbranded'; groups.set(brand, [...(groups.get(brand) ?? []), product]); return groups; }, new Map<string, typeof products>()).entries()].sort((left, right) => sort === 'name' ? left[0].localeCompare(right[0]) : Math.max(...right[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0)) - Math.max(...left[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0)));
+  const visible = products.filter((product) =>
+    `${product.label} ${product.foodName} ${product.barcode} ${product.estimatedCost ?? ''}`.toLowerCase().includes(query.toLowerCase())
+    && (brandFilter === 'All brands' || (product.brand || 'Unbranded') === brandFilter)
+  );
+  const brandGroups = [...visible.reduce((groups, product) => {
+    const brand = product.brand || 'Unbranded';
+    groups.set(brand, [...(groups.get(brand) ?? []), product]);
+    return groups;
+  }, new Map<string, typeof products>()).entries()].sort((left, right) =>
+    sort === 'name'
+      ? left[0].localeCompare(right[0])
+      : Math.max(...right[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0))
+        - Math.max(...left[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0))
+  );
   const compared = comparison.map((id) => products.find((product) => product.id === id)).filter(Boolean) as typeof products;
+
   function toggleCompare(id: string) {
     const product = products.find((candidate) => candidate.id === id);
     if (!product) return;
     setComparison((current) => {
       if (current.includes(id)) return current.filter((value) => value !== id);
       const existing = products.find((candidate) => candidate.id === current[0]);
-      if (existing && existing.foodId !== product.foodId) { notify(`Choose another ${existing.foodName} product to compare.`); return current; }
+      if (existing && existing.foodId !== product.foodId) {
+        notify(`Choose another ${existing.foodName} product to compare.`);
+        return current;
+      }
       return [...current, id].slice(-2);
     });
   }
-  return <div className="stack"><div className="toolbar product-toolbar"><label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, or barcode…" /></label><select aria-label="Filter by brand" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option>All brands</option>{brands.map((brand) => <option key={brand}>{brand}</option>)}</select><select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="used">Most used</option><option value="recent">Recently used</option><option value="name">Brand A–Z</option></select><button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan</button></div>{compared.length > 0 && <Card className="comparison-card"><SectionTitle title={`Compare ${compared[0].foodName}`} action="Clear" onAction={() => setComparison([])} /><div className="comparison-grid"><span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [<span key={`${label}-label`}>{label}</span>, ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>), ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : [])])}</div></Card>}{brandGroups.map(([brand, items]) => <Card className="brand-group" key={brand}><SectionTitle title={brand} action={`${items.length} product${items.length === 1 ? '' : 's'}`} /><div className="product-grid">{[...items].sort((left, right) => sort === 'name' ? left.name.localeCompare(right.name) : sort === 'used' ? right.useCount - left.useCount : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)).map((product) => <div className="product-card" key={product.id}><div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName} · used {product.useCount}×</small><strong>{product.name}</strong><em>{product.barcode || 'No barcode'}</em></div></div><div className="product-macros"><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div><div className="card-actions"><button className="button secondary" onClick={() => setViewing(product)}>View</button><button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>{product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}</div></div>)}</div></Card>)}{!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2></Card>}{viewing && <div className="panel-layer"><button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} /><aside className="action-panel product-detail" role="dialog" aria-modal="true"><PanelHeader eyebrow={viewing.foodName.toUpperCase()} title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} /><div className="panel-body"><div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></div></aside></div>}</div>;
+
+  return (
+    <div className="stack">
+      <div className="toolbar product-toolbar">
+        <label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, barcode, or cost…" /></label>
+        <select aria-label="Filter by brand" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option>All brands</option>{brands.map((brand) => <option key={brand}>{brand}</option>)}</select>
+        <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="used">Most used</option><option value="recent">Recently used</option><option value="name">Brand A–Z</option></select>
+        <button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan</button>
+      </div>
+      {compared.length > 0 && (
+        <Card className="comparison-card">
+          <SectionTitle title={`Compare ${compared[0].foodName}`} subtitle="Prices are package estimates; nutrition uses each product's stored basis." action="Clear" onAction={() => setComparison([])} />
+          <div className="comparison-grid">
+            <span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>
+            <span>Est. cost</span>{compared.map((product) => <em key={`cost-${product.id}`}>{product.estimatedCost === null ? '—' : `$${product.estimatedCost.toFixed(2)}`}</em>)}{compared.length === 1 && <em>—</em>}
+            {(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [
+              <span key={`${label}-label`}>{label}</span>,
+              ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>),
+              ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : []),
+            ])}
+          </div>
+        </Card>
+      )}
+      {brandGroups.map(([brand, items]) => (
+        <Card className="brand-group" key={brand}>
+          <SectionTitle title={brand} action={`${items.length} product${items.length === 1 ? '' : 's'}`} />
+          <div className="product-grid">
+            {[...items].sort((left, right) => sort === 'name' ? left.name.localeCompare(right.name) : sort === 'used' ? right.useCount - left.useCount : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)).map((product) => (
+              <div className="product-card" key={product.id}>
+                <div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName} · used {product.useCount}×</small><strong>{product.name}</strong><em>{product.barcode || 'No barcode'}</em></div></div>
+                <div className="product-macros"><span>{product.estimatedCost === null ? 'No cost estimate' : `Est. $${product.estimatedCost.toFixed(2)}`}</span><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div>
+                <div className="card-actions">
+                  <button className="button secondary" onClick={() => setViewing(product)}>View</button>
+                  <button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>
+                  {product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+      {!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2><p>Try another name, brand, food, barcode, or cost.</p></Card>}
+      {viewing && (
+        <div className="panel-layer">
+          <button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} />
+          <aside className="action-panel product-detail" role="dialog" aria-modal="true">
+            <PanelHeader eyebrow={viewing.foodName.toUpperCase()} title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} />
+            <div className="panel-body">
+              <div className="product-cost-detail"><span>Estimated package cost</span><strong>{viewing.estimatedCost === null ? 'Not estimated' : `$${viewing.estimatedCost.toFixed(2)}`}</strong>{viewing.costSource && <small>{viewing.costSource}{viewing.costAsOf ? ` · as of ${new Date(`${viewing.costAsOf}T00:00:00`).toLocaleDateString()}` : ''}</small>}</div>
+              <div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div>
+            </div>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal' | 'inventory-detail'>, { eyebrow: string; title: string; subtitle: string; save: string }> = {

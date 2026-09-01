@@ -121,7 +121,7 @@ begin
   if p_discard and p_remaining <> 0 then raise exception 'Discarding a lot must set it to zero'; end if;
 
   insert into public.inventory_events(lot, quantity_delta, reason, note)
-  values (p_lot, quantity_change, case when p_discard then 'waste' else 'adjust' end, case when p_discard then 'Discarded from lot details' else 'Adjusted from lot details' end);
+  values (p_lot, quantity_change, (case when p_discard then 'waste' else 'adjust' end)::public.inventory_event_reason, case when p_discard then 'Discarded from lot details' else 'Adjusted from lot details' end);
 end;
 $$;
 

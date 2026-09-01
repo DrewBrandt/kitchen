@@ -131,8 +131,8 @@ insert into transaction_test_results select is(
 
 insert into transaction_test_results select is(
   (select round(qty_needed, 2) from shopping_items where food = '91000000-0000-0000-0000-000000000001' and source = 'generated'),
-  120.00::numeric,
-  'Generated grocery quantity subtracts available inventory'
+  4.23::numeric,
+  'Generated grocery quantity subtracts available inventory and uses the food display unit'
 );
 
 insert into transaction_test_results select lives_ok(
