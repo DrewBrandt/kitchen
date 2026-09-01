@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(30);
+select plan(31);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -219,6 +219,25 @@ insert into transaction_test_results select is(
   (select count(*) from inventory_events where food_log = (select id from food_logs where kind = 'prepared' order by occurred_at desc limit 1) and voided_at is null),
   1::bigint,
   'Restoring the log reapplies its deduction'
+);
+
+reset role;
+insert into food_logs(id, label, kind, voided_at)
+values
+  ('95000000-0000-0000-0000-000000000001', 'Superseded aggregate', 'inventory', now()),
+  ('95000000-0000-0000-0000-000000000002', 'Replacement component', 'inventory', null);
+insert into food_log_replacements(original_log, replacement_log)
+values (
+  '95000000-0000-0000-0000-000000000001',
+  '95000000-0000-0000-0000-000000000002'
+);
+set local role authenticated;
+
+insert into transaction_test_results select throws_ok(
+  $$select restore_food_log('95000000-0000-0000-0000-000000000001')$$,
+  'P0001',
+  'This food log was split into individual items and cannot be restored',
+  'A superseded aggregate consumption cannot be restored over its components'
 );
 
 -- Undoing a cook: refused once the batch has been eaten from, allowed otherwise.

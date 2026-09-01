@@ -244,6 +244,39 @@ export type Database = {
           },
         ]
       }
+      food_log_replacements: {
+        Row: {
+          created_at: string
+          original_log: string
+          replacement_log: string
+        }
+        Insert: {
+          created_at?: string
+          original_log: string
+          replacement_log: string
+        }
+        Update: {
+          created_at?: string
+          original_log?: string
+          replacement_log?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_log_replacements_original_log_fkey"
+            columns: ["original_log"]
+            isOneToOne: false
+            referencedRelation: "food_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_log_replacements_replacement_log_fkey"
+            columns: ["replacement_log"]
+            isOneToOne: false
+            referencedRelation: "food_logs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grocery_categories: {
         Row: {
           category: string
