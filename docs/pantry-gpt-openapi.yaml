@@ -151,7 +151,29 @@ paths:
       operationId: saveOutsideFood
       summary: Save or update a reusable outside food
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/OutsideFood'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string, minLength: 1}
+                brand: {type: string}
+                barcode: {type: string}
+                emoji: {type: string}
+                calories: {type: number, minimum: 0}
+                proteinG: {type: number, minimum: 0}
+                carbsG: {type: number, minimum: 0}
+                fatG: {type: number, minimum: 0}
+                fiberG: {type: number, minimum: 0}
+                sugarG: {type: number, minimum: 0}
+                sodiumMg: {type: number, minimum: 0}
+                source: {type: string}
+                estimated: {type: boolean}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/meals:
     post:
@@ -248,7 +270,6 @@ components:
     GroceryHaul: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GroceryHaul'}}}}
     InventoryReconciliation: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryReconciliation'}}}}
     Recipe: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
-    OutsideFood: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OutsideFood'}}}}
     MealLog: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MealLog'}}}}
     WeeklyPlan: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyPlan'}}}}
     Targets: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Targets'}}}}
@@ -374,25 +395,6 @@ components:
               unit: {type: string}
               sortOrder: {type: integer, minimum: 0}
               note: {type: string}
-    OutsideFood:
-      type: object
-      additionalProperties: false
-      required: [name, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
-      properties:
-        id: {type: string, format: uuid}
-        name: {type: string}
-        brand: {type: string}
-        barcode: {type: string}
-        emoji: {type: string}
-        calories: {type: number, minimum: 0}
-        proteinG: {type: number, minimum: 0}
-        carbsG: {type: number, minimum: 0}
-        fatG: {type: number, minimum: 0}
-        fiberG: {type: number, minimum: 0}
-        sugarG: {type: number, minimum: 0}
-        sodiumMg: {type: number, minimum: 0}
-        source: {type: string}
-        estimated: {type: boolean}
     MealLog:
       type: object
       additionalProperties: false
