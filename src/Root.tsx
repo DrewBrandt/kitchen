@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
+import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
@@ -101,7 +101,6 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onToggleGrocery={async (id, checked) => { await setShoppingItemChecked(supabase, id, checked); await refresh(); }}
         onVoidFoodLog={async (id) => { await voidFoodLog(supabase, id); await refresh(); }}
         onSaveAction={async (kind, form) => { const message = await savePanelAction(supabase, kind, form); await refresh(); return message; }}
-        onLogExternal={async (id) => { await logExternalProduct(supabase, id); await refresh(); }}
         onCookRecipe={async (id) => { const prepId = await cookRecipe(supabase, id); await refresh(); return prepId; }}
         onSavePrepFeedback={async (prepId, ease, taste, minutes) => { await savePrepFeedback(supabase, prepId, ease, taste, minutes); await refresh(); }}
         onCookRecipes={async (ids) => { await cookRecipes(supabase, ids); await refresh(); }}

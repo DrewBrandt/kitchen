@@ -55,11 +55,12 @@ Never place the token in the schema, instructions, Knowledge, Git, or a chat.
 Run these in Preview before relying on writes:
 
 1. `Read my pantry and tell me how many eggs I have.`
-2. `Search my saved outside foods for Chick-fil-A. Do not create anything.`
+2. `Search my saved foods and products for Chick-fil-A. Do not create anything.`
 3. `Show my current meal plan and grocery list.`
 4. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
-5. Inspect `saveOutsideFood` in the Action tester and confirm its request body
-   lists `name`, all seven nutrition values, and the optional metadata fields.
+5. Inspect `consumePurchasedProduct` in the Action tester and confirm its request
+   body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `location`,
+   timestamp, cost, label, and note fields.
 
 The first three should call read Actions. The fourth must stop before writing.
 The fifth catches an imported empty `{}` tool contract before it can reach the

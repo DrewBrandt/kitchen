@@ -13,9 +13,10 @@ const number = (form: FormData, key: string, fallback?: number) => {
   if (!Number.isFinite(parsed)) throw new Error(`${key.replaceAll('_', ' ')} must be a number.`);
   return parsed;
 };
+const optionalNumber = (form: FormData, key: string) => text(form, key) ? number(form, key) : null;
 const list = (form: FormData, key: string) => text(form, key).split(',').map((item) => item.trim()).filter(Boolean);
 
-async function createProductAndFood(client: Client, form: FormData, external: boolean) {
+async function createProductAndFood(client: Client, form: FormData) {
   const name = text(form, 'name');
   const unit = text(form, 'unit');
   if (!name || !unit) throw new Error('Name and stock unit are required.');
@@ -56,7 +57,9 @@ async function createProductAndFood(client: Client, form: FormData, external: bo
     sodium_mg: number(form, 'sodium_mg', 0),
     nutrition_is_estimated: form.get('nutrition_is_estimated') === 'on',
     emoji: optionalText(form, 'emoji'),
-    is_external: external,
+    estimated_cost: optionalNumber(form, 'estimated_cost'),
+    cost_source: optionalText(form, 'cost_source'),
+    cost_as_of: optionalText(form, 'cost_as_of'),
   });
   if (productError) {
     await client.from('base_foods').delete().eq('id', food.id);
@@ -138,14 +141,9 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
     return 'Lot added.';
   }
 
-  if (kind === 'food') {
-    await createProductAndFood(client, form, false);
+  if (kind === 'product') {
+    await createProductAndFood(client, form);
     return 'Food and product created.';
-  }
-
-  if (kind === 'external') {
-    await createProductAndFood(client, form, true);
-    return 'Product saved.';
   }
 
   if (kind === 'recipe' || kind === 'recipe-edit') {
@@ -173,22 +171,22 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'log') {
-    const { error } = await client.from('food_logs').insert({
-      label: text(form, 'label'),
-      kind: 'custom',
-      servings: number(form, 'servings', 1),
-      occurred_at: optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString(),
-      kcal: number(form, 'kcal', 0),
-      protein_g: number(form, 'protein_g', 0),
-      carbs_g: number(form, 'carbs_g', 0),
-      fat_g: number(form, 'fat_g', 0),
-      fiber_g: number(form, 'fiber_g', 0),
-      sodium_mg: number(form, 'sodium_mg', 0),
-      nutrition_is_estimated: form.get('nutrition_is_estimated') === 'on',
-      note: optionalText(form, 'note'),
+    const totalCost = optionalNumber(form, 'total_cost');
+    const occurredAt = optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString();
+    const { error } = await client.rpc('consume_product_purchase', {
+      p_product: text(form, 'product'),
+      p_purchased_quantity: number(form, 'purchased_quantity', 1),
+      p_consumed_quantity: number(form, 'consumed_quantity', 1),
+      ...(optionalText(form, 'location') ? { p_location: optionalText(form, 'location')! } : {}),
+      p_occurred_at: occurredAt,
+      p_cost_is_estimated: form.get('cost_is_estimated') === 'on',
+      ...(totalCost === null ? {} : { p_total_cost: totalCost }),
+      ...(optionalText(form, 'cost_source') ? { p_cost_source: optionalText(form, 'cost_source')! } : {}),
+      ...(optionalText(form, 'label') ? { p_label: optionalText(form, 'label')! } : {}),
+      ...(optionalText(form, 'note') ? { p_note: optionalText(form, 'note')! } : {}),
     });
     if (error) throw error;
-    return 'Food logged.';
+    return 'Purchase recorded and consumed portion logged.';
   }
 
   if (kind === 'meal') {

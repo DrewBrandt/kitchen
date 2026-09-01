@@ -285,15 +285,6 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   });
   const recipeCosts = new Map(recipes.map((recipe) => [recipe.id, recipe]));
 
-  const externalProducts = [...products.values()].filter((product) => product.is_external).map((product) => ({
-    id: product.id,
-    emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🥡',
-    name: product.name,
-    place: product.brand ?? 'Saved food',
-    nutrition: `${Math.round(Number(product.kcal ?? 0))} cal · ${Math.round(Number(product.protein_g ?? 0))} g protein`,
-    cost: product.estimated_cost === null ? null : Number(product.estimated_cost),
-  }));
-
   const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
     const recipe = prep ? recipeRows.find((candidate) => candidate.id === prep.recipe) : undefined;
@@ -394,7 +385,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   };
   const buildFoodLog = (dayLogs: FoodLogRow[]) => dayLogs.map((log, index) => ({
     id: log.id,
-    emoji: log.kind === 'external' ? '🥡' : '🍽️',
+    emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
     label: log.label,
     serving: `${Number(log.servings ?? 1)} serving${Number(log.servings ?? 1) === 1 ? '' : 's'}${log.nutrition_is_estimated ? ' · estimated' : ''}`,
     calories: `${Math.round(Number(log.kcal ?? 0))} cal`,
@@ -455,10 +446,19 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
     wasteByDay.set(key, (wasteByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
   }
-  const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys()])].sort().map((dateKey) => ({
+  const awayByDay = new Map<string, number>();
+  for (const event of eventsResult.data ?? []) {
+    if (event.reason !== 'eaten') continue;
+    const lot = lotsResult.data?.find((candidate) => candidate.id === event.lot);
+    if (!lot?.is_external) continue;
+    const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
+    awayByDay.set(key, (awayByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
+  }
+  const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys(), ...awayByDay.keys()])].sort().map((dateKey) => ({
     dateKey,
     spend: spendByDay.get(dateKey) ?? 0,
     waste: wasteByDay.get(dateKey) ?? 0,
+    away: awayByDay.get(dateKey) ?? 0,
   }));
 
   // Three causes, each decided by what the lot actually was, not by a label.
@@ -555,7 +555,6 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       costSource: product.cost_source ?? '',
       costAsOf: product.cost_as_of ?? '',
       emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
-      isExternal: product.is_external,
       nutrition: nutritionValues(product),
       useCount: product.use_count,
       lastUsedAt: product.last_used_at ?? '',
@@ -578,7 +577,6 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       planningNotes: settings.planning_notes ?? '',
       weeklyFoodBudget: Number(settings.weekly_food_budget ?? DEFAULT_WEEKLY_FOOD_BUDGET),
     },
-    externalProducts,
     preparedLots,
     spendHistory,
     wasteCauses,
@@ -611,26 +609,6 @@ export async function undoInventoryAdjustment(client: Client, eventId: string) {
 
 export async function undoPrep(client: Client, prepId: string) {
   const { error } = await client.rpc('undo_prep', { p_prep: prepId });
-  if (error) throw error;
-}
-
-export async function logExternalProduct(client: Client, id: string) {
-  const { data: product, error: productError } = await client.from('products').select('*').eq('id', id).eq('is_external', true).single();
-  if (productError) throw productError;
-  const { error } = await client.from('food_logs').insert({
-    label: [product.brand, product.name].filter(Boolean).join(' · '),
-    kind: 'external',
-    product: product.id,
-    servings: 1,
-    kcal: product.kcal,
-    protein_g: product.protein_g,
-    carbs_g: product.carbs_g,
-    fat_g: product.fat_g,
-    fiber_g: product.fiber_g,
-    sugar_g: product.sugar_g,
-    sodium_mg: product.sodium_mg,
-    nutrition_is_estimated: product.nutrition_is_estimated,
-  });
   if (error) throw error;
 }
 

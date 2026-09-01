@@ -180,6 +180,27 @@ describe('Pantry web UI', () => {
     expect(form.get('quantity_label')).toBe('1 bunch');
   });
 
+  it('captures a partially consumed purchase and the remainder location', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Purchase recorded and consumed portion logged.');
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getByRole('button', { name: 'Products' }));
+    await user.click(screen.getAllByRole('button', { name: 'Consume' })[0]);
+    const dialog = screen.getByRole('dialog');
+    await user.clear(within(dialog).getByLabelText('Quantity consumed now'));
+    await user.type(within(dialog).getByLabelText('Quantity consumed now'), '0.5');
+    await user.selectOptions(within(dialog).getByLabelText('Remaining item location'), 'fridge');
+    await user.click(within(dialog).getByRole('button', { name: 'Acquire & consume' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('log');
+    expect(form.get('purchased_quantity')).toBe('1');
+    expect(form.get('consumed_quantity')).toBe('0.5');
+    expect(form.get('location')).toBe('fridge');
+  });
+
   it('scans and submits a barcode without the native BarcodeDetector API', async () => {
     const user = userEvent.setup();
     const save = vi.fn().mockResolvedValue('Found Oikos · Vanilla Greek yogurt.');

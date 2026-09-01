@@ -56,7 +56,7 @@ const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
   today: 'lot',
   inventory: 'lot',
   recipes: 'recipe',
-  products: 'external',
+  products: 'product',
   'food-log': 'log',
   history: 'export',
   trends: 'targets',
@@ -100,7 +100,7 @@ function calendarDateKey(date: Date) {
 
 const servingLabel = (count: number) => `${count} serving${count === 1 ? '' : 's'}`;
 
-export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeals, onSetPlannedMealsMade, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<string | null>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeals?: (ids: string[]) => Promise<void>; onSetPlannedMealsMade?: (ids: string[], made: boolean) => Promise<void>; onRemoveGrocery?: (id: string) => Promise<void>; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; onRestoreFoodLog?: (id: string) => Promise<void>; onUndoInventoryAdjustment?: (eventId: string) => Promise<void>; onUndoPrep?: (prepId: string) => Promise<void> } = {}) {
+export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeals, onSetPlannedMealsMade, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<string | null>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeals?: (ids: string[]) => Promise<void>; onSetPlannedMealsMade?: (ids: string[], made: boolean) => Promise<void>; onRemoveGrocery?: (id: string) => Promise<void>; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; onRestoreFoodLog?: (id: string) => Promise<void>; onUndoInventoryAdjustment?: (eventId: string) => Promise<void>; onUndoPrep?: (prepId: string) => Promise<void> } = {}) {
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
@@ -279,7 +279,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
             />
           )}
           {page === 'recipes' && <RecipesPage filter={recipeFilter} onFilter={setRecipeFilter} onOpen={open} />}
-          {page === 'products' && <ProductsPage onOpen={open} notify={notify} onLog={onLogExternal} />}
+          {page === 'products' && <ProductsPage onOpen={open} notify={notify} />}
           {page === 'food-log' && <FoodLogPage onOpen={open} notify={notify} onVoid={onVoidFoodLog} undo={reversals} />}
           {page === 'history' && <HistoryPage onOpen={open} onNavigate={setPage} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
@@ -459,7 +459,7 @@ function InventoryPage({ filter, search, onFilter, onSearch, onOpen, onOpenFood 
         {['All', 'Use soon', 'Fridge', 'Pantry'].map((item) => <button key={item} className={cx('filter-chip', filter === item && 'active')} onClick={() => onFilter(item)}>{item}</button>)}
         <span className="toolbar-spacer" />
         <button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Look up barcode</button>
-        <button className="button secondary" onClick={() => onOpen('food')}><PackageOpen />Define food</button>
+        <button className="button secondary" onClick={() => onOpen('product')}><PackageOpen />Define product</button>
       </div>
       {sections.map((section) => (
         <Card className="inventory-section" key={section.label}>
@@ -713,7 +713,7 @@ function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKin
       </Card>
       <Card>
         <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'} · ${costLabel(foodLog.every((entry) => entry.cost !== null && entry.cost !== undefined) ? foodLog.reduce((sum, entry) => sum + Number(entry.cost), 0) : null, foodLog.some((entry) => entry.costIsEstimated))}`} />
-        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small><div className="log-row-actions"><button className="row-icon-button" aria-label={`Edit ${entry.label}`} onClick={() => onOpen('log')}><Pencil /></button>{entry.id && onVoid && <button className="row-icon-button" aria-label={`Remove ${entry.label}`} onClick={() => { const entryId = entry.id!; void onVoid(entryId).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(entryId); } : undefined)).catch(() => notify(`Could not remove ${entry.label}.`)); }}><Trash2 /></button>}</div></div>)}
+        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small><div className="log-row-actions">{entry.id && onVoid && <button className="row-icon-button" aria-label={`Remove ${entry.label}`} onClick={() => { const entryId = entry.id!; void onVoid(entryId).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(entryId); } : undefined)).catch(() => notify(`Could not remove ${entry.label}.`)); }}><Trash2 /></button>}</div></div>)}
       </Card>
     </div>
   );
@@ -867,7 +867,7 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
     date.setDate(cutoff.getDate() + index);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const row = spendHistory.find((entry) => entry.dateKey === key);
-    return { label: String(date.getDate()), spend: row?.spend ?? 0, waste: row?.waste ?? 0 };
+    return { label: String(date.getDate()), spend: row?.spend ?? 0, waste: row?.waste ?? 0, away: row?.away ?? 0 };
   });
   const spendTotal = spendDays.reduce((total, day) => total + day.spend, 0);
   const lastSeven = spendDays.slice(-7).reduce((total, day) => total + day.spend, 0);
@@ -876,8 +876,9 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
   const spendMaximum = Math.max(dailyBudget, ...spendDays.map((day) => day.spend + day.waste), 0.01) * 1.1;
 
   const wasteTotal = spendDays.reduce((total, day) => total + day.waste, 0);
+  const awayTotal = spendDays.reduce((total, day) => total + day.away, 0);
   const wasteDays = spendDays.filter((day) => day.waste > 0).length;
-  const worstDay = spendDays.reduce((worst, day) => day.waste > worst.waste ? day : worst, { label: '—', waste: 0, spend: 0 });
+  const worstDay = spendDays.reduce((worst, day) => day.waste > worst.waste ? day : worst, { label: '—', waste: 0, spend: 0, away: 0 });
   const wasteShare = spendTotal > 0 ? wasteTotal / spendTotal * 100 : 0;
   const causeMax = Math.max(...wasteCauses.map((cause) => cause.amount), 0.01);
   return (
@@ -947,8 +948,8 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
             <>
               <div className="gap-row"><span>Per day</span><strong className="spend">{usd(spendTotal / range)}</strong></div>
               <div className="gap-row"><span>Per week</span><strong className="spend">{usd(spendTotal / (range / 7))}</strong></div>
-              <div className="gap-row"><span>Groceries</span><strong className="spend">{usd(Math.max(0, spendTotal - wasteTotal))}</strong></div>
-              <div className="gap-row"><span>Food away from home</span><strong className="spend">{usd(0)}</strong></div>
+              <div className="gap-row"><span>Groceries</span><strong className="spend">{usd(Math.max(0, spendTotal - awayTotal))}</strong></div>
+              <div className="gap-row"><span>Food away from home</span><strong className="spend">{usd(awayTotal)}</strong></div>
               <div className="gap-row"><span>Wasted</span><strong className="waste">{usd(wasteTotal)}</strong></div>
             </>
           ) : averages.map((row) => <MacroRow key={row.label} label={row.label} value={`${Math.round(row.value).toLocaleString()} ${row.unit}`} target={`/ ${row.target.toLocaleString()} ${row.unit}`} pct={row.target ? row.value / row.target * 100 : 0} color={row.color} />)}
@@ -972,7 +973,7 @@ const COMPARE_ROWS: Array<{ label: string; higherIsBetter: boolean; read: (produ
 const costPer100Cal = (cost: number | null, calories: number) =>
   cost === null || !calories ? '—' : `$${(cost / calories * 100).toFixed(2)}`;
 
-function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: Notify; onLog?: (id: string) => Promise<void> }) {
+function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify }) {
   const { products } = usePantryData();
   const [query, setQuery] = useState('');
   const [brandFilter, setBrandFilter] = useState('All brands');
@@ -1057,7 +1058,7 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
               <div className="product-cell-actions">
                 <button className={cx('button secondary compact', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>
                 <button className="button secondary compact" onClick={() => setViewing(product)}>Open</button>
-                {product.isExternal && <button className="button compact" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}
+                <button className="button compact" onClick={() => onOpen('log', undefined, { product: product.id })}>Consume</button>
               </div>
             </div>
           ))}
@@ -1087,11 +1088,10 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
 const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal' | 'inventory-detail'>, { title: string; subtitle?: string; save: string; destructive?: string }> = {
   lot: { title: 'Add a lot', save: 'Save lot' },
   groceries: { title: 'Add several items', save: 'Add items' },
-  food: { title: 'Define a food', save: 'Save food' },
+  product: { title: 'Add a product', save: 'Save product' },
   recipe: { title: 'New recipe', save: 'Save recipe' },
   'recipe-edit': { title: 'Edit recipe', save: 'Save changes' },
-  external: { title: 'Add a product', save: 'Save product' },
-  log: { title: 'Log food', save: 'Log it' },
+  log: { title: 'Consume a product', save: 'Acquire & consume' },
   item: { title: 'Add an item', save: 'Add item' },
   meal: { title: 'Add to the plan', save: 'Add to plan' },
   targets: { title: 'Targets & budget', save: 'Save targets' },
@@ -1262,7 +1262,7 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
   </div>;
 
   if (kind === 'lot') return <div className="form-grid">
-    <SelectField name="product" label="Product" defaultValue={values.product} options={products.filter((product) => !product.isExternal).map((product) => ({ value: product.id, label: product.label }))} required />
+    <SelectField name="product" label="Product" defaultValue={values.product} options={products.map((product) => ({ value: product.id, label: product.label }))} required />
     <div className="form-grid two"><Field name="initial_qty" label="Stock quantity in product base units" type="number" min="0.001" step="any" required /><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" defaultValue="0" /></div>
     <div className="form-grid two"><SelectField name="location" label="Location" options={locations.map((location) => ({ value: location, label: location }))} /><Field name="use_by" label="Best by" type="date" /></div>
     <Field name="note" label="Note" placeholder="Optional lot note" />
@@ -1272,28 +1272,16 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
   if (kind === 'item') return <div className="form-grid"><Field name="name" label="Item" placeholder="Grocery item" required /><Field name="quantity_label" label="Quantity" placeholder="2 bags" /><Field name="note" label="Note" placeholder="Optional" /></div>;
 
   if (kind === 'log') return <div className="form-grid">
-    <Field name="label" label="Food" placeholder="What did you eat?" required />
-    <div className="form-grid two"><Field name="servings" label="Servings" type="number" defaultValue="1" min="0.01" step="any" required /><Field name="occurred_at" label="Time" type="datetime-local" /></div>
-    <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
-    <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>
-    <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" defaultValue="0" /><Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" defaultValue="0" /></div>
+    <SelectField name="product" label="Product" defaultValue={values.product} options={products.map((product) => ({ value: product.id, label: product.label }))} required />
+    <div className="form-grid two"><Field name="purchased_quantity" label="Quantity purchased" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="consumed_quantity" label="Quantity consumed now" type="number" defaultValue="1" min="0" step="any" required /></div>
+    <div className="form-grid two"><SelectField name="location" label="Remaining item location" options={locations.map((location) => ({ value: location, label: location }))} /><Field name="occurred_at" label="Time" type="datetime-local" /></div>
+    <div className="form-grid two"><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" /><Field name="cost_source" label="Cost source" placeholder="Receipt, menu, estimate…" /></div>
+    <Field name="label" label="Log label override" placeholder="Optional; defaults to brand and product" />
     <Field name="note" label="Note" placeholder="Optional" />
-    <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" defaultChecked /><span><strong>Nutrition is estimated</strong><small>Keep the confidence visible in the log.</small></span></label>
+    <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong><small>Nutrition confidence stays on the product definition.</small></span></label>
   </div>;
 
-  if (kind === 'external') return <div className="form-grid">
-    <input type="hidden" name="measure_style" value="discrete" /><input type="hidden" name="unit" value={defaultUnit} />
-    <input type="hidden" name="package_qty_base" value="1" /><input type="hidden" name="serving_qty_base" value="1" /><input type="hidden" name="nutrition_basis_qty" value="1" />
-    <div className="form-grid two"><Field name="name" label="Menu item" placeholder="Exact item or order" required /><Field name="brand" label="Restaurant or brand" placeholder="Where is it from?" required /></div>
-    <div className="form-grid two"><Field name="emoji" label="Emoji" placeholder="🥡" /><Field name="barcode" label="Barcode" placeholder="Optional UPC/EAN" /></div>
-    <p className="form-help">Nutrition per serving</p>
-    <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
-    <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>
-    <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" defaultValue="0" /><Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" defaultValue="0" /></div>
-    <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" /><span><strong>Nutrition is estimated</strong></span></label>
-  </div>;
-
-  if (kind === 'food') return <div className="form-grid">
+  if (kind === 'product') return <div className="form-grid">
     <div className="form-grid two"><Field name="name" label="Food and product name" placeholder="Name" required /><Field name="brand" label="Brand" placeholder="Optional" /></div>
     <div className="form-grid two"><Field name="emoji" label="Emoji" placeholder="🍽️" /><Field name="barcode" label="Barcode" placeholder="Optional UPC/EAN" /></div>
     <div className="form-grid two"><SelectField name="measure_style" label="Stock style" options={['discrete', 'weight', 'volume'].map((value) => ({ value, label: value }))} required /><SelectField name="unit" label="Stock unit" defaultValue={defaultUnit} options={units.map((unit) => ({ value: unit.id, label: unit.label }))} required /></div>
@@ -1304,6 +1292,8 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
     <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
     <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>
     <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" defaultValue="0" /><Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" defaultValue="0" /></div>
+    <div className="form-grid two"><Field name="estimated_cost" label="Estimated package cost" type="number" min="0" step="0.01" /><Field name="cost_source" label="Cost source" placeholder="Store, menu, receipt…" /></div>
+    <Field name="cost_as_of" label="Cost as of" type="date" />
     <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" /><span><strong>Nutrition is estimated</strong></span></label>
   </div>;
 
