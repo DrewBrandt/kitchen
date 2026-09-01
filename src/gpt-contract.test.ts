@@ -109,6 +109,14 @@ describe('Pantry GPT operator pack', () => {
     expect(requestBody.content['application/json'].schema.required).toEqual(required);
   });
 
+  it('exposes always-available food status for creation and partial edits', () => {
+    expect(schema.paths['/v1/foods'].post.requestBody.content['application/json'].schema.properties)
+      .toHaveProperty('alwaysAvailable');
+    expect(schema.paths['/v1/foods/{id}'].patch.requestBody.content['application/json'].schema.properties)
+      .toHaveProperty('alwaysAvailable');
+    expect(edgeFunction).toContain('always_available: Boolean(input.alwaysAvailable)');
+  });
+
   it.each([
     ['/v1/foods/{id}', 'editFoodDefinition'],
     ['/v1/products/{id}', 'editProductDefinition'],

@@ -54,6 +54,7 @@ Natural language is deliberately not accepted by the mutation endpoint. Interpre
 - `default_location`: `pantry | fridge | freezer`
 - `nutrition_per_base_amount` (future)
 - `aliases[]`
+- `always_available`: recipes use the food without inventory deductions or generated grocery shortages
 
 Recipes and grocery shortages reference canonical foods only.
 
@@ -105,6 +106,8 @@ Conversions are food-specific. One cup of butter and one cup of flour do not sha
 ## Transaction rules
 
 Cooking is all-or-nothing. The service first converts every ingredient to its food's base unit, validates the complete demand, and plans deductions ordered by best-by date. Only after every ingredient is available are lot quantities updated and a history record written. Undo restores the exact lots originally used.
+
+Foods marked `always_available`, such as household water, are exempt from stock validation, deduction, and generated grocery shortages.
 
 The PostgreSQL implementation performs validation, deductions, and history creation in one transaction.
 

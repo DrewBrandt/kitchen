@@ -29,6 +29,7 @@ async function createProductAndFood(client: Client, form: FormData) {
     display_unit: unit,
     grocery_category: optionalText(form, 'grocery_category'),
     ingredient_role: optionalText(form, 'ingredient_role'),
+    always_available: form.get('always_available') === 'on',
     nutrition_basis_qty: number(form, 'nutrition_basis_qty', 100),
     kcal: number(form, 'kcal', 0),
     protein_g: number(form, 'protein_g', 0),

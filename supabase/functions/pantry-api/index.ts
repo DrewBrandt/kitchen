@@ -194,6 +194,7 @@ async function saveFood(db: Supabase, input: Json) {
     g_per_fl_oz: input.gPerFlOz == null ? null : positiveNumber(input.gPerFlOz, "gPerFlOz"),
     g_per_count: input.gPerCount == null ? null : positiveNumber(input.gPerCount, "gPerCount"),
     ingredient_role: input.ingredientRole ?? null, store_aisle: input.storeAisle ?? null,
+    always_available: Boolean(input.alwaysAvailable),
     aliases: Array.isArray(input.aliases) ? input.aliases : [], nutrition_basis_qty: Number(nutrition.basisQuantity ?? 100),
     kcal: Number(nutrition.calories ?? 0), protein_g: Number(nutrition.proteinG ?? 0), carbs_g: Number(nutrition.carbsG ?? 0),
     fat_g: Number(nutrition.fatG ?? 0), fiber_g: Number(nutrition.fiberG ?? 0), sugar_g: Number(nutrition.sugarG ?? 0),

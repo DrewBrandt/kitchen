@@ -79,6 +79,7 @@ paths:
                 displayUnit: {type: string, description: Unit UUID, full name, or short name.}
                 groceryCategory: {type: string}
                 ingredientRole: {type: string, enum: [main, supporting, staple]}
+                alwaysAvailable: {type: boolean, description: Exclude this food from recipe stock deductions and generated grocery shortages.}
                 storeAisle: {type: string}
                 gPerFlOz: {type: number, exclusiveMinimum: 0}
                 gPerCount: {type: number, exclusiveMinimum: 0}
@@ -122,6 +123,7 @@ paths:
                 displayUnit: {type: string}
                 groceryCategory: {type: [string, 'null']}
                 ingredientRole: {type: [string, 'null'], enum: [main, supporting, staple, null]}
+                alwaysAvailable: {type: boolean, description: Exclude this food from recipe stock deductions and generated grocery shortages.}
                 storeAisle: {type: [string, 'null']}
                 gPerFlOz: {type: [number, 'null'], exclusiveMinimum: 0}
                 gPerCount: {type: [number, 'null'], exclusiveMinimum: 0}

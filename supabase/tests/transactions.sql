@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(33);
+select plan(35);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -29,10 +29,11 @@ set local role authenticated;
 
 insert into transaction_test_results select ok(public.is_app_owner(), 'Test JWT resolves to the live owner and temporary session');
 
-insert into base_foods(id, name, measure_style, display_unit)
+insert into base_foods(id, name, measure_style, display_unit, always_available)
 values
-  ('91000000-0000-0000-0000-000000000001', 'Transaction test ingredient', 'weight', (select id from measure_conversions where short_name = 'g')),
-  ('91000000-0000-0000-0000-000000000002', 'Transaction test prepared food', 'discrete', (select id from measure_conversions where short_name = 'ct'));
+  ('91000000-0000-0000-0000-000000000001', 'Transaction test ingredient', 'weight', (select id from measure_conversions where short_name = 'g'), false),
+  ('91000000-0000-0000-0000-000000000002', 'Transaction test prepared food', 'discrete', (select id from measure_conversions where short_name = 'ct'), false),
+  ('91000000-0000-0000-0000-000000000003', 'Transaction test water', 'volume', (select id from measure_conversions where short_name = 'fl oz'), true);
 
 insert into products(id, food, name, package_qty_base, package_unit, nutrition_basis_qty, kcal, protein_g, carbs_g, fat_g, fiber_g, sodium_mg)
 values (
@@ -57,7 +58,9 @@ insert into recipes(id, name, servings, output_food, yield_qty, instructions)
 values ('94000000-0000-0000-0000-000000000001', 'Transaction test recipe', 2, '91000000-0000-0000-0000-000000000002', 2, '[]');
 
 insert into recipe_ingredients(recipe, ingredient, qty, unit)
-values ('94000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', 100, (select id from measure_conversions where short_name = 'g'));
+values
+  ('94000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000001', 100, (select id from measure_conversions where short_name = 'g')),
+  ('94000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000003', 8, (select id from measure_conversions where short_name = 'fl oz'));
 
 insert into transaction_test_results select lives_ok(
   $$select cook_recipe('94000000-0000-0000-0000-000000000001')$$,
@@ -68,6 +71,12 @@ insert into transaction_test_results select is(
   (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000001'),
   100::numeric,
   'Cooking deducts the required ingredient quantity'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from inventory_events event join inventory_lots lot on lot.id = event.lot join products product on product.id = lot.product where product.food = '91000000-0000-0000-0000-000000000003'),
+  0::bigint,
+  'Cooking requires no lot or deduction for an always-available ingredient'
 );
 
 insert into transaction_test_results select lives_ok(
@@ -174,6 +183,12 @@ insert into transaction_test_results select is(
   (select count(*) from shopping_items where source = 'manual' and free_text = 'Manual transaction-test item'),
   1::bigint,
   'Rebuilding preserves manually added shopping items'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from shopping_items where food = '91000000-0000-0000-0000-000000000003' and source = 'generated'),
+  0::bigint,
+  'Always-available ingredients never become generated grocery shortages'
 );
 
 insert into transaction_test_results select lives_ok(

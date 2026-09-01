@@ -140,6 +140,7 @@ Create a canonical food before its branded product:
   "gPerFlOz": 30.6,
   "groceryCategory": "Eggs, yogurt, cheese & dough",
   "ingredientRole": "supporting",
+  "alwaysAvailable": false,
   "nutrition": {
     "basisQuantity": 240,
     "calories": 149,
