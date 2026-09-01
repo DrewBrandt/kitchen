@@ -79,6 +79,7 @@ POST /v1/prepare/recipe
 POST /v1/consume/prepared
 POST /v1/consume/inventory
 POST /v1/consume/product
+POST /v1/consume/manual
 POST /v1/plans
 POST /v1/grocery-items
 POST /v1/targets
@@ -111,8 +112,9 @@ Read the record first and send only changed fields. Recipe `ingredients`, when
 present, replace the complete ingredient list. Lot `remainingQuantity` creates a
 ledger adjustment instead of overwriting stock history.
 
-History reads include each consumption's linked inventory events, lots, and
-derived cost. Correct a purchased-food cost without relogging it:
+History reads include each consumption's nutrition completeness, direct cost,
+and any linked inventory events, lots, and derived cost. Correct a purchased-food
+cost without relogging it:
 
 ```json
 {"purchaseTotalCost":4.05,"costIsEstimated":false,"costSource":"Receipt"}
@@ -121,6 +123,10 @@ derived cost. Correct a purchased-food cost without relogging it:
 `purchaseTotalCost` updates the single away-from-home purchase lot linked to that
 history event. It is rejected when there is not exactly one such lot; use the
 specific lot edit in that case. Nutrition and history remain unduplicated.
+
+Manual events can be corrected in place with `portionLabel`, `nutrition`, and
+`directCost`. The nutrition object may contain only the values actually known;
+setting it to `null` returns the event to unknown nutrition.
 
 ## Definitions and groceries
 
@@ -194,11 +200,36 @@ Quick use of one food goes through `POST /v1/consume/inventory`:
 
 All three operations roll back completely on insufficient inventory.
 
-## Purchased food and retained leftovers
+## Manual meals, purchased food, and retained leftovers
 
-Restaurant, takeout, and other away-from-home items use the same food and product
-definitions as groceries. Search first, then create only a missing canonical food
-or exact product variant. Acquire and consume it through `POST /v1/consume/product`:
+One-off homemade, shared, catered, or undocumented food does not need a canonical
+food, product, or inventory lot. Log the consumed event directly:
+
+```json
+{
+  "label": "Spaghetti at Mom's",
+  "portionLabel": "1 large plate",
+  "timestamp": "2026-09-01T19:15:00-04:00",
+  "nutrition": {
+    "calories": 750,
+    "proteinG": 28,
+    "source": "Rough portion estimate",
+    "estimated": true
+  },
+  "cost": 0,
+  "costSource": "Shared family meal"
+}
+```
+
+`label` is the only required field. Omit `nutrition` when it is wholly unknown,
+or omit individual nutrient properties when only a partial snapshot is known.
+Unknown nutrients remain `NULL`; totals expose incomplete entry counts and must
+not present known subtotals as complete daily nutrition.
+
+Reusable, exactly identifiable restaurant, takeout, and packaged items may use
+the same food and product definitions as groceries. Search first, then create only
+a genuinely reusable missing canonical food or exact product variant. Acquire and
+consume it through `POST /v1/consume/product`:
 
 ```json
 {

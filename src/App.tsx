@@ -57,7 +57,7 @@ const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
   inventory: 'lot',
   recipes: 'recipe',
   products: 'product',
-  'food-log': 'log',
+  'food-log': 'manual-log',
   history: 'export',
   trends: 'targets',
   week: 'meal',
@@ -665,7 +665,7 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
 }
 
 function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKind) => void; notify: Notify; onVoid?: (id: string) => Promise<void>; undo: Reversals }) {
-  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients, settings, todayProjection } = usePantryData();
+  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients, nutritionIncompleteEntries: todayIncompleteEntries, settings, todayProjection } = usePantryData();
   const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
   const [selectedDate, setSelectedDate] = useState(() => {
     const date = new Date();
@@ -678,6 +678,7 @@ function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKin
   const isToday = selectedDate.getTime() === today.getTime();
   const selectedDay = foodLogByDate[selectedKey];
   const foodLog = isToday ? todayFoodLog : (selectedDay?.foodLog ?? []);
+  const incompleteEntries = isToday ? todayIncompleteEntries : (selectedDay?.nutritionIncompleteEntries ?? 0);
   const nutrients = isToday ? todayNutrients : (selectedDay?.nutrients ?? todayNutrients.map((nutrient) => ({
     ...nutrient,
     value: nutrient.label === 'Calories' ? '0' : `0 ${nutrient.label === 'Sodium' ? 'mg' : 'g'}`,
@@ -694,6 +695,7 @@ function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKin
       <div className="date-switcher"><button aria-label="Previous day" onClick={() => moveDay(-1)}>‹</button><strong>{isToday ? 'Today' : dateLabel}</strong>{isToday && <span>{dateLabel}</span>}<button aria-label="Next day" disabled={isToday} onClick={() => moveDay(1)}>›</button></div>
       <Card className="contribution-card">
         <SectionTitle title="How each food built your day" action="Targets" onAction={() => onOpen('targets')} />
+        {incompleteEntries > 0 && <div className="notice"><Info /><span>Known nutrition is shown as a minimum. {incompleteEntries} entr{incompleteEntries === 1 ? 'y has' : 'ies have'} partial or unknown nutrition.</span></div>}
         <div className="legend">{foodLog.map((item) => <span key={item.id ?? item.label}><i style={{ background: item.color }} />{item.label}<small>{item.calories}</small></span>)}{isToday && Object.values(todayProjection).some(Boolean) && <span><i className="projection-swatch" />Today's plan<small>what if</small></span>}</div>
         {nutrients.map((nutrient) => {
           const label = nutrient.label as keyof typeof todayProjection;
@@ -732,11 +734,12 @@ function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void
   const proteinTarget = settings.proteinG || 1;
   const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
   const logged = days.length;
-  const avgCalories = logged ? days.reduce((total, day) => total + (day.calories ?? 0), 0) / logged : 0;
-  const avgProtein = logged ? days.reduce((total, day) => total + (day.protein ?? 0), 0) / logged : 0;
+  const completeDays = days.filter((day) => !day.nutritionIncompleteEntries);
+  const avgCalories = completeDays.length ? completeDays.reduce((total, day) => total + (day.calories ?? 0), 0) / completeDays.length : 0;
+  const avgProtein = completeDays.length ? completeDays.reduce((total, day) => total + (day.protein ?? 0), 0) / completeDays.length : 0;
   const pricedDays = days.filter((day) => day.cost !== null && day.cost !== undefined);
   const totalSpend = pricedDays.reduce((total, day) => total + Number(day.cost), 0);
-  const targetHits = days.filter((day) => (day.protein ?? 0) >= proteinTarget).length;
+  const targetHits = completeDays.filter((day) => (day.protein ?? 0) >= proteinTarget).length;
 
   // The strip is the real calendar: one cell per day in range, coloured only where
   // a day was actually logged. Nothing here is synthesized to fill a gap.
@@ -746,7 +749,7 @@ function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void
     date.setDate(date.getDate() + index);
     const key = date.toLocaleDateString('en-CA');
     const day = byKey.get(key);
-    const share = day ? (day.protein ?? 0) / proteinTarget : null;
+    const share = day && !day.nutritionIncompleteEntries ? (day.protein ?? 0) / proteinTarget : null;
     return { key, label: date.toLocaleDateString([], { month: 'short', day: 'numeric' }), day, share };
   });
   const heatColor = (share: number | null) => {
@@ -785,7 +788,7 @@ function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void
           <div><span>Avg calories</span><strong>{Math.round(avgCalories).toLocaleString()}</strong></div>
           <div><span>Avg protein</span><strong>{Math.round(avgProtein)} g</strong></div>
           <div><span>Spend</span><strong className="spend">{usd(totalSpend)}</strong><small>{usd(logged ? totalSpend / logged : 0)} a logged day</small></div>
-          <div><span>Protein target hit</span><strong>{targetHits} of {logged}</strong></div>
+          <div><span>Protein target hit</span><strong>{targetHits} of {completeDays.length}</strong></div>
         </div>
         <div className="heat-strip">{cells.map((cell) => <i key={cell.key} style={{ background: heatColor(cell.share) }} title={cell.day ? `${cell.label} · ${Math.round(cell.day.protein ?? 0)} g protein · ${usd(cell.day.cost)}` : `${cell.label} · not logged`} />)}</div>
       </Card>
@@ -798,8 +801,8 @@ function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void
             <div className="history-meals">{(day.mealDetails ?? day.meals.map((label) => ({ label, emoji: '🍽️', cost: null as number | null, costIsEstimated: true }))).map((meal, index) => (
               <button className="meal-chip" key={`${meal.label}-${index}`} onClick={() => onNavigate('food-log')}><span>{meal.emoji}</span>{meal.label}<em className="spend">{costLabel(meal.cost, meal.costIsEstimated)}</em></button>
             ))}</div>
-            <span className="history-figure">{Math.round(day.calories ?? 0).toLocaleString()} cal</span>
-            <span className="history-figure">{Math.round(day.protein ?? 0)} g</span>
+            <span className="history-figure">{Math.round(day.calories ?? 0).toLocaleString()}{day.nutritionIncompleteEntries ? '+' : ''} cal</span>
+            <span className="history-figure">{Math.round(day.protein ?? 0)}{day.nutritionIncompleteEntries ? '+' : ''} g</span>
             <span className="history-figure spend">{costLabel(day.cost, true)}</span>
             <div className="history-actions"><button className="button secondary compact" onClick={() => onOpen('meal')}>Plan again</button><button className="row-icon-button" aria-label={`Open ${day.day}`} onClick={() => onNavigate('food-log')}><ChevronRight /></button></div>
           </div>
@@ -818,7 +821,8 @@ function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void
           <div className="gap-row"><span>Unlogged days</span><strong>{range - logged}</strong></div>
           <div className="gap-row"><span>Meals missing a cost</span><strong>{missingCost}</strong></div>
           <div className="gap-row"><span>Longest streak</span><strong>{streak} day{streak === 1 ? '' : 's'}</strong></div>
-          <div className="gap-row"><span>Protein target missed</span><strong>{logged - targetHits} of {logged}</strong></div>
+          <div className="gap-row"><span>Incomplete nutrition days</span><strong>{logged - completeDays.length}</strong></div>
+          <div className="gap-row"><span>Protein target missed</span><strong>{completeDays.length - targetHits} of {completeDays.length}</strong></div>
           <div className="gap-row"><span>Days over budget</span><strong>{pricedDays.filter((day) => Number(day.cost) > dailyBudget).length}</strong></div>
         </Card>
       </div>
@@ -842,6 +846,7 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
   cutoff.setDate(cutoff.getDate() - (range - 1));
   const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
   const recent = nutritionHistory.filter((day) => day.dateKey >= cutoffKey);
+  const incompleteEntries = recent.reduce((total, day) => total + day.nutritionIncompleteEntries, 0);
   const days = Array.from({ length: range }, (_, index) => {
     const date = new Date(cutoff);
     date.setDate(cutoff.getDate() + index);
@@ -891,6 +896,7 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
       {view === 'nutrition' ? (
         <Card className="trend-card">
           <SectionTitle title={`${nutrient}, day by day`} subtitle={`Daily average ${Math.round(average).toLocaleString()} ${spec[nutrient].unit} · target ${target.toLocaleString()} ${spec[nutrient].unit} · ${daysOnTarget} of ${range} days ${nutrient === 'Sodium' ? 'within limit' : 'on target'}`} action="Edit targets" onAction={() => onOpen('targets')} />
+          {incompleteEntries > 0 && <div className="notice"><Info /><span>Trend totals include known values only; {incompleteEntries} entr{incompleteEntries === 1 ? 'y is' : 'ies are'} incomplete in this range.</span></div>}
           <div className="trend-controls"><div className="driver-tabs">{nutrientLabels.map((label) => <button className={nutrient === label ? 'active' : ''} key={label} onClick={() => setNutrient(label)}>{label}</button>)}</div><label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label></div>
           <div className="bar-chart"><div className="target-line" style={{ bottom: `${target / chartMaximum * 100}%` }}><span>{target.toLocaleString()} {spec[nutrient].unit} target</span></div>{days.map((day, index) => <div className="chart-column" key={index}><i style={{ height: `${day.value / chartMaximum * 100}%`, background: spec[nutrient].color }} /><small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small></div>)}</div>
         </Card>
@@ -1092,6 +1098,7 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
   recipe: { title: 'New recipe', save: 'Save recipe' },
   'recipe-edit': { title: 'Edit recipe', save: 'Save changes' },
   log: { title: 'Consume a product', save: 'Acquire & consume' },
+  'manual-log': { title: 'Log a meal or snack', subtitle: 'No product or inventory record is required.', save: 'Log food' },
   item: { title: 'Add an item', save: 'Add item' },
   meal: { title: 'Add to the plan', save: 'Add to plan' },
   targets: { title: 'Targets & budget', save: 'Save targets' },
@@ -1173,7 +1180,7 @@ function panelContext(state: PanelState, data: Pick<PantryData, 'nutrients' | 'f
   const daily = dailyFoodBudget(weekly);
   const sumCosts = (costs: Array<number | null | undefined>) => costs.reduce((total: number, value) => total + (value ?? 0), 0);
 
-  if (state.kind === 'log') {
+  if (state.kind === 'log' || state.kind === 'manual-log') {
     const calories = nutrients.find((row) => row.label === 'Calories');
     return `Today so far: ${calories?.value ?? '0'} cal · ${usd(sumCosts(foodLog.map((entry) => entry.cost)))} of ${usd(daily)}.`;
   }
@@ -1279,6 +1286,26 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
     <Field name="label" label="Log label override" placeholder="Optional; defaults to brand and product" />
     <Field name="note" label="Note" placeholder="Optional" />
     <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong><small>Nutrition confidence stays on the product definition.</small></span></label>
+  </div>;
+
+  if (kind === 'manual-log') return <div className="form-grid">
+    <PanelSection title="What you ate"><div className="form-grid">
+      <Field name="label" label="Meal or food" placeholder="Spaghetti at Mom's" required />
+      <div className="form-grid two"><Field name="portion_label" label="Portion" placeholder="1 large plate" /><Field name="occurred_at" label="Time" type="datetime-local" /></div>
+    </div></PanelSection>
+    <PanelSection title="Nutrition (optional)"><div className="form-grid">
+      <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" step="any" /><Field name="protein_g" label="Protein (g)" type="number" min="0" step="any" /></div>
+      <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" step="any" /><Field name="fat_g" label="Fat (g)" type="number" min="0" step="any" /></div>
+      <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" step="any" /><Field name="sugar_g" label="Sugar (g)" type="number" min="0" step="any" /></div>
+      <Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" step="any" />
+      <Field name="nutrition_source" label="Nutrition source" placeholder="Rough portion estimate, recipe from Mom…" />
+      <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" /><span><strong>Nutrition is estimated</strong><small>Leave every nutrition field blank when it is unknown.</small></span></label>
+    </div></PanelSection>
+    <PanelSection title="Cost (optional)"><div className="form-grid">
+      <div className="form-grid two"><Field name="cost" label="Out-of-pocket cost (USD)" type="number" min="0" step="0.01" /><Field name="cost_source" label="Cost source" placeholder="Receipt, menu, free meal…" /></div>
+      <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong></span></label>
+    </div></PanelSection>
+    <Field name="note" label="Note" placeholder="Optional context" />
   </div>;
 
   if (kind === 'product') return <div className="form-grid">

@@ -13,7 +13,8 @@ A personal kitchen inventory that tracks pantry, fridge, and freezer stock; stor
 - **Canonical food:** The brand-independent ingredient identity and recipe conversion rules.
 - **Product:** A purchasable branded item mapped to one canonical food, with optional barcode, aliases, package conversions, and label nutrition.
 - **Inventory lot:** A separately purchased quantity with its own location and best-by date.
-- **Consumption:** An atomic, reversible set of lot deductions caused by cooking or quick use.
+- **Consumption:** An atomic, reversible record of food eaten. It may have zero or
+  more linked lot deductions; manual meals do not require inventory or product records.
 
 ## MVP behavior
 
@@ -93,6 +94,10 @@ Conversions are food-specific. One cup of butter and one cup of flour do not sha
 - `label`
 - `recipe_id` (nullable)
 - `servings` (nullable)
+- `portion_label` (nullable free-form description)
+- `nutrition_status`: `complete | partial | unknown`
+- nullable nutrient snapshot and estimate/source metadata
+- optional direct cost for consumption without a purchase lot
 - `timestamp`
 - `deductions[]`: `{lot_id, food_id, quantity_base}`
 - `undone_at` (nullable)

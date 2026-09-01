@@ -8,6 +8,9 @@
 - New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `npm ci` at the repository root. Use the lockfile; do not copy `node_modules` or build output from another worktree.
 - If the sandbox blocks dependency network access, rerun only the standard locked restore command with the required network approval. Do not replace the locked restore with copied dependencies or an unpinned install.
 - Supabase CLI commands write telemetry state under `C:\Users\<user>\.supabase` even for read-only help and validation commands. In a restricted workspace, use narrowly scoped approval for the exact Supabase command; do not redirect or copy that user-level state into the repository.
+- New worktrees do not inherit the ignored Supabase project link. Before a dry run,
+  database test, or deployment there, run `npx.cmd supabase link --project-ref xaetuqdtnolzspfvqvja`;
+  do not copy `supabase/.temp` from another worktree.
 - In PowerShell scripts, invoke the Node package runner as `npx.cmd`. Calling `npx` with the call operator (`& npx ...`) can make the installed `npx.ps1` misparse the command as the unrelated `px` package.
 - When a task discovers another repeatable worktree-specific setup requirement or workaround, add it to this file in the same change so future agents do not have to rediscover it.
 - Before integrating, update the feature branch from the latest committed `main`, resolve conflicts in the feature worktree, and rerun the feature tests plus the full regression suite. Verify that previously working behavior still works with the new feature.

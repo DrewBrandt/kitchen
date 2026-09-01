@@ -355,7 +355,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   ] as const;
   const buildNutrients = (dayLogs: FoodLogRow[]) => nutrientSpec.map(([label, field, target, unit, color]) => {
     const value = sum(dayLogs, field);
-    return { label, value: `${Math.round(value).toLocaleString()}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
+    const incomplete = dayLogs.some((log) => log[field] === null);
+    return { label, value: `${Math.round(value).toLocaleString()}${incomplete ? '+' : ''}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
   });
   const palette = ['#5fe0a0', '#57a8f2', '#a184f5', '#f0b13f', '#f2637a', '#35d6c8', '#f59e6b', '#f472b6'];
   const eventCostById = new Map((eventCostsResult.data ?? []).map((row) => [row.inventory_event_id ?? '', row.cost === null ? null : Number(row.cost)]));
@@ -377,6 +378,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       }
       return { cost: total, estimated, source: estimated ? 'Inventory estimate' : 'Inventory event cost' };
     }
+    if (log.cost !== null) return { cost: Number(log.cost), estimated: log.cost_is_estimated, source: log.cost_source ?? 'Directly logged cost' };
     const product = log.product ? products.get(log.product) : undefined;
     if (product?.estimated_cost !== null && product?.estimated_cost !== undefined) return { cost: Number(product.estimated_cost) * Number(log.servings ?? 1), estimated: true, source: product.cost_source ?? 'Product price estimate' };
     const recipe = log.recipe ? recipeCosts.get(log.recipe) : undefined;
@@ -387,17 +389,19 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     id: log.id,
     emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
     label: log.label,
-    serving: `${Number(log.servings ?? 1)} serving${Number(log.servings ?? 1) === 1 ? '' : 's'}${log.nutrition_is_estimated ? ' · estimated' : ''}`,
-    calories: `${Math.round(Number(log.kcal ?? 0))} cal`,
-    protein: `${Math.round(Number(log.protein_g ?? 0))} g protein`,
+    serving: `${log.portion_label ?? (log.servings === null ? 'Portion not specified' : `${Number(log.servings)} serving${Number(log.servings) === 1 ? '' : 's'}`)}${log.nutrition_status === 'unknown' ? ' · nutrition unknown' : log.nutrition_status === 'partial' ? ' · partial nutrition' : log.nutrition_is_estimated ? ' · estimated' : ''}`,
+    calories: log.kcal === null ? 'Calories unknown' : `${Math.round(Number(log.kcal))} cal`,
+    protein: log.protein_g === null ? 'Protein unknown' : `${Math.round(Number(log.protein_g))} g protein`,
     time: new Date(log.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     color: palette[index % palette.length],
-    nutrition: nutritionValues(log),
+    nutrition: log.nutrition_status === 'unknown' ? undefined : nutritionValues(log),
+    nutritionStatus: log.nutrition_status as 'complete' | 'partial' | 'unknown',
     cost: costForLog(log).cost,
     costIsEstimated: costForLog(log).estimated,
   }));
   const nutrients = buildNutrients(todayLogs);
   const foodLog = buildFoodLog(todayLogs);
+  const nutritionIncompleteEntries = todayLogs.filter((log) => log.nutrition_status !== 'complete').length;
 
   const byDay = new Map<string, FoodLogRow[]>();
   for (const log of logs) {
@@ -407,6 +411,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const foodLogByDate = Object.fromEntries([...byDay.entries()].map(([date, dayLogs]) => [date, {
     nutrients: buildNutrients(dayLogs),
     foodLog: buildFoodLog(dayLogs),
+    nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
   }]));
   // History carries the numbers the page renders rather than pre-formatted strings,
   // so the heat strip and stat strip derive from real rows instead of re-parsing text.
@@ -430,6 +435,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       protein: sum(dayLogs, 'protein_g'),
       cost: priced ? dayLogs.reduce((total, log) => total + Number(costForLog(log).cost), 0) : null,
       mealsMissingCost: dayLogs.filter((log) => costForLog(log).cost === null).length,
+      nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
     };
   });
 
@@ -522,6 +528,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     dateKey,
     label: new Date(`${dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' }),
     values: Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, sum(dayLogs, field)])) as NutritionValues,
+    nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
     foods: dayLogs.map((log) => ({ label: log.label, values: nutritionValues(log) })),
   }));
   const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey).reduce((totals, plan) => {
@@ -540,6 +547,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     weekDays,
     plannedMeals,
     foodLog,
+    nutritionIncompleteEntries,
     foodLogByDate,
     history,
     foods: [...foods.values()].map((food) => ({ id: food.id, name: food.name, emoji: food.emoji ?? '🍽️', measureStyle: food.measure_style })),

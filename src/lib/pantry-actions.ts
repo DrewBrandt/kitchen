@@ -189,6 +189,38 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
     return 'Purchase recorded and consumed portion logged.';
   }
 
+  if (kind === 'manual-log') {
+    const occurredAt = optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString();
+    const nutritionFields = {
+      calories: optionalNumber(form, 'kcal'),
+      proteinG: optionalNumber(form, 'protein_g'),
+      carbsG: optionalNumber(form, 'carbs_g'),
+      fatG: optionalNumber(form, 'fat_g'),
+      fiberG: optionalNumber(form, 'fiber_g'),
+      sugarG: optionalNumber(form, 'sugar_g'),
+      sodiumMg: optionalNumber(form, 'sodium_mg'),
+    };
+    const nutrition = Object.fromEntries(Object.entries(nutritionFields).filter(([, value]) => value !== null)) as Record<string, number | boolean | string>;
+    const nutritionSource = optionalText(form, 'nutrition_source');
+    if (Object.keys(nutrition).length || nutritionSource || form.get('nutrition_is_estimated') === 'on') {
+      nutrition.estimated = form.get('nutrition_is_estimated') === 'on';
+      if (nutritionSource) nutrition.source = nutritionSource;
+    }
+    const cost = optionalNumber(form, 'cost');
+    const { error } = await client.rpc('log_manual_consumption', {
+      p_label: text(form, 'label'),
+      ...(optionalText(form, 'portion_label') ? { p_portion_label: optionalText(form, 'portion_label')! } : {}),
+      p_occurred_at: occurredAt,
+      ...(Object.keys(nutrition).length ? { p_nutrition: nutrition } : {}),
+      ...(cost === null ? {} : { p_cost: cost }),
+      p_cost_is_estimated: form.get('cost_is_estimated') === 'on',
+      ...(optionalText(form, 'cost_source') ? { p_cost_source: optionalText(form, 'cost_source')! } : {}),
+      ...(optionalText(form, 'note') ? { p_note: optionalText(form, 'note')! } : {}),
+    });
+    if (error) throw error;
+    return 'Food logged without changing inventory.';
+  }
+
   if (kind === 'meal') {
     const intent = text(form, 'intent') || 'prepare';
     const groupId = crypto.randomUUID();
