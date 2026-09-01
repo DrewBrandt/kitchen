@@ -243,6 +243,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     recipeNutrition.set(recipe.id, totals);
   }
   const costForFoodQuantity = (foodId: string, quantity: number, pinnedProduct: string | null): CostValue => {
+    if (foods.get(foodId)?.always_available) return { cost: 0, estimated: false, source: 'Always available' };
     let remaining = quantity;
     let total = 0;
     let estimated = false;
@@ -295,11 +296,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         const unit = units.get(ingredient.unit);
         const requestedQuantity = Number(ingredient.qty);
         if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
+        const ingredientName = pluralize(food.name, food.plural, requestedQuantity);
+        if (food.always_available) return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
         const enough = availableBase + 0.0000001 >= neededBase;
         const availableInRequestedUnit = fromFoodBase(food, availableBase, unit);
-        const ingredientName = pluralize(food.name, food.plural, requestedQuantity);
         return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
@@ -314,7 +316,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       cookable: recipeIngredients.every((ingredient) => {
         const unit = units.get(ingredient.unit);
         const food = foods.get(ingredient.ingredient);
-        return Boolean(unit && food && (stockByFood.get(ingredient.ingredient) ?? 0) + 0.0000001 >= toFoodBase(food, Number(ingredient.qty), unit));
+        return Boolean(unit && food && (food.always_available || (stockByFood.get(ingredient.ingredient) ?? 0) + 0.0000001 >= toFoodBase(food, Number(ingredient.qty), unit)));
       }),
       estimatedCost,
       costPerServing: estimatedCost === null ? null : estimatedCost / Number(recipe.servings),

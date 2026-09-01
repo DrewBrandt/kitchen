@@ -35,6 +35,7 @@ export type Database = {
       base_foods: {
         Row: {
           aliases: string[]
+          always_available: boolean
           carbs_g: number | null
           created_at: string
           display_unit: string | null
@@ -62,6 +63,7 @@ export type Database = {
         }
         Insert: {
           aliases?: string[]
+          always_available?: boolean
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null
@@ -89,6 +91,7 @@ export type Database = {
         }
         Update: {
           aliases?: string[]
+          always_available?: boolean
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null

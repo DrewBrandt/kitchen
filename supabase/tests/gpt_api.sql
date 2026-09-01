@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(40);
+select plan(42);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -245,6 +245,16 @@ select is(
   (select aliases from base_foods where id = 'a1000000-0000-4000-8000-000000000001'),
   array['edit apple']::text[],
   'Food edit applies only the supplied fields'
+);
+
+select lives_ok(
+  $$select gpt_update_food('a1000000-0000-4000-8000-000000000001', '{"alwaysAvailable":true}')$$,
+  'A canonical food can be marked always available'
+);
+
+select ok(
+  (select always_available from base_foods where id = 'a1000000-0000-4000-8000-000000000001'),
+  'Always-available status is stored on the canonical food'
 );
 
 select * from finish();

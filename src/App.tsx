@@ -1366,6 +1366,7 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
     <div className="form-grid two"><Field name="package_qty_base" label="Package quantity" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="serving_qty_base" label="Serving quantity" type="number" defaultValue="1" min="0.001" step="any" /></div>
     <SelectField name="grocery_category" label="Grocery category" options={categories.map((category) => ({ value: category, label: category }))} />
     <Field name="ingredient_role" label="Ingredient role" placeholder="Main, supporting, staple…" />
+    <label className="toggle-row"><input name="always_available" type="checkbox" /><span><strong>Always available</strong><small>Recipes can use this without tracked stock or grocery shortages.</small></span></label>
     <Field name="nutrition_basis_qty" label="Nutrition basis quantity" type="number" defaultValue="100" min="0.001" step="any" required />
     <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
     <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>

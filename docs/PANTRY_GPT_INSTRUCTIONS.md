@@ -67,8 +67,9 @@ because its quantity is zero.
   by ID, barcode, name, or reviewed alias. Every lot write requires an exact
   `productId`, quantity, and supported unit. If only the product is new, create
   only it; create a food only for a new ingredient.
-- New foods need the best grocery category and an ingredient role of
-  `main`, `supporting`, or `staple`. Retain only confirmed exact aisles.
+- New foods need a grocery category and `main`, `supporting`, or `staple` role.
+  Keep exact aisles. Mark household water `alwaysAvailable`; it needs no lots
+  or groceries.
 - Prefer label nutrition. Otherwise use a reputable source, preserve its source,
   and mark estimates. Ask only for missing data that blocks a safe conversion or
   materially changes the result.

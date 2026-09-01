@@ -95,7 +95,7 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 ### 2. Food catalog
 
 - Create, read, update, search, and delete canonical food definitions.
-- Record a name, aliases, quantity mode, base unit, preferred display unit, supported conversions, default storage location, optional symbolic identifier, nutrition basis, grocery department, ingredient role, and optional exact store-aisle note.
+- Record a name, aliases, quantity mode, base unit, preferred display unit, supported conversions, default storage location, optional symbolic identifier, nutrition basis, grocery department, ingredient role, optional always-available status, and optional exact store-aisle note.
 - Classify ingredient roles as main ingredient, supporting ingredient, or staple/seasoning.
 - Match user-entered names against canonical names and reviewed aliases.
 - Prevent unsupported units from being used in inventory or recipe calculations.
@@ -143,6 +143,7 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 - Validate the complete demand before changing any lot.
 - Reject an entire recipe or grouped cooking action if any required ingredient is insufficient.
 - Record the exact lot and base quantity used in every successful deduction.
+- Skip inventory validation and deduction for always-available foods such as household water.
 - Permit undo to restore the exact original lots rather than adding an approximate replacement quantity.
 
 ### 7. Recipes
@@ -241,6 +242,7 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 - Aggregate each canonical-food shortage in its base unit and record the first date on which it is needed.
 - Rebuild plan-generated grocery items whenever the plan or relevant inventory changes.
 - Preserve manual grocery items and their checked state when plan-generated shortages are rebuilt.
+- Exclude always-available foods from generated grocery shortages.
 - Add and remove durable manual grocery items independently of meal plans.
 - Assign groceries to store departments and order them using the household's configured store walk order.
 - Retain an optional exact aisle note only when learned or confirmed; never invent one.
