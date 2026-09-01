@@ -942,6 +942,7 @@ function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity }:
 function BarcodeScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const scanSessionRef = useRef(0);
   const [barcode, setBarcode] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -950,6 +951,9 @@ function BarcodeScanner() {
     scanSessionRef.current += 1;
     controlsRef.current?.stop();
     controlsRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
     if (updateState) setScanning(false);
   };
   useEffect(() => () => stop(false), []);
@@ -959,14 +963,22 @@ function BarcodeScanner() {
     const session = scanSessionRef.current + 1;
     scanSessionRef.current = session;
     setScanning(true);
-    setMessage('Starting camera…');
+    setMessage('Waiting for Firefox camera permission…');
     try {
+      if (window.isSecureContext === false) throw new DOMException('Camera access requires a secure HTTPS page.', 'SecurityError');
+      if (!navigator.mediaDevices?.getUserMedia) throw new DOMException('This browser does not expose camera access.', 'NotSupportedError');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      if (scanSessionRef.current !== session) { stream.getTracks().forEach((track) => track.stop()); return; }
+      streamRef.current = stream;
+      video.srcObject = stream;
+      await video.play();
+      setMessage('Camera is on. Loading barcode reader…');
       const { BarcodeFormat, BrowserMultiFormatReader } = await import('@zxing/browser');
       if (scanSessionRef.current !== session) return;
       const reader = new BrowserMultiFormatReader();
       reader.possibleFormats = [BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.EAN_8, BarcodeFormat.EAN_13, BarcodeFormat.CODE_128];
-      const controls = await reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      const controls = await reader.decodeFromStream(
+        stream,
         video,
         (result, _error, activeControls) => {
           if (!result || scanSessionRef.current !== session) return;
@@ -974,6 +986,7 @@ function BarcodeScanner() {
           scanSessionRef.current += 1;
           activeControls.stop();
           controlsRef.current = null;
+          streamRef.current = null;
           setBarcode(found);
           setMessage(`Found ${found}`);
           setScanning(false);
@@ -984,11 +997,20 @@ function BarcodeScanner() {
       setMessage('Point the camera at the barcode.');
     } catch (cause) {
       if (scanSessionRef.current !== session) return;
-      setMessage(cause instanceof Error ? cause.message : 'Camera access was not available.');
+      const name = cause instanceof DOMException ? cause.name : '';
+      setMessage(
+        name === 'NotAllowedError' || name === 'SecurityError'
+          ? 'Firefox blocked the camera. Allow Camera for this site in Firefox permissions, then try again.'
+          : name === 'NotFoundError'
+            ? 'Firefox could not find a camera on this device.'
+            : name === 'NotReadableError'
+              ? 'The camera is busy. Close other apps using it, then try again.'
+              : cause instanceof Error ? cause.message : 'Camera access was not available.',
+      );
       stop();
     }
   }
-  return <div className="scan-box"><div className={cx('scanner-frame', scanning && 'live')}><video ref={videoRef} muted playsInline /><ScanLine /><span>{message}</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" onClick={() => scanning ? stop() : void start()}>{scanning ? 'Stop camera' : 'Scan with camera'}</button><label className="field"><span>UPC / EAN</span><input name="barcode" inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Enter barcode" required /></label></div>;
+  return <div className="scan-box"><div className={cx('scanner-frame', scanning && 'live')}><video ref={videoRef} muted playsInline /><ScanLine /><span role="status" aria-live="polite">{message}</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" onClick={() => scanning ? stop() : void start()}>{scanning ? 'Stop camera' : 'Enable camera'}</button><label className="field"><span>UPC / EAN</span><input name="barcode" inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Enter barcode" required /></label></div>;
 }
 
 function RatingInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
