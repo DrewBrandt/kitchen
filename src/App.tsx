@@ -7,11 +7,15 @@ import {
   Check,
   ChevronRight,
   ClipboardList,
+  Columns2,
   CookingPot,
   Download,
+  GripVertical,
+  Grid2X2,
   History as HistoryIcon,
   House,
   Info,
+  LayoutList,
   Pencil,
   ListChecks,
   NotebookTabs,
@@ -43,6 +47,7 @@ import { completeCost, dailyFoodBudget, perServingCost, usd } from './lib/cost';
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
   today: House,
   inventory: Archive,
+  'on-deck': LayoutList,
   recipes: CookingPot,
   products: Store,
   'food-log': NotebookTabs,
@@ -55,6 +60,7 @@ const PAGE_ICONS: Record<PageId, LucideIcon> = {
 const PANEL_FOR_PAGE: Record<PageId, PanelKind> = {
   today: 'lot',
   inventory: 'lot',
+  'on-deck': 'recipe',
   recipes: 'recipe',
   products: 'product',
   'food-log': 'manual-log',
@@ -127,12 +133,18 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   const [activeRecipeIds, setActiveRecipeIds] = useState<Set<string>>(() => new Set(recipes.filter((recipe) => {
     try { return (JSON.parse(localStorage.getItem(`mise.recipe-progress.${recipe.id}`) ?? '[]') as string[]).length > 0; } catch { return false; }
   }).map((recipe) => recipe.id)));
+  const [manualDeckRecipeIds, setManualDeckRecipeIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('mise.on-deck-recipes') ?? '[]') as string[]); } catch { return new Set(); }
+  });
+  const [dismissedDeckRecipeIds, setDismissedDeckRecipeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCheckedGroceries(new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map(groceryKey)));
   }, [grocerySections]);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+
+  useEffect(() => { localStorage.setItem('mise.on-deck-recipes', JSON.stringify([...manualDeckRecipeIds])); }, [manualDeckRecipeIds]);
 
   useEffect(() => {
     if (!panel) return;
@@ -181,6 +193,13 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   };
 
   function open(kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) {
+    if (kind === 'cook' && recipe) {
+      setManualDeckRecipeIds((current) => new Set(current).add(recipe.id));
+      setDismissedDeckRecipeIds((current) => { const next = new Set(current); next.delete(recipe.id); return next; });
+      setPanel(null);
+      setPage('on-deck');
+      return;
+    }
     setPanel({ kind, recipe, values });
   }
 
@@ -193,7 +212,11 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   }
 
   const todayPins = weekDays.find((day) => day.today)?.meals.flatMap((meal) => recipes.filter((recipe) => recipe.id === meal.recipeId)) ?? [];
-  const pinnedRecipes = [...new Map([...todayPins, ...recipes.filter((recipe) => activeRecipeIds.has(recipe.id))].map((recipe) => [recipe.id, recipe])).values()];
+  const pinnedRecipes = [...new Map([...todayPins, ...recipes.filter((recipe) => manualDeckRecipeIds.has(recipe.id) || activeRecipeIds.has(recipe.id))].filter((recipe) => !dismissedDeckRecipeIds.has(recipe.id)).map((recipe) => [recipe.id, recipe])).values()];
+  const removeFromDeck = (id: string) => {
+    setManualDeckRecipeIds((current) => { const next = new Set(current); next.delete(id); return next; });
+    setDismissedDeckRecipeIds((current) => new Set(current).add(id));
+  };
 
   // Reversible actions get a toast with Undo; everything else just says what happened.
   function notify(message: string, undo?: () => Promise<void>) {
@@ -251,7 +274,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         ownerName={ownerName}
         syncStatus={syncStatus}
         groceryLeft={groceryTotal - groceryDone}
-        badges={{ inventory: inventoryFoodCount, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
+        badges={{ inventory: inventoryFoodCount, 'on-deck': pinnedRecipes.length, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
         onNavigate={setPage}
         onProfile={() => open('profile')}
         pinnedRecipes={pinnedRecipes}
@@ -259,7 +282,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         onSignOut={onSignOut}
       />
 
-      <main className="main-shell">
+      <main className={cx('main-shell', page === 'on-deck' && 'on-deck-shell')}>
         <header className="page-header">
           <div className="page-header-inner">
             <div className="page-heading">
@@ -274,15 +297,16 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
                   <span>{meta.secondary}</span>
                 </button>
               )}
-              <button className="button primary" onClick={() => open(PANEL_FOR_PAGE[page])}>
+              <button className="button primary" onClick={() => page === 'on-deck' ? setPage('recipes') : open(PANEL_FOR_PAGE[page])}>
                 <Plus /> <span>{meta.primary}</span>
               </button>
             </div>
           </div>
         </header>
 
-        <div className="page-content">
+        <div className={cx('page-content', page === 'on-deck' && 'on-deck-page-content')}>
           {page === 'today' && <TodayPage onNavigate={setPage} onOpen={open} onOpenFood={openInventory} notify={notify} onConsumePrepared={onConsumePrepared} undo={reversals} />}
+          {page === 'on-deck' && <OnDeckPage recipes={pinnedRecipes} onAddRecipe={() => setPage('recipes')} onRemoveRecipe={removeFromDeck} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} undo={reversals} />}
           {page === 'inventory' && (
             <InventoryPage
               filter={inventoryFilter}
@@ -313,7 +337,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
       </main>
 
       <MobileNav page={page} onNavigate={setPage} onScan={() => open('scan')} />
-      {panel && <ActionPanel state={panel} onDeckRecipes={pinnedRecipes} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} onRecipeProgress={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} onConsumeInventoryLot={onConsumeInventoryLot} onSetInventoryLotQuantity={onSetInventoryLotQuantity} undo={reversals} />}
+      {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} onRecipeProgress={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} onConsumeInventoryLot={onConsumeInventoryLot} onSetInventoryLotQuantity={onSetInventoryLotQuantity} undo={reversals} />}
       {toast && <div className="toast" role="status"><Check /><span className="grow">{toast.message}</span>{toast.undo && <button className="toast-undo" onClick={runUndo}>Undo</button>}<button className="toast-dismiss" aria-label="Dismiss" onClick={dismissToast}><X /></button></div>}
     </div>
   );
@@ -353,7 +377,7 @@ function MobileNav({ page, onNavigate, onScan }: { page: PageId; onNavigate: (pa
     { id: 'today', label: 'Today', icon: House },
     { id: 'week', label: 'Week', icon: CalendarDays },
     { id: 'grocery', label: 'Shop', icon: ShoppingBasket },
-    { id: 'trends', label: 'Trends', icon: TrendingUp },
+    { id: 'on-deck', label: 'Deck', icon: LayoutList },
   ];
   return (
     <nav className="mobile-nav" aria-label="Mobile navigation">
@@ -1158,11 +1182,11 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
 };
 
 
-function ActionPanel({ state, onDeckRecipes, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { state: PanelState; onDeckRecipes: Recipe[]; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
+function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { state: PanelState; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
   const { foodLog, grocerySections, history, nutrients, plannedMeals, recipes, settings } = usePantryData();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (state.kind === 'cook') return <OnDeckPanel initialRecipe={state.recipe ?? recipes[0]} recipes={onDeckRecipes} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} undo={undo} />;
+  if (state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} undo={undo} />;
   if (state.kind === 'recipe-detail') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={false} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} undo={undo} />;
   if (state.kind === 'combined-meal') return <CombinedMealPanel onClose={onClose} notify={notify} onCook={onCookRecipes} />;
   if (state.kind === 'inventory-detail') return state.inventoryFood ? <InventoryLotsPanel food={state.inventoryFood} onClose={onClose} notify={notify} onConsume={onConsumeInventoryLot} onSetQuantity={onSetInventoryLotQuantity} undo={undo} /> : null;
@@ -1402,16 +1426,75 @@ function ConsumptionDetailPanel({ entry, onClose }: { entry: FoodLogEntry; onClo
   return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle="Consumption event" onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{entry.id && <div className="event-reference"><span>EVENT REFERENCE</span><code>{entry.id}</code></div>}</div><div className="panel-footer"><span className="panel-footer-spacer" /><button className="button secondary" onClick={onClose}>Close</button></div></aside></div>;
 }
 
-type RecipePanelProps = { recipe: Recipe; cooking: boolean; onClose: () => void; notify: Notify; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals; deck?: { recipes: Recipe[]; onSelect: (id: string) => void } };
+type RecipePanelProps = { recipe: Recipe; cooking: boolean; onClose: () => void; notify: Notify; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals };
 
-function OnDeckPanel({ initialRecipe, recipes, ...props }: { initialRecipe: Recipe; recipes: Recipe[] } & Omit<RecipePanelProps, 'recipe' | 'cooking' | 'deck'>) {
-  const deckRecipes = [...new Map([initialRecipe, ...recipes].map((recipe) => [recipe.id, recipe])).values()];
-  const [selectedId, setSelectedId] = useState(initialRecipe.id);
-  const selected = deckRecipes.find((recipe) => recipe.id === selectedId) ?? initialRecipe;
-  return <RecipePanel key={selected.id} recipe={selected} cooking {...props} deck={{ recipes: deckRecipes, onSelect: setSelectedId }} />;
+type DeckLayout = 'stack' | 'split' | 'three' | 'quad';
+
+function OnDeckPage({ recipes, onAddRecipe, onRemoveRecipe, notify, onCook, onFeedback, onProgressChange, undo }: { recipes: Recipe[]; onAddRecipe: () => void; onRemoveRecipe: (id: string) => void; notify: Notify; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals }) {
+  const [layout, setLayout] = useState<DeckLayout>(() => (localStorage.getItem('mise.on-deck-layout') as DeckLayout | null) ?? 'split');
+  const [order, setOrder] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('mise.on-deck-order') ?? '[]') as string[]; } catch { return []; } });
+  const [draggingId, setDraggingId] = useState('');
+  useEffect(() => {
+    const ids = recipes.map((recipe) => recipe.id);
+    setOrder((current) => {
+      const next = [...current.filter((id) => ids.includes(id)), ...ids.filter((id) => !current.includes(id))];
+      return next.join('|') === current.join('|') ? current : next;
+    });
+  }, [recipes]);
+  useEffect(() => { localStorage.setItem('mise.on-deck-layout', layout); }, [layout]);
+  useEffect(() => { localStorage.setItem('mise.on-deck-order', JSON.stringify(order)); }, [order]);
+  const orderedRecipes = order.map((id) => recipes.find((recipe) => recipe.id === id)).filter((recipe): recipe is Recipe => Boolean(recipe));
+  const moveRecipe = (id: string, targetId: string) => setOrder((current) => {
+    if (id === targetId) return current;
+    const next = current.filter((candidate) => candidate !== id);
+    const targetIndex = next.indexOf(targetId);
+    next.splice(targetIndex < 0 ? next.length : targetIndex, 0, id);
+    return next;
+  });
+  const nudgeRecipe = (id: string, delta: number) => setOrder((current) => {
+    const from = current.indexOf(id);
+    const to = Math.max(0, Math.min(current.length - 1, from + delta));
+    if (from < 0 || from === to) return current;
+    const next = [...current];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    return next;
+  });
+  const layouts: Array<{ id: DeckLayout; label: string; icon?: LucideIcon }> = [
+    { id: 'stack', label: 'One column', icon: LayoutList },
+    { id: 'split', label: 'Side by side', icon: Columns2 },
+    { id: 'three', label: 'Three panels' },
+    { id: 'quad', label: 'Four corners', icon: Grid2X2 },
+  ];
+  return <div className="on-deck-workspace">
+    <div className="on-deck-toolbar">
+      <div><strong>Workspace layout</strong><span>Drag panels by their handles. Your arrangement is saved on this device.</span></div>
+      <div className="layout-switcher" role="group" aria-label="Workspace layout">{layouts.map((option) => { const Icon = option.icon; return <button key={option.id} className={layout === option.id ? 'active' : ''} aria-label={option.label} aria-pressed={layout === option.id} onClick={() => setLayout(option.id)} title={option.label}>{Icon ? <Icon /> : <b>3</b>}<span>{option.label}</span></button>; })}</div>
+    </div>
+    {orderedRecipes.length ? <div className={cx('on-deck-board', `layout-${layout}`)}>{orderedRecipes.map((recipe, index) => <OnDeckRecipeCard key={recipe.id} recipe={recipe} dragging={draggingId === recipe.id} onDragStart={(event) => { setDraggingId(recipe.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', recipe.id); }} onDragEnd={() => setDraggingId('')} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); moveRecipe(event.dataTransfer.getData('text/plain') || draggingId, recipe.id); setDraggingId(''); }} onNudge={(delta) => nudgeRecipe(recipe.id, delta)} canMoveEarlier={index > 0} canMoveLater={index < orderedRecipes.length - 1} onRemove={() => onRemoveRecipe(recipe.id)} notify={notify} onCook={onCook} onFeedback={onFeedback} onProgressChange={onProgressChange} undo={undo} />)}</div> : <div className="empty-deck"><CookingPot /><h2>Nothing is on deck</h2><p>Open a recipe to add it to your cooking workspace.</p><button className="button primary" onClick={onAddRecipe}><Plus /> Add a recipe</button></div>}
+  </div>;
 }
 
-function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback, onProgressChange, undo, deck }: RecipePanelProps) {
+function OnDeckRecipeCard({ recipe, dragging, onDragStart, onDragEnd, onDragOver, onDrop, onNudge, canMoveEarlier, canMoveLater, onRemove, notify, onCook, onFeedback, onProgressChange, undo }: { recipe: Recipe; dragging: boolean; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void; onDragOver: (event: React.DragEvent<HTMLElement>) => void; onDrop: (event: React.DragEvent<HTMLElement>) => void; onNudge: (delta: number) => void; canMoveEarlier: boolean; canMoveLater: boolean; onRemove: () => void; notify: Notify; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals }) {
+  const storageKey = `mise.recipe-progress.${recipe.id}`;
+  const [checks, setChecks] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]); } catch { return new Set(); } });
+  const [saving, setSaving] = useState(false);
+  const [prepId, setPrepId] = useState('');
+  const [ease, setEase] = useState(0);
+  const [taste, setTaste] = useState(0);
+  const [minutes, setMinutes] = useState(0);
+  const total = recipe.ingredients.length + recipe.steps.length;
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); onProgressChange(recipe.id, checks.size > 0); }, [checks, recipe.id, storageKey]);
+  const toggle = (key: string) => setChecks((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); };
+  const finishFeedback = () => { clearProgress(); setPrepId(''); setEase(0); setTaste(0); setMinutes(0); };
+  return <article className={cx('on-deck-card', dragging && 'dragging')} aria-label={recipe.name} onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="deck-card-header"><button className="deck-drag-handle" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); onNudge(-1); } if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); onNudge(1); } }} aria-label={`Drag ${recipe.name} panel. Use arrow keys to reorder.`}><GripVertical /></button><span className="deck-recipe-emoji">{recipe.emoji}</span><div><h2>{recipe.name}</h2><p>{servingLabel(recipe.servings)} · {recipe.minutes} minutes</p></div><div className="deck-card-actions"><button className="icon-button" disabled={!canMoveEarlier} onClick={() => onNudge(-1)} aria-label={`Move ${recipe.name} earlier`}>←</button><button className="icon-button" disabled={!canMoveLater} onClick={() => onNudge(1)} aria-label={`Move ${recipe.name} later`}>→</button><button className="icon-button" onClick={onRemove} aria-label={`Remove ${recipe.name} from on deck`}><X /></button></div></div>
+    {prepId ? <div className="deck-card-body deck-feedback"><h3>HOW WAS IT?</h3><RatingInput label="Ease" value={ease} onChange={setEase} /><RatingInput label="Taste" value={taste} onChange={setTaste} /><label className="field"><span>Actual time (minutes)</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label><small>Zero means not rated and will not affect the average.</small></div> : <div className="deck-card-body"><small className="deck-nutrition">{recipe.nutrition}</small><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</div>}
+    <div className="deck-card-footer">{prepId ? <><button className="button secondary" onClick={finishFeedback}>Skip</button><button className="button primary" disabled={saving || !onFeedback} onClick={() => { if (!onFeedback) return; setSaving(true); void onFeedback(prepId, ease, taste, minutes).then(() => { finishFeedback(); notify('Preparation feedback saved.'); }).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not save feedback.')).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : 'Save feedback'}</button></> : <button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`, id && undo.undoPrep ? async () => { await undo.undoPrep!(id); } : undefined); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : 'Mark cooked'}</button>}</div>
+  </article>;
+}
+
+function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback, onProgressChange, undo }: RecipePanelProps) {
   const storageKey = `mise.recipe-progress.${recipe.id}`;
   const [checks, setChecks] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]); } catch { return new Set(); }
@@ -1426,7 +1509,7 @@ function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback, onP
   function toggle(key: string) { setChecks((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); }
   const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); };
   if (prepId) return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close feedback" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader title={`How was ${recipe.name}?`} subtitle="This feedback belongs to this preparation and updates the recipe's averages." onClose={onClose} /><div className="panel-body feedback-form"><RatingInput label="Ease" value={ease} onChange={setEase} /><RatingInput label="Taste" value={taste} onChange={setTaste} /><label className="field"><span>Actual time (minutes)</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label><small>Ratings default to 0, which means “not rated” and is excluded from the average.</small></div><div className="panel-footer"><button className="button secondary" onClick={() => { clearProgress(); onClose(); }}>Skip</button><button className="button primary" disabled={saving || !onFeedback} onClick={() => { if (!onFeedback) return; setSaving(true); void onFeedback(prepId, ease, taste, minutes).then(() => { clearProgress(); onClose(); notify('Preparation feedback saved.'); }).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not save feedback.')).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : 'Save feedback'}</button></div></aside></div>;
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader title={deck ? 'On deck' : `${recipe.emoji} ${recipe.name}`} subtitle={deck ? `${deck.recipes.length} recipe${deck.recipes.length === 1 ? '' : 's'} ready in this cooking workspace` : `${servingLabel(recipe.servings)} · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} />{deck && <div className="on-deck-tabs" role="tablist" aria-label="On deck recipes">{deck.recipes.map((candidate) => <button role="tab" aria-selected={candidate.id === recipe.id} key={candidate.id} onClick={() => deck.onSelect(candidate.id)}><span>{candidate.emoji}</span>{candidate.name}</button>)}</div>}<div className="panel-body">{deck && <div className="on-deck-recipe-heading"><div><span>{recipe.emoji}</span><div><h2>{recipe.name}</h2><p>{servingLabel(recipe.servings)} · {recipe.minutes} minutes</p></div></div><small>{recipe.nutrition}</small></div>}<div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`, id && undo.undoPrep ? async () => { await undo.undoPrep!(id); } : undefined); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader title={`${recipe.emoji} ${recipe.name}`} subtitle={`${servingLabel(recipe.servings)} · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`, id && undo.undoPrep ? async () => { await undo.undoPrep!(id); } : undefined); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
 }
 
 function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity, undo }: { food: InventoryFood; onClose: () => void; notify: Notify; onConsume?: (id: string, quantity: number) => Promise<string | null>; onSetQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {

@@ -1,6 +1,7 @@
 export type PageId =
   | 'today'
   | 'inventory'
+  | 'on-deck'
   | 'recipes'
   | 'products'
   | 'food-log'
@@ -40,6 +41,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'today', label: 'Today', group: 'Kitchen' },
   { id: 'inventory', label: 'Inventory', group: 'Kitchen', badge: '6' },
+  { id: 'on-deck', label: 'On deck', group: 'Kitchen' },
   { id: 'recipes', label: 'Recipes', group: 'Kitchen', badge: '2' },
   { id: 'products', label: 'Products', group: 'Kitchen', badge: '3' },
   { id: 'food-log', label: 'Food log', group: 'Eating' },
@@ -52,6 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
 export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitle: string; primary: string; secondary?: string }> = {
   today: { eyebrow: '', title: '', subtitle: 'See what needs attention and what is ready to eat.', primary: 'Add inventory', secondary: 'Look up barcode' },
   inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: 'Grouped by grocery department. Lots deduct earliest-expiry first.', primary: 'Add lot' },
+  'on-deck': { eyebrow: 'COOKING WORKSPACE', title: 'On deck', subtitle: 'Keep every active recipe visible and arrange the workspace around how you cook.', primary: 'Add recipe' },
   recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: 'What is ready to cook, and exactly what a run to the store would unlock.', primary: 'New recipe' },
   products: { eyebrow: 'KNOWN PRODUCTS', title: 'Products', subtitle: 'Search every known product, inspect nutrition, and compare alternatives for the same food.', primary: 'Add product' },
   'food-log': { eyebrow: 'TODAY · THU, AUG 27', title: 'Food log', subtitle: 'Calories and nutrients from recipes, pantry items, and food away from home.', primary: 'Log food', secondary: 'Look up barcode' },

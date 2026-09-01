@@ -106,22 +106,25 @@ describe('Pantry web UI', () => {
   });
 
   it('opens recipe detail and tracks cooking steps', async () => {
+    localStorage.clear();
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
 
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('INGREDIENTS')).toBeInTheDocument();
-    expect(within(dialog).getByText('METHOD')).toBeInTheDocument();
-    expect(within(dialog).getByText('0 of 8 complete')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'On deck' })).toBeInTheDocument();
+    const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
+    expect(within(workspace).getByText('INGREDIENTS')).toBeInTheDocument();
+    expect(within(workspace).getByText('METHOD')).toBeInTheDocument();
+    expect(within(workspace).getByText('0 of 8 complete')).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole('button', { name: /all-purpose flour/i }));
-    expect(within(dialog).getByText('1 of 8 complete')).toBeInTheDocument();
+    await user.click(within(workspace).getByRole('button', { name: /all-purpose flour/i }));
+    expect(within(workspace).getByText('1 of 8 complete')).toBeInTheDocument();
   });
 
-  it('switches between on-deck recipes without closing the cooking workspace', async () => {
+  it('shows multiple recipes in a configurable, reorderable on-deck workspace', async () => {
+    localStorage.clear();
     localStorage.setItem('mise.recipe-progress.pancakes', JSON.stringify(['i0']));
     localStorage.setItem('mise.recipe-progress.eggs', JSON.stringify(['i0']));
     const user = userEvent.setup();
@@ -130,16 +133,18 @@ describe('Pantry web UI', () => {
     const pinned = screen.getByRole('navigation', { name: 'Pinned cooking' });
     await user.click(within(pinned).getByRole('button', { name: /Simple Pancakes/ }));
 
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('heading', { name: 'On deck' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('tab', { name: /Simple Pancakes/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(dialog).getByText('1½ cups all-purpose flour')).toBeInTheDocument();
+    const pancakes = screen.getByRole('article', { name: 'Simple Pancakes' });
+    const eggs = screen.getByRole('article', { name: 'Soft Scrambled Eggs' });
+    expect(within(pancakes).getByText('1½ cups all-purpose flour')).toBeInTheDocument();
+    expect(within(eggs).getByText('⅛ tsp salt')).toBeInTheDocument();
+    expect(within(eggs).getByText('1 of 6 complete')).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole('tab', { name: /Soft Scrambled Eggs/ }));
-    const switchedDialog = screen.getByRole('dialog');
-    expect(within(switchedDialog).getByRole('tab', { name: /Soft Scrambled Eggs/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(switchedDialog).getByText('⅛ tsp salt')).toBeInTheDocument();
-    expect(within(switchedDialog).getByText('1 of 6 complete')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Four corners' }));
+    expect(screen.getByRole('button', { name: 'Four corners' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(within(pancakes).getByRole('button', { name: /Drag Simple Pancakes panel/ }), '{ArrowRight}');
+    const panelNames = [...document.querySelectorAll('.on-deck-card')].map((panel) => panel.getAttribute('aria-label'));
+    expect(panelNames).toEqual(['Soft Scrambled Eggs', 'Simple Pancakes']);
   });
 
   it('edits recipes and pins started cooking to the sidebar', async () => {
@@ -153,8 +158,8 @@ describe('Pantry web UI', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /all-purpose flour/i }));
-    await user.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' }).at(-1)!);
+    await user.click(within(screen.getByRole('article', { name: 'Simple Pancakes' })).getByRole('button', { name: /all-purpose flour/i }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Kitchen' })).getByRole('button', { name: 'Today' }));
     expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
   });
 
@@ -336,13 +341,14 @@ describe('Pantry web UI', () => {
   });
 
   it('does not offer undo on an action that cannot be reversed', async () => {
+    localStorage.clear();
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
-    const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: /all-purpose flour/i }));
+    const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
+    await user.click(within(workspace).getByRole('button', { name: /all-purpose flour/i }));
 
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   });
