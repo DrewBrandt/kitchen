@@ -117,6 +117,12 @@ describe('Pantry GPT operator pack', () => {
     expect(edgeFunction).toContain('always_available: Boolean(input.alwaysAvailable)');
   });
 
+  it('requires recipe-friendly volume measures for convertible staples', () => {
+    expect(instructions).toContain('Write weight-stocked staples in practical kitchen volume units');
+    expect(instructions).toContain('Do not save tiny gram quantities');
+    expect(instructions).toContain('supported conversion allows `1/2 tsp`');
+  });
+
   it.each([
     ['/v1/foods/{id}', 'editFoodDefinition'],
     ['/v1/products/{id}', 'editProductDefinition'],
