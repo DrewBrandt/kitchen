@@ -136,7 +136,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     client.from('meal_plans').select('*').order('plan_date'),
     client.from('food_logs').select('*').is('voided_at', null).order('occurred_at', { ascending: false }),
     client.from('personal_settings').select('*').single(),
-    client.from('inventory_events').select('*').not('food_log', 'is', null),
+    client.from('inventory_events').select('*').is('voided_at', null).or('food_log.not.is.null,reason.eq.waste'),
     client.from('inventory_event_costs').select('*'),
   ]);
 
@@ -349,6 +349,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const grocerySections = orderCategories([...groceryGroups.entries()]).map(([label, items]) => ({ emoji: categoryEmoji(label), label, items }));
 
   const settings = settingsResult.data;
+
   if (!settings) throw new Error('Personal settings are missing.');
   const logs = logsResult.data ?? [];
   const todayKey = dateKeyInZone(new Date(), settings.time_zone);
@@ -416,17 +417,63 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     nutrients: buildNutrients(dayLogs),
     foodLog: buildFoodLog(dayLogs),
   }]));
-  const history = [...byDay.entries()].slice(0, 14).map(([date, dayLogs]) => {
+  // History carries the numbers the page renders rather than pre-formatted strings,
+  // so the heat strip and stat strip derive from real rows instead of re-parsing text.
+  const history = [...byDay.entries()].slice(0, 90).map(([date, dayLogs]) => {
     const parsed = new Date(`${date}T12:00:00`);
+    const priced = dayLogs.every((log) => costForLog(log).cost !== null);
     return {
       dateKey: date,
       day: parsed.toLocaleDateString([], { weekday: 'long' }),
       date: parsed.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase(),
       meals: dayLogs.map((log) => log.label),
+      mealDetails: dayLogs.map((log) => ({
+        id: log.id,
+        label: log.label,
+        emoji: (log.product ? products.get(log.product)?.emoji : undefined) ?? (log.recipe ? recipeRows.find((row) => row.id === log.recipe)?.emoji : undefined) ?? '🍽️',
+        cost: costForLog(log).cost,
+        costIsEstimated: costForLog(log).estimated,
+      })),
       totals: `${Math.round(sum(dayLogs, 'kcal')).toLocaleString()} cal\n${Math.round(sum(dayLogs, 'protein_g'))} g protein`,
-      cost: dayLogs.every((log) => costForLog(log).cost !== null) ? dayLogs.reduce((total, log) => total + Number(costForLog(log).cost), 0) : null,
+      calories: sum(dayLogs, 'kcal'),
+      protein: sum(dayLogs, 'protein_g'),
+      cost: priced ? dayLogs.reduce((total, log) => total + Number(costForLog(log).cost), 0) : null,
+      mealsMissingCost: dayLogs.filter((log) => costForLog(log).cost === null).length,
     };
   });
+
+  // Waste is a real series now: discards write 'waste' events, and the event-cost
+  // view prices each one from the lot it came off. Nothing here is estimated into
+  // existence — an unpriced discard contributes 0 rather than a guess.
+  const wasteEvents = (eventsResult.data ?? []).filter((event) => event.reason === 'waste');
+  const spendByDay = new Map<string, number>();
+  for (const [date, dayLogs] of byDay) {
+    spendByDay.set(date, dayLogs.reduce((total, log) => total + (costForLog(log).cost ?? 0), 0));
+  }
+  const wasteByDay = new Map<string, number>();
+  for (const event of wasteEvents) {
+    const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
+    wasteByDay.set(key, (wasteByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
+  }
+  const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys()])].sort().map((dateKey) => ({
+    dateKey,
+    spend: spendByDay.get(dateKey) ?? 0,
+    waste: wasteByDay.get(dateKey) ?? 0,
+  }));
+
+  // Three causes, each decided by what the lot actually was, not by a label.
+  const wasteCauses = [
+    { label: 'Expired in the fridge', note: 'produce and dairy', amount: 0 },
+    { label: 'Prepared batches discarded', note: 'leftovers past date', amount: 0 },
+    { label: 'Opened and forgotten', note: 'partial packages', amount: 0 },
+  ];
+  for (const event of wasteEvents) {
+    const lot = lotsResult.data?.find((candidate) => candidate.id === event.lot);
+    const cost = eventCostById.get(event.id) ?? 0;
+    if (lot?.prep) wasteCauses[1].amount += cost;
+    else if (lot?.use_by && lot.use_by <= dateKeyInZone(new Date(event.occurred_at), settings.time_zone)) wasteCauses[0].amount += cost;
+    else wasteCauses[2].amount += cost;
+  }
 
   const proteinTrend = Array.from({ length: 30 }, (_, index) => {
     const date = new Date();
@@ -533,6 +580,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     },
     externalProducts,
     preparedLots,
+    spendHistory,
+    wasteCauses,
     proteinTrend,
     nutrientDrivers,
     nutritionHistory,

@@ -68,7 +68,9 @@ describe('Pantry web UI', () => {
     expect(screen.getAllByText('~$3.18').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
-    expect(screen.getByText(/~\$4\.72 batch · ~\$1\.18\/serving/)).toBeInTheDocument();
+    // Per-serving is derived from the batch, not stored: $4.72 over 4 servings.
+    expect(screen.getByText(/~\$4\.72 batch/)).toBeInTheDocument();
+    expect(screen.getByText('~$1.18/serving')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     expect(screen.getByText(/3 entries · ~\$13\.25/)).toBeInTheDocument();
@@ -155,7 +157,7 @@ describe('Pantry web UI', () => {
     const { container } = render(<App />);
 
     await user.click(screen.getByRole('button', { name: /This week/ }));
-    const days = [...container.querySelectorAll('.week-date strong')].map((day) => day.textContent);
+    const days = [...container.querySelectorAll('.week-row-date strong')].map((day) => day.textContent);
     expect(days).toEqual(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']);
   });
 
@@ -229,7 +231,7 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     const row = container.querySelectorAll('.log-row')[0] as HTMLElement;
-    await user.click(within(row).getByRole('button', { name: 'Remove' }));
+    await user.click(within(row).getByRole('button', { name: 'Remove Simple Pancakes' }));
 
     const toast = await screen.findByRole('status');
     expect(within(toast).getByText(/removed from the food log/)).toBeInTheDocument();
@@ -249,5 +251,39 @@ describe('Pantry web UI', () => {
     await user.click(within(dialog).getByRole('button', { name: /all-purpose flour/i }));
 
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+
+  it('derives the history stat strip and heat strip from real logged days', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'History' }));
+
+    // One cell per day in range, not one per logged day.
+    expect(container.querySelectorAll('.heat-strip i')).toHaveLength(30);
+    // Only the days that were actually logged are coloured.
+    const lit = [...container.querySelectorAll('.heat-strip i')].filter((cell) => !(cell as HTMLElement).style.background.includes('26, 32, 30'));
+    expect(lit.length).toBe(container.querySelectorAll('.history-row').length);
+
+    const strip = container.querySelector('.stat-strip')!;
+    expect(within(strip as HTMLElement).getByText('6 of 30')).toBeInTheDocument();
+    // 6 logged days averaging (1180+1640+1420+1830+1290+1710)/6 = 1,512
+    expect(within(strip as HTMLElement).getByText('1,512')).toBeInTheDocument();
+  });
+
+  it('switches Trends between nutrition and spend without making spend a macro', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Trends' })[0]);
+    expect(screen.queryByText('Lost to waste')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Spend$/ }));
+    expect(screen.getByText('Lost to waste')).toBeInTheDocument();
+    // The daily target line reads from the one weekly budget: 150 / 7.
+    expect(screen.getByText('$21.43 a day')).toBeInTheDocument();
+    // Spend is a view, not a seventh nutrient chip.
+    const tabs = screen.getAllByRole('button', { name: /^Spend$/ });
+    expect(tabs.every((tab) => tab.closest('.driver-tabs') === null)).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import {
   History as HistoryIcon,
   House,
   Info,
+  Pencil,
   ListChecks,
   NotebookTabs,
   PackageOpen,
@@ -36,7 +37,7 @@ import {
   type PanelKind,
   type Recipe,
 } from './data';
-import { usePantryData, type InventoryFood, type PantryData } from './pantry-data';
+import { usePantryData, type InventoryFood, type PantryData, type ProductView } from './pantry-data';
 import { dailyFoodBudget, perServingCost, usd } from './lib/cost';
 
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
@@ -266,7 +267,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         </header>
 
         <div className="page-content">
-          {page === 'today' && <TodayPage onNavigate={setPage} onOpen={open} notify={notify} onConsumePrepared={onConsumePrepared} undo={reversals} />}
+          {page === 'today' && <TodayPage onNavigate={setPage} onOpen={open} onOpenFood={openInventory} notify={notify} onConsumePrepared={onConsumePrepared} undo={reversals} />}
           {page === 'inventory' && (
             <InventoryPage
               filter={inventoryFilter}
@@ -280,7 +281,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
           {page === 'recipes' && <RecipesPage filter={recipeFilter} onFilter={setRecipeFilter} onOpen={open} />}
           {page === 'products' && <ProductsPage onOpen={open} notify={notify} onLog={onLogExternal} />}
           {page === 'food-log' && <FoodLogPage onOpen={open} notify={notify} onVoid={onVoidFoodLog} undo={reversals} />}
-          {page === 'history' && <HistoryPage onOpen={open} />}
+          {page === 'history' && <HistoryPage onOpen={open} onNavigate={setPage} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
           {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onSetMade={onSetPlannedMealsMade} />}
           {page === 'grocery' && (
@@ -370,20 +371,36 @@ function Progress({ value, color }: { value: number; color?: string }) {
   return <div className="progress"><span style={{ width: `${Math.min(value, 100)}%`, background: color }} /></div>;
 }
 
-function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared, undo }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onConsumePrepared?: (id: string) => Promise<string | null>; undo: Reversals }) {
-  const { inventorySections, nutrients, preparedLots, recipes, weekDays } = usePantryData();
+function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, undo }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void; notify: Notify; onConsumePrepared?: (id: string) => Promise<string | null>; undo: Reversals }) {
+  const { foodLog, inventorySections, nutrients, preparedLots, recipes, settings, weekDays } = usePantryData();
   const todayIndex = weekDays.findIndex((day) => day.today);
   const relevantDays = todayIndex >= 0 ? weekDays.slice(todayIndex) : weekDays;
   const nextMeal = relevantDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day }))).find(Boolean);
   const nextRecipe = recipes.find((recipe) => recipe.id === nextMeal?.recipeId || recipe.name === nextMeal?.name);
   const useSoon = inventorySections.flatMap((section) => section.foods).filter((food) => ['warn', 'urgent'].includes(food.tone)).slice(0, 2);
+  // Money at risk is only honest when every expiring lot has a price.
+  const atRisk = useSoon.every((food) => food.cost !== null && food.cost !== undefined) ? useSoon.reduce((total, food) => total + Number(food.cost), 0) : null;
+  const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
+  const spentToday = foodLog.reduce((total, entry) => total + (entry.cost ?? 0), 0);
+  const budgetPct = dailyBudget > 0 ? Math.min(100, spentToday / dailyBudget * 100) : 0;
   const popularRecipes = [...recipes].sort((left, right) => (right.prepCount ?? 0) - (left.prepCount ?? 0) || left.name.localeCompare(right.name)).slice(0, 4);
   return (
     <div className="stack">
       <div className="today-grid">
         <Card className="nutrition-card">
           <div className="card-kicker"><span>TODAY · NUTRITION</span><button onClick={() => onOpen('targets')}>Targets</button></div>
-          <div className="calorie-total"><strong>{nutrients[0]?.value ?? '0'}</strong><span>{nutrients[0]?.target ?? ''}</span><em>{Math.max(0, 100 - (nutrients[0]?.pct ?? 0))}% left</em></div>
+          <div className="headline-metrics">
+            <div className="headline-metric">
+              <div className="metric-total"><strong>{nutrients[0]?.value ?? '0'}</strong><span>{nutrients[0]?.target ?? ''}</span></div>
+              <Progress value={nutrients[0]?.pct ?? 0} />
+              <em>{Math.max(0, 100 - (nutrients[0]?.pct ?? 0))}% LEFT</em>
+            </div>
+            <div className="headline-metric spend-metric">
+              <div className="metric-total"><strong>{usd(spentToday)}</strong><span>/ {usd(dailyBudget)} a day</span></div>
+              <Progress value={budgetPct} color="var(--spend)" />
+              <em>{usd(Math.max(0, dailyBudget - spentToday))} LEFT</em>
+            </div>
+          </div>
           <div className="macro-list">{nutrients.slice(1, 6).map((row) => <MacroRow key={row.label} {...row} />)}</div>
         </Card>
         <Card className="next-card">
@@ -392,10 +409,10 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared, undo }: { on
           <div className="split-actions"><button className="button primary" disabled={!nextRecipe} onClick={() => nextRecipe && onOpen('cook', nextRecipe)}>Cook it</button><button className="button secondary" onClick={() => onOpen('meal', undefined, nextMeal?.day.dateKey ? { plan_date: nextMeal.day.dateKey, daypart: nextMeal.slot.toLowerCase() } : undefined)}>{nextMeal ? 'Plan another' : 'Plan meal'}</button></div>
         </Card>
         <Card>
-          <div className="card-kicker"><span>USE SOON</span><small>{useSoon.length}</small></div>
-          {useSoon.map((food) => <div className={cx('soon-row', food.tone)} key={food.name}><div><strong>{food.name}</strong><small>{food.total} · {food.lots[0]?.split(' ').at(-1)}</small></div><em>{food.due}</em></div>)}
+          <div className="card-kicker"><span>USE SOON</span><small className="spend">{atRisk === null ? `${useSoon.length}` : `${usd(atRisk)} at risk`}</small></div>
+          {useSoon.map((food) => <button className={cx('soon-row', food.tone)} key={food.name} onClick={() => onOpenFood(food)}><div><strong>{food.name}</strong><small>{food.total} · {food.lots[0]?.split(' ').at(-1)}</small></div><div className="soon-value"><em>{food.due}</em><small className="spend">{costLabel(food.cost, food.costIsEstimated)}</small></div></button>)}
           {!useSoon.length && <div className="soon-row"><div><strong>Nothing urgent</strong><small>No dated lots need attention.</small></div></div>}
-          <button className="text-button align-left" onClick={() => onNavigate('recipes')}>Cook something with these →</button>
+          <button className="text-button align-left" onClick={() => onNavigate('recipes')}>Cook these before they spoil →</button>
         </Card>
       </div>
 
@@ -468,22 +485,61 @@ function Rating({ label, value }: { label: string; value: number }) {
 
 function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe) => void }) {
   const { recipes } = usePantryData();
-  const visibleRecipes = filter === 'Cookable now' ? recipes.filter((recipe) => recipe.cookable) : recipes;
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'made' | 'added' | 'quickest' | 'cheapest' | 'stocked' | 'name'>('made');
+
+  const matches = (recipe: Recipe) => {
+    const haystack = `${recipe.name} ${recipe.ingredients.map((item) => item.label).join(' ')}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  };
+  const perServing = (recipe: Recipe) => perServingCost(recipe.estimatedCost, recipe.servings);
+  const usesExpiring = (recipe: Recipe) => recipe.ingredients.some((item) => /expires in|short/i.test(item.stock));
+
+  const FILTERS: Array<{ label: string; test: (recipe: Recipe) => boolean }> = [
+    { label: 'All recipes', test: () => true },
+    { label: 'Cookable now', test: (recipe) => Boolean(recipe.cookable) },
+    { label: 'Under 15 min', test: (recipe) => recipe.minutes < 15 },
+    { label: 'Under $2 a serving', test: (recipe) => { const value = perServing(recipe); return value !== null && value < 2; } },
+    { label: 'Uses expiring food', test: usesExpiring },
+    { label: 'Never made', test: (recipe) => !(recipe.prepCount ?? 0) },
+  ];
+  const active = FILTERS.find((option) => option.label === filter) ?? FILTERS[0];
+  const visibleRecipes = recipes.filter((recipe) => matches(recipe) && active.test(recipe)).sort((left, right) => {
+    if (sort === 'added') return left.name.localeCompare(right.name);
+    if (sort === 'quickest') return left.minutes - right.minutes;
+    if (sort === 'cheapest') return (perServing(left) ?? Infinity) - (perServing(right) ?? Infinity);
+    if (sort === 'stocked') return Number(right.cookable ?? false) - Number(left.cookable ?? false);
+    if (sort === 'name') return left.name.localeCompare(right.name);
+    return (right.prepCount ?? 0) - (left.prepCount ?? 0) || left.name.localeCompare(right.name);
+  });
+
   return (
     <div>
-      <div className="toolbar"><button className={cx('filter-chip', filter === 'All recipes' && 'active')} onClick={() => onFilter('All recipes')}>All recipes <small>{recipes.length}</small></button><button className={cx('filter-chip', filter === 'Cookable now' && 'active')} onClick={() => onFilter('Cookable now')}>Cookable now <small>{recipes.filter((recipe) => recipe.cookable).length}</small></button></div>
+      <div className="find-bar">
+        <label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search names, ingredients, or tags…" /></label>
+        <label className="find-sort">Sort<select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+          <option value="made">Most made</option>
+          <option value="added">Recently added</option>
+          <option value="quickest">Quickest first</option>
+          <option value="cheapest">Cheapest per serving</option>
+          <option value="stocked">Best stocked</option>
+          <option value="name">A–Z</option>
+        </select></label>
+        <small className="find-count">{visibleRecipes.length} of {recipes.length}</small>
+      </div>
+      <div className="toolbar">{FILTERS.map((option) => <button className={cx('filter-chip', filter === option.label && 'active')} key={option.label} onClick={() => onFilter(option.label)}>{option.label} <small>{recipes.filter((recipe) => matches(recipe) && option.test(recipe)).length}</small></button>)}</div>
       <div className="recipe-grid">
         {visibleRecipes.map((recipe) => (
           <Card className="recipe-card" key={recipe.id}>
             <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2></div><small>{recipe.minutes} min · {servingLabel(recipe.servings)} · {recipe.prepCount ?? 0} preparation{recipe.prepCount === 1 ? '' : 's'}</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
             <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label}</span>; })}</div>
-            <p className="recipe-nutrition">{recipe.nutrition} · {costLabel(recipe.costPerServing, recipe.costIsEstimated)}/serving</p>
+            <p className="recipe-nutrition">{recipe.nutrition} · <span className="spend">{costLabel(perServing(recipe), recipe.costIsEstimated)}/serving</span></p>
             <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-edit', recipe)}>Edit recipe</button></div>
           </Card>
         ))}
-        {!visibleRecipes.length && <Card className="empty-state"><CookingPot /><h2>Nothing is fully stocked</h2><p>Add the missing ingredients, then check again.</p></Card>}
+        {!visibleRecipes.length && <Card className="empty-state"><CookingPot /><h2>Nothing matches</h2><p>Try a different search or filter.</p></Card>}
       </div>
-      <div className="inline-heading"><h2>Meals</h2><p>Cook one recipe or prepare several recipes as one meal.</p><button className="button secondary" onClick={() => onOpen('combined-meal')}>Build a meal</button></div>
+      <div className="inline-heading"><h2>Meals</h2><p>Cook one recipe or prepare several recipes as one meal.</p></div>
       <Card className="combined-meal">
         <div className="combined-summary"><span>🍽️</span><div className="grow"><strong>Build a meal</strong><small>Select one or more recipes and cook them in one inventory transaction.</small></div><button className="button primary" onClick={() => onOpen('combined-meal')}>Choose recipes</button></div>
         <div className="combined-components">{recipes.map((recipe) => <button key={recipe.id} onClick={() => onOpen('recipe-detail', recipe)}><span>{recipe.emoji}</span><div><strong>{recipe.name}</strong><small>{recipe.minutes} min · {costLabel(recipe.estimatedCost, recipe.costIsEstimated)}</small></div><ChevronRight /></button>)}</div>
@@ -493,25 +549,33 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
 }
 
 function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, notify }: { checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void; onRemove?: (id: string) => Promise<void>; notify: Notify }) {
-  const { grocerySections, inventorySections } = usePantryData();
+  const { grocerySections, inventorySections, settings } = usePantryData();
+  const weekly = settings.weeklyFoodBudget;
   const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const total = grocerySections.flatMap((section) => section.items).length;
   const groceryCost = grocerySections.flatMap((section) => section.items).reduce((sum, item) => sum + Number(item.cost ?? 0), 0);
   const done = checked.size;
   const next = grocerySections.find((section) => section.items.some((item) => !checked.has(itemKey(item))));
+  const pickedUp = grocerySections.flatMap((section) => section.items).filter((item) => checked.has(itemKey(item))).reduce((sum, item) => sum + Number(item.cost ?? 0), 0);
   const alreadyInKitchen = inventorySections.flatMap((section) => section.foods).slice(0, 6);
   return (
     <div className={cx(shoppingMode && 'shopping-mode')}>
       <Card className="grocery-summary">
         <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /></div>
-        <div className="next-aisle"><span>{next ? `NEXT AISLE · ${costLabel(groceryCost, true)}` : `ALL DONE · ${costLabel(groceryCost, true)}`}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
+        <div className="budget-panel">
+          <strong className="spend">{usd(groceryCost)}</strong>
+          <span>of {usd(weekly)} weekly food budget</span>
+          <Progress value={weekly ? Math.min(100, groceryCost / weekly * 100) : 0} color="var(--spend)" />
+          <small>{usd(pickedUp)} picked up so far</small>
+        </div>
+        <div className="next-aisle"><span>{next ? 'NEXT AISLE' : 'ALL DONE'}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
       </Card>
       <div className="grocery-grid">
         {grocerySections.map((section) => (
           <Card className={cx('grocery-section', section.items.every((item) => checked.has(itemKey(item))) && 'complete')} key={section.label}>
             <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.items.filter((item) => !checked.has(itemKey(item))).length} left</small></div>
             {section.items.map((item) => (
-              <div className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} key={itemKey(item)}><button className="grocery-toggle" onClick={() => toggle(item)}><span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity} · {costLabel(item.cost, true)}</small></button>{item.id && <button className="grocery-remove" aria-label={`Remove ${item.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(item.id!).then(() => notify(`${item.name} removed from the grocery list.`)).catch(() => notify(`Could not remove ${item.name}.`)); }}><Trash2 /></button>}</div>
+              <div className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} key={itemKey(item)}><button className="grocery-toggle" onClick={() => toggle(item)}><span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity} · <span className="spend">{costLabel(item.cost, true)}</span></small></button>{item.id && <button className="grocery-remove" aria-label={`Remove ${item.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(item.id!).then(() => notify(`${item.name} removed from the grocery list.`)).catch(() => notify(`Could not remove ${item.name}.`)); }}><Trash2 /></button>}</div>
             ))}
           </Card>
         ))}
@@ -543,21 +607,66 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
   }, [plannedMeals, settings.timeZone, weekOffset]);
   const weekLabel = `${new Date(`${weekDays[0].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(`${weekDays[6].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
   const todayKey = calendarDateKey(new Date());
+  const weekly = settings.weeklyFoodBudget;
+  const weekMeals = weekDays.flatMap((day) => day.meals);
+  const committed = weekMeals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+  const unspent = Math.max(0, weekly - committed);
+  const committedPct = weekly > 0 ? Math.min(100, committed / weekly * 100) : 0;
+
   return (
-    <Card className="week-card"><div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
-      <div className="week-grid">{weekDays.map((day) => (
-        <div className={cx('week-day', day.today && 'today', day.dateKey < todayKey && 'past')} key={day.dateKey}>
-          <div className="week-date"><strong>{day.day}</strong><small>{day.date}</small></div>
-          <div className="week-meals">{[...day.meals.reduce((groups, meal) => { const key = meal.groupId ?? meal.id ?? meal.name; groups.set(key, [...(groups.get(key) ?? []), meal]); return groups; }, new Map<string, typeof day.meals>()).entries()].map(([groupId, meals]) => { const made = meals.every((meal) => meal.status === 'made'); const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []); return <div className={cx('planned-meal-group', made && 'made', meals[0].isLeftover && 'leftover')} key={groupId}><div className="planned-meal-head"><small>{meals[0].slot}{meals[0].isLeftover ? ' · LEFTOVERS' : ''}</small><span className={cx('plan-status', made ? 'made' : day.dateKey < todayKey ? 'missed' : 'planned')}>{made ? 'Made' : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span></div><div className="planned-components">{meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <button key={meal.id} disabled={!recipe} onClick={() => recipe && onOpen('recipe-detail', recipe)}><span>{meal.emoji}</span>{meal.name}</button>; })}</div><div className="plan-actions"><button disabled={!onSetMade || !ids.length} onClick={() => { if (onSetMade) void onSetMade(ids, !made).then(() => notify(made ? 'Meal marked as planned.' : 'Meal marked as made.')).catch(() => notify('Could not update the meal status.')); }}>{made ? 'Undo made' : 'Mark made'}</button><button aria-label={`Remove ${meals.map((meal) => meal.name).join(', ')}`} disabled={!onRemove || !ids.length} onClick={() => { if (onRemove) void onRemove(ids).then(() => notify('Meal removed from the plan.')).catch(() => notify('Could not remove the meal.')); }}><Trash2 /> Remove</button></div></div>; })}</div>
-          <button className="day-add" aria-label={`Add meal on ${day.day}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Plus /></button>
-        </div>
-      ))}</div>
+    <Card className="week-card">
+      <div className="week-header">
+        <div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
+        <p>{weekMeals.length} meal{weekMeals.length === 1 ? '' : 's'} planned · <span className="spend">{usd(unspent)}</span> of the week's budget still unspent</p>
+        <div className="week-budget-bar"><Progress value={committedPct} color="var(--spend)" /><small>{usd(committed)} of {usd(weekly)}</small></div>
+      </div>
+      <div className="week-list">{weekDays.map((day) => {
+        const dayCost = day.meals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+        const groups = [...day.meals.reduce((map, meal) => { const key = meal.groupId ?? meal.id ?? meal.name; map.set(key, [...(map.get(key) ?? []), meal]); return map; }, new Map<string, typeof day.meals>()).entries()];
+        return (
+          <div className={cx('week-row', day.today && 'today', day.dateKey < todayKey && 'past')} key={day.dateKey}>
+            <div className="week-row-date">
+              <strong>{day.day}</strong>
+              <small>{day.date}</small>
+              <em className="spend">{day.meals.length ? usd(dayCost) : '—'}</em>
+              <small>{day.meals.length} meal{day.meals.length === 1 ? '' : 's'}</small>
+            </div>
+            <div className="week-row-meals">
+              {groups.map(([groupId, meals]) => {
+                const made = meals.every((meal) => meal.status === 'made');
+                const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []);
+                const groupCost = meals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+                const recipe = recipes.find((candidate) => candidate.id === meals[0].recipeId);
+                return (
+                  <div className={cx('week-meal-card', made && 'made', meals[0].isLeftover && 'leftover')} key={groupId}>
+                    <span className="row-emoji">{meals[0].emoji}</span>
+                    <div className="grow">
+                      <strong>{meals.map((meal) => meal.name).join(' + ')}</strong>
+                      <small>{meals[0].slot.split(' · ')[0]}{meals[0].isLeftover ? ' · leftovers' : ''}</small>
+                    </div>
+                    <span className={cx('plan-status', made ? 'made' : day.dateKey < todayKey ? 'missed' : 'planned')}>{made ? 'Made' : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span>
+                    <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}</strong>
+                    <div className="week-meal-actions">
+                      {recipe && !made ? <button className="button compact" onClick={() => onOpen('cook', recipe)}><CookingPot />Start cooking</button> : null}
+                      <button className="button secondary compact" disabled={!onSetMade || !ids.length} onClick={() => { if (onSetMade) void onSetMade(ids, !made).then(() => notify(made ? 'Meal marked as planned.' : 'Meal marked as made.')).catch(() => notify('Could not update the meal status.')); }}>{made ? 'Undo made' : 'Log it'}</button>
+                      <button className="row-icon-button" aria-label={`Edit ${meals.map((meal) => meal.name).join(', ')}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Pencil /></button>
+                      <button className="row-icon-button" aria-label={`Remove ${meals.map((meal) => meal.name).join(', ')}`} disabled={!onRemove || !ids.length} onClick={() => { if (onRemove) void onRemove(ids).then(() => notify('Meal removed from the plan.')).catch(() => notify('Could not remove the meal.')); }}><Trash2 /></button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button className="week-add" onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Plus />Add a meal</button>
+            </div>
+          </div>
+        );
+      })}</div>
     </Card>
   );
 }
 
 function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKind) => void; notify: Notify; onVoid?: (id: string) => Promise<void>; undo: Reversals }) {
-  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients, todayProjection } = usePantryData();
+  const { foodLog: todayFoodLog, foodLogByDate, nutrients: todayNutrients, settings, todayProjection } = usePantryData();
+  const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
   const [selectedDate, setSelectedDate] = useState(() => {
     const date = new Date();
     date.setHours(12, 0, 0, 0);
@@ -594,39 +703,132 @@ function FoodLogPage({ onOpen, notify, onVoid, undo }: { onOpen: (kind: PanelKin
           const scale = Math.max(target / 0.82, total + projection, 1);
           return <div className="contribution-row" key={nutrient.label}><strong>{nutrient.label}</strong><div className="segment-bar">{foodLog.map((entry, index) => <i key={entry.id ?? `${entry.label}-${index}`} style={{ width: `${Number(entry.nutrition?.[label] ?? 0) / scale * 100}%`, background: entry.color }} />)}{projection > 0 && <i className="projection-segment" style={{ width: `${projection / scale * 100}%` }} />}<b style={{ left: `${target / scale * 100}%` }} /></div><span>{nutrient.value} {nutrient.target}</span></div>;
         })}
+        {(() => {
+          // Cost reads exactly like a nutrient: same segments, same target marker,
+          // with the line at the day's share of the one weekly budget.
+          const spent = foodLog.reduce((sum, entry) => sum + (entry.cost ?? 0), 0);
+          const scale = Math.max(dailyBudget / 0.82, spent, 0.01);
+          return <div className="contribution-row" key="Cost"><strong>Cost</strong><div className="segment-bar">{foodLog.map((entry, index) => <i key={entry.id ?? `${entry.label}-${index}`} style={{ width: `${(entry.cost ?? 0) / scale * 100}%`, background: entry.color }} />)}<b style={{ left: `${dailyBudget / scale * 100}%` }} /></div><span>{usd(spent)} / {usd(dailyBudget)}</span></div>;
+        })()}
       </Card>
       <Card>
         <SectionTitle title="Meals and snacks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'} · ${costLabel(foodLog.every((entry) => entry.cost !== null && entry.cost !== undefined) ? foodLog.reduce((sum, entry) => sum + Number(entry.cost), 0) : null, foodLog.some((entry) => entry.costIsEstimated))}`} />
-        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small>{entry.id && onVoid && <button onClick={() => { const entryId = entry.id!; void onVoid(entryId).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(entryId); } : undefined)).catch(() => notify(`Could not remove ${entry.label}.`)); }}>Remove</button>}</div>)}
+        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small><div className="log-row-actions"><button className="row-icon-button" aria-label={`Edit ${entry.label}`} onClick={() => onOpen('log')}><Pencil /></button>{entry.id && onVoid && <button className="row-icon-button" aria-label={`Remove ${entry.label}`} onClick={() => { const entryId = entry.id!; void onVoid(entryId).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(entryId); } : undefined)).catch(() => notify(`Could not remove ${entry.label}.`)); }}><Trash2 /></button>}</div></div>)}
       </Card>
     </div>
   );
 }
 
-function HistoryPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
-  const { history } = usePantryData();
-  const repeated = [...history.reduce((counts, day) => {
-    for (const meal of day.meals) counts.set(meal, (counts.get(meal) ?? 0) + 1);
+function HistoryPage({ onOpen, onNavigate }: { onOpen: (kind: PanelKind) => void; onNavigate: (page: PageId) => void }) {
+  const { history, settings } = usePantryData();
+  const [range, setRange] = useState(30);
+
+  const cutoff = new Date();
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (range - 1));
+  const cutoffKey = cutoff.toLocaleDateString('en-CA');
+  const days = history.filter((day) => !day.dateKey || day.dateKey >= cutoffKey);
+
+  const proteinTarget = settings.proteinG || 1;
+  const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
+  const logged = days.length;
+  const avgCalories = logged ? days.reduce((total, day) => total + (day.calories ?? 0), 0) / logged : 0;
+  const avgProtein = logged ? days.reduce((total, day) => total + (day.protein ?? 0), 0) / logged : 0;
+  const pricedDays = days.filter((day) => day.cost !== null && day.cost !== undefined);
+  const totalSpend = pricedDays.reduce((total, day) => total + Number(day.cost), 0);
+  const targetHits = days.filter((day) => (day.protein ?? 0) >= proteinTarget).length;
+
+  // The strip is the real calendar: one cell per day in range, coloured only where
+  // a day was actually logged. Nothing here is synthesized to fill a gap.
+  const byKey = new Map(days.flatMap((day) => day.dateKey ? [[day.dateKey, day] as const] : []));
+  const cells = Array.from({ length: range }, (_, index) => {
+    const date = new Date(cutoff);
+    date.setDate(date.getDate() + index);
+    const key = date.toLocaleDateString('en-CA');
+    const day = byKey.get(key);
+    const share = day ? (day.protein ?? 0) / proteinTarget : null;
+    return { key, label: date.toLocaleDateString([], { month: 'short', day: 'numeric' }), day, share };
+  });
+  const heatColor = (share: number | null) => {
+    if (share === null) return '#1a201e';
+    if (share >= 0.9) return '#5fe0a0';
+    if (share >= 0.7) return '#3f9e72';
+    if (share >= 0.5) return '#2f5c44';
+    return '#26483a';
+  };
+
+  const repeated = [...days.reduce((counts, day) => {
+    for (const meal of day.mealDetails ?? day.meals.map((label) => ({ label, cost: null as number | null, costIsEstimated: true, emoji: '🍽️' }))) {
+      const current = counts.get(meal.label) ?? { count: 0, spend: 0, priced: true, emoji: meal.emoji };
+      counts.set(meal.label, { count: current.count + 1, spend: current.spend + (meal.cost ?? 0), priced: current.priced && meal.cost !== null, emoji: current.emoji });
+    }
     return counts;
-  }, new Map<string, number>()).entries()].sort((left, right) => right[1] - left[1]).slice(0, 5);
+  }, new Map<string, { count: number; spend: number; priced: boolean; emoji: string }>()).entries()]
+    .sort((left, right) => right[1].count - left[1].count).slice(0, 5);
+
+  // Longest run of consecutive logged days inside the range.
+  let streak = 0;
+  let run = 0;
+  for (const cell of cells) { run = cell.day ? run + 1 : 0; streak = Math.max(streak, run); }
+  const missingCost = days.reduce((total, day) => total + (day.mealsMissingCost ?? 0), 0);
+
   return (
-    <div className="history-layout">
-      <Card className="grow">
-        <SectionTitle title="Day by day" />
-        {history.map((day) => <div className="history-day" key={day.date}><div><strong>{day.day}</strong><small>{day.date}</small></div><div>{day.meals.map((meal, index) => <span key={`${meal}-${index}`}>{meal}</span>)}</div><small>{day.totals}\n{costLabel(day.cost, true)}</small></div>)}
+    <div className="stack">
+      <div className="range-bar">
+        <div className="range-chips">{[7, 30, 90].map((option) => <button key={option} className={cx('filter-chip', range === option && 'active')} onClick={() => setRange(option)}>{option} days</button>)}</div>
+        <button className="button secondary" onClick={() => onOpen('export')}><Download />Export</button>
+      </div>
+
+      <Card>
+        <div className="stat-strip">
+          <div><span>Days logged</span><strong>{logged} of {range}</strong></div>
+          <div><span>Avg calories</span><strong>{Math.round(avgCalories).toLocaleString()}</strong></div>
+          <div><span>Avg protein</span><strong>{Math.round(avgProtein)} g</strong></div>
+          <div><span>Spend</span><strong className="spend">{usd(totalSpend)}</strong><small>{usd(logged ? totalSpend / logged : 0)} a logged day</small></div>
+          <div><span>Protein target hit</span><strong>{targetHits} of {logged}</strong></div>
+        </div>
+        <div className="heat-strip">{cells.map((cell) => <i key={cell.key} style={{ background: heatColor(cell.share) }} title={cell.day ? `${cell.label} · ${Math.round(cell.day.protein ?? 0)} g protein · ${usd(cell.day.cost)}` : `${cell.label} · not logged`} />)}</div>
       </Card>
-      <Card className="repeats-card">
-        <SectionTitle title="Most repeated" subtitle="Context for planning more variety." />
-        {repeated.map(([label, count]) => <div className="repeat-row" key={label}><strong>{count}×</strong><div><span>{label}</span><small>In this displayed range</small></div></div>)}
-        {!repeated.length && <div className="empty-inline">No meals logged in this range.</div>}
-        <button className="button secondary full" onClick={() => onOpen('export')}><Download />Export this range</button>
+
+      <Card>
+        <SectionTitle title="Day by day" action={`${logged} logged day${logged === 1 ? '' : 's'}`} />
+        {days.map((day) => (
+          <div className="history-row" key={day.dateKey ?? day.date}>
+            <div className="history-when"><strong>{day.day}</strong><small>{day.date}</small></div>
+            <div className="history-meals">{(day.mealDetails ?? day.meals.map((label) => ({ label, emoji: '🍽️', cost: null as number | null, costIsEstimated: true }))).map((meal, index) => (
+              <button className="meal-chip" key={`${meal.label}-${index}`} onClick={() => onNavigate('food-log')}><span>{meal.emoji}</span>{meal.label}<em className="spend">{costLabel(meal.cost, meal.costIsEstimated)}</em></button>
+            ))}</div>
+            <span className="history-figure">{Math.round(day.calories ?? 0).toLocaleString()} cal</span>
+            <span className="history-figure">{Math.round(day.protein ?? 0)} g</span>
+            <span className="history-figure spend">{costLabel(day.cost, true)}</span>
+            <div className="history-actions"><button className="button secondary compact" onClick={() => onOpen('meal')}>Plan again</button><button className="row-icon-button" aria-label={`Open ${day.day}`} onClick={() => onNavigate('food-log')}><ChevronRight /></button></div>
+          </div>
+        ))}
+        {!days.length && <div className="empty-inline">Nothing logged in the last {range} days.</div>}
       </Card>
+
+      <div className="history-layout">
+        <Card className="grow">
+          <SectionTitle title="Most repeated" />
+          {repeated.map(([label, meal]) => <div className="repeat-row" key={label}><strong>{meal.count}×</strong><div><span>{meal.emoji} {label}</span><small className="spend">{meal.priced ? `${usd(meal.spend)} across the range` : 'Price unavailable'}</small></div><button className="button secondary compact" onClick={() => onOpen('meal')}>Plan</button></div>)}
+          {!repeated.length && <div className="empty-inline">No meals logged in this range.</div>}
+        </Card>
+        <Card className="repeats-card">
+          <SectionTitle title="Gaps and misses" />
+          <div className="gap-row"><span>Unlogged days</span><strong>{range - logged}</strong></div>
+          <div className="gap-row"><span>Meals missing a cost</span><strong>{missingCost}</strong></div>
+          <div className="gap-row"><span>Longest streak</span><strong>{streak} day{streak === 1 ? '' : 's'}</strong></div>
+          <div className="gap-row"><span>Protein target missed</span><strong>{logged - targetHits} of {logged}</strong></div>
+          <div className="gap-row"><span>Days over budget</span><strong>{pricedDays.filter((day) => Number(day.cost) > dailyBudget).length}</strong></div>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
-  const { nutritionHistory, settings } = usePantryData();
+  const { nutritionHistory, settings, spendHistory, wasteCauses } = usePantryData();
+  const [view, setView] = useState<'nutrition' | 'spend'>('nutrition');
   const nutrientLabels = ['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const;
   type TrendNutrient = typeof nutrientLabels[number];
   const [nutrient, setNutrient] = useState<TrendNutrient>('Protein');
@@ -656,20 +858,119 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
   const driverGrandTotal = [...driverTotals.values()].reduce((total, value) => total + value, 0);
   const drivers = [...driverTotals.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5).map(([label, value]) => ({ label, pct: driverGrandTotal ? Math.round(value / driverGrandTotal * 100) : 0 }));
   const driverMax = Math.max(...drivers.map((driver) => driver.pct), 1);
+
+  // Spend is a top-level view, not a seventh macro.
+  const weekly = settings.weeklyFoodBudget;
+  const dailyBudget = dailyFoodBudget(weekly);
+  const spendDays = Array.from({ length: range }, (_, index) => {
+    const date = new Date(cutoff);
+    date.setDate(cutoff.getDate() + index);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const row = spendHistory.find((entry) => entry.dateKey === key);
+    return { label: String(date.getDate()), spend: row?.spend ?? 0, waste: row?.waste ?? 0 };
+  });
+  const spendTotal = spendDays.reduce((total, day) => total + day.spend, 0);
+  const lastSeven = spendDays.slice(-7).reduce((total, day) => total + day.spend, 0);
+  const caloriesTotal = recent.reduce((total, day) => total + day.values.Calories, 0);
+  const per1000Cal = caloriesTotal > 0 ? spendTotal / caloriesTotal * 1000 : null;
+  const spendMaximum = Math.max(dailyBudget, ...spendDays.map((day) => day.spend + day.waste), 0.01) * 1.1;
+
+  const wasteTotal = spendDays.reduce((total, day) => total + day.waste, 0);
+  const wasteDays = spendDays.filter((day) => day.waste > 0).length;
+  const worstDay = spendDays.reduce((worst, day) => day.waste > worst.waste ? day : worst, { label: '—', waste: 0, spend: 0 });
+  const wasteShare = spendTotal > 0 ? wasteTotal / spendTotal * 100 : 0;
+  const causeMax = Math.max(...wasteCauses.map((cause) => cause.amount), 0.01);
   return (
     <div className="stack">
-      <Card className="trend-card">
-        <SectionTitle title={`${nutrient}, day by day`} subtitle={`Daily average ${Math.round(average).toLocaleString()} ${spec[nutrient].unit} · target ${target.toLocaleString()} ${spec[nutrient].unit} · ${daysOnTarget} of ${range} days ${nutrient === 'Sodium' ? 'within limit' : 'on target'}`} action="Edit targets" onAction={() => onOpen('targets')} />
-        <div className="trend-controls"><div className="driver-tabs">{nutrientLabels.map((label) => <button className={nutrient === label ? 'active' : ''} key={label} onClick={() => setNutrient(label)}>{label}</button>)}</div><label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label></div>
-        <div className="bar-chart"><div className="target-line" style={{ bottom: `${target / chartMaximum * 100}%` }}><span>{target.toLocaleString()} {spec[nutrient].unit} target</span></div>{days.map((day, index) => <div className="chart-column" key={index}><i style={{ height: `${day.value / chartMaximum * 100}%`, background: spec[nutrient].color }} /><small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small></div>)}</div>
-      </Card>
+      <div className="segmented">
+        <button className={cx(view === 'nutrition' && 'active')} onClick={() => setView('nutrition')}>Nutrition</button>
+        <button className={cx(view === 'spend' && 'active')} onClick={() => setView('spend')}>Spend</button>
+      </div>
+
+      {view === 'nutrition' ? (
+        <Card className="trend-card">
+          <SectionTitle title={`${nutrient}, day by day`} subtitle={`Daily average ${Math.round(average).toLocaleString()} ${spec[nutrient].unit} · target ${target.toLocaleString()} ${spec[nutrient].unit} · ${daysOnTarget} of ${range} days ${nutrient === 'Sodium' ? 'within limit' : 'on target'}`} action="Edit targets" onAction={() => onOpen('targets')} />
+          <div className="trend-controls"><div className="driver-tabs">{nutrientLabels.map((label) => <button className={nutrient === label ? 'active' : ''} key={label} onClick={() => setNutrient(label)}>{label}</button>)}</div><label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label></div>
+          <div className="bar-chart"><div className="target-line" style={{ bottom: `${target / chartMaximum * 100}%` }}><span>{target.toLocaleString()} {spec[nutrient].unit} target</span></div>{days.map((day, index) => <div className="chart-column" key={index}><i style={{ height: `${day.value / chartMaximum * 100}%`, background: spec[nutrient].color }} /><small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small></div>)}</div>
+        </Card>
+      ) : (
+        <Card className="trend-card">
+          <SectionTitle title="Spend, day by day" action="Edit budget" onAction={() => onOpen('targets')} />
+          <div className="spend-figures">
+            <div><span>Last 7 days</span><strong className="spend">{usd(lastSeven)}</strong></div>
+            <div><span>Weekly budget</span><strong>{usd(weekly)}</strong></div>
+            <div><span>{range}-day total</span><strong className="spend">{usd(spendTotal)}</strong></div>
+            <div><span>Per 1,000 cal</span><strong>{per1000Cal === null ? '—' : usd(per1000Cal)}</strong></div>
+          </div>
+          <div className="trend-controls">
+            <div className="chart-legend"><span><i style={{ background: 'var(--spend)' }} />Eaten</span><span><i style={{ background: 'var(--urgent)' }} />Wasted</span></div>
+            <label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>
+          </div>
+          <div className="bar-chart">
+            <div className="target-line" style={{ bottom: `${dailyBudget / spendMaximum * 100}%` }}><span>{usd(dailyBudget)} a day</span></div>
+            {spendDays.map((day, index) => (
+              <div className="chart-column" key={index}>
+                {day.waste > 0 && <i className="waste-cap" style={{ height: `${day.waste / spendMaximum * 100}%` }} />}
+                <i style={{ height: `${day.spend / spendMaximum * 100}%`, background: 'var(--spend)' }} />
+                <small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {view === 'spend' && (
+        <Card>
+          <SectionTitle title="Lost to waste" action={`${wasteShare.toFixed(1)}% of ${range}-day spend`} />
+          <div className="stat-strip four">
+            <div><span>{range} days</span><strong className="waste">{usd(wasteTotal)}</strong></div>
+            <div><span>Per week</span><strong className="waste">{usd(wasteTotal / (range / 7))}</strong></div>
+            <div><span>Days with waste</span><strong>{wasteDays} of {range}</strong></div>
+            <div><span>Worst day</span><strong className="waste">{usd(worstDay.waste)}</strong><small>day {worstDay.label}</small></div>
+          </div>
+          <div className="waste-causes">
+            {wasteCauses.map((cause) => (
+              <div className="driver" key={cause.label}>
+                <div><span>{cause.label}<small className="cause-note"> · {cause.note}</small></span><small className="waste">{usd(cause.amount)}</small></div>
+                <Progress value={cause.amount / causeMax * 100} color="var(--urgent)" />
+              </div>
+            ))}
+          </div>
+          {wasteTotal === 0 && <div className="empty-inline">Nothing discarded in the last {range} days.</div>}
+        </Card>
+      )}
+
       <div className="two-column">
-        <Card><SectionTitle title="Daily average vs target" subtitle={`Average per calendar day over ${range} days.`} />{averages.map((row) => <MacroRow key={row.label} label={row.label} value={`${Math.round(row.value).toLocaleString()} ${row.unit}`} target={`/ ${row.target.toLocaleString()} ${row.unit}`} pct={row.target ? row.value / row.target * 100 : 0} color={row.color} />)}</Card>
+        <Card>
+          <SectionTitle title={view === 'spend' ? 'Averages' : 'Daily average vs target'} subtitle={view === 'spend' ? undefined : `Average per calendar day over ${range} days.`} />
+          {view === 'spend' ? (
+            <>
+              <div className="gap-row"><span>Per day</span><strong className="spend">{usd(spendTotal / range)}</strong></div>
+              <div className="gap-row"><span>Per week</span><strong className="spend">{usd(spendTotal / (range / 7))}</strong></div>
+              <div className="gap-row"><span>Groceries</span><strong className="spend">{usd(Math.max(0, spendTotal - wasteTotal))}</strong></div>
+              <div className="gap-row"><span>Food away from home</span><strong className="spend">{usd(0)}</strong></div>
+              <div className="gap-row"><span>Wasted</span><strong className="waste">{usd(wasteTotal)}</strong></div>
+            </>
+          ) : averages.map((row) => <MacroRow key={row.label} label={row.label} value={`${Math.round(row.value).toLocaleString()} ${row.unit}`} target={`/ ${row.target.toLocaleString()} ${row.unit}`} pct={row.target ? row.value / row.target * 100 : 0} color={row.color} />)}
+        </Card>
         <Card><SectionTitle title="What drives each nutrient" subtitle={`Share of logged nutrition over ${range} days; bars are relative to the top contributor.`} /><div className="driver-tabs">{nutrientLabels.map((label) => <button className={driverNutrient === label ? 'active' : ''} key={label} onClick={() => setDriverNutrient(label)}>{label}</button>)}</div>{drivers.map(({ label, pct }) => <div className="driver" key={label}><div><span>{label}</span><small>{pct}%</small></div><Progress value={pct / driverMax * 100} /></div>)}{!drivers.length && <div className="empty-inline">No {driverNutrient.toLowerCase()} has been logged in this period.</div>}</Card>
       </div>
     </div>
   );
 }
+
+const COMPARE_ROWS: Array<{ label: string; higherIsBetter: boolean; read: (product: ProductView) => number | null; format: (value: number | null) => string }> = [
+  { label: 'Est. cost', higherIsBetter: false, read: (product) => product.estimatedCost, format: (value) => value === null ? '—' : `$${value.toFixed(2)}` },
+  { label: 'Calories', higherIsBetter: false, read: (product) => product.nutrition.Calories, format: (value) => value === null ? '—' : `${Math.round(value).toLocaleString()} cal` },
+  { label: 'Protein', higherIsBetter: true, read: (product) => product.nutrition.Protein, format: (value) => value === null ? '—' : `${Math.round(value)} g` },
+  { label: 'Carbs', higherIsBetter: false, read: (product) => product.nutrition.Carbs, format: (value) => value === null ? '—' : `${Math.round(value)} g` },
+  { label: 'Fat', higherIsBetter: false, read: (product) => product.nutrition.Fat, format: (value) => value === null ? '—' : `${Math.round(value)} g` },
+  { label: 'Fiber', higherIsBetter: true, read: (product) => product.nutrition.Fiber, format: (value) => value === null ? '—' : `${Math.round(value)} g` },
+  { label: 'Sodium', higherIsBetter: false, read: (product) => product.nutrition.Sodium, format: (value) => value === null ? '—' : `${Math.round(value).toLocaleString()} mg` },
+];
+
+const costPer100Cal = (cost: number | null, calories: number) =>
+  cost === null || !calories ? '—' : `$${(cost / calories * 100).toFixed(2)}`;
 
 function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: Notify; onLog?: (id: string) => Promise<void> }) {
   const { products } = usePantryData();
@@ -683,15 +984,12 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
     `${product.label} ${product.foodName} ${product.barcode} ${product.estimatedCost ?? ''}`.toLowerCase().includes(query.toLowerCase())
     && (brandFilter === 'All brands' || (product.brand || 'Unbranded') === brandFilter)
   );
-  const brandGroups = [...visible.reduce((groups, product) => {
-    const brand = product.brand || 'Unbranded';
-    groups.set(brand, [...(groups.get(brand) ?? []), product]);
-    return groups;
-  }, new Map<string, typeof products>()).entries()].sort((left, right) =>
+  const sorted = [...visible].sort((left, right) =>
     sort === 'name'
-      ? left[0].localeCompare(right[0])
-      : Math.max(...right[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0))
-        - Math.max(...left[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0))
+      ? (left.brand || 'Unbranded').localeCompare(right.brand || 'Unbranded') || left.name.localeCompare(right.name)
+      : sort === 'used'
+        ? right.useCount - left.useCount
+        : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)
   );
   const compared = comparison.map((id) => products.find((product) => product.id === id)).filter(Boolean) as typeof products;
 
@@ -719,44 +1017,64 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
       </div>
       {compared.length > 0 && (
         <Card className="comparison-card">
-          <SectionTitle title={`Compare ${compared[0].foodName}`} subtitle="Prices are package estimates; nutrition uses each product's stored basis." action="Clear" onAction={() => setComparison([])} />
+          <SectionTitle title={`Compare ${compared[0].foodName}`} action="Clear" onAction={() => setComparison([])} />
           <div className="comparison-grid">
             <span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>
-            <span>Est. cost</span>{compared.map((product) => <em key={`cost-${product.id}`}>{product.estimatedCost === null ? '—' : `$${product.estimatedCost.toFixed(2)}`}</em>)}{compared.length === 1 && <em>—</em>}
-            {(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [
-              <span key={`${label}-label`}>{label}</span>,
-              ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>),
-              ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : []),
-            ])}
+            {COMPARE_ROWS.map((row) => {
+              const values = compared.map((product) => row.read(product));
+              // "Better" is row-specific: cheaper, more protein, less sodium.
+              const best = values.length === 2 && values[0] !== null && values[1] !== null && values[0] !== values[1]
+                ? (row.higherIsBetter ? (Number(values[0]) > Number(values[1]) ? 0 : 1) : (Number(values[0]) < Number(values[1]) ? 0 : 1))
+                : -1;
+              return [
+                <span key={`${row.label}-label`}>{row.label}</span>,
+                ...compared.map((product, index) => <em className={cx(index === best && 'better')} key={`${row.label}-${product.id}`}>{row.format(values[index])}</em>),
+                ...(compared.length === 1 ? [<em key={`${row.label}-empty`}>—</em>] : []),
+              ];
+            })}
           </div>
         </Card>
       )}
-      {brandGroups.map(([brand, items]) => (
-        <Card className="brand-group" key={brand}>
-          <SectionTitle title={brand} action={`${items.length} product${items.length === 1 ? '' : 's'}`} />
-          <div className="product-grid">
-            {[...items].sort((left, right) => sort === 'name' ? left.name.localeCompare(right.name) : sort === 'used' ? right.useCount - left.useCount : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)).map((product) => (
-              <div className="product-card" key={product.id}>
-                <div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName} · used {product.useCount}×</small><strong>{product.name}</strong><em>{product.barcode || 'No barcode'}</em></div></div>
-                <div className="product-macros"><span>{product.estimatedCost === null ? 'No cost estimate' : `Est. $${product.estimatedCost.toFixed(2)}`}</span><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div>
-                <div className="card-actions">
-                  <button className="button secondary" onClick={() => setViewing(product)}>View</button>
-                  <button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>
-                  {product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}
-                </div>
-              </div>
-            ))}
+      <Card>
+        <SectionTitle title="Products" action={`${visible.length} product${visible.length === 1 ? '' : 's'}`} />
+        <div className="product-table">
+          <div className="product-table-head">
+            <span className="product-cell-name">Product</span>
+            <span>Cost</span><span>Cal</span><span>Protein</span><span>Sodium</span><span>Used</span>
+            <span className="product-cell-actions" />
           </div>
-        </Card>
-      ))}
-      {!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2><p>Try another name, brand, food, barcode, or cost.</p></Card>}
+          {sorted.map((product) => (
+            <div className={cx('product-row', comparison.includes(product.id) && 'comparing')} key={product.id}>
+              <div className="product-cell-name">
+                <span className="row-emoji">{product.emoji}</span>
+                <div className="grow"><strong>{product.name}</strong><small>{[product.brand || 'Unbranded', product.foodName, product.barcode || 'no barcode'].join(' · ')}</small></div>
+              </div>
+              <span className="spend">{product.estimatedCost === null ? '—' : `$${product.estimatedCost.toFixed(2)}`}</span>
+              <span>{Math.round(product.nutrition.Calories).toLocaleString()}</span>
+              <span>{Math.round(product.nutrition.Protein)} g</span>
+              <span>{Math.round(product.nutrition.Sodium).toLocaleString()}</span>
+              <span>{product.useCount}×</span>
+              <div className="product-cell-actions">
+                <button className={cx('button secondary compact', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>
+                <button className="button secondary compact" onClick={() => setViewing(product)}>Open</button>
+                {product.isExternal && <button className="button compact" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}
+              </div>
+            </div>
+          ))}
+          {!sorted.length && <div className="empty-inline">No products match that search.</div>}
+        </div>
+      </Card>
       {viewing && (
         <div className="panel-layer">
           <button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} />
           <aside className="action-panel product-detail" role="dialog" aria-modal="true">
             <PanelHeader title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} />
             <div className="panel-body">
-              <div className="product-cost-detail"><span>Estimated package cost</span><strong>{viewing.estimatedCost === null ? 'Not estimated' : `$${viewing.estimatedCost.toFixed(2)}`}</strong>{viewing.costSource && <small>{viewing.costSource}{viewing.costAsOf ? ` · as of ${new Date(`${viewing.costAsOf}T00:00:00`).toLocaleDateString()}` : ''}</small>}</div>
+              <div className="product-headline-stats">
+                <div><span>Estimated cost</span><strong className="spend">{viewing.estimatedCost === null ? 'Not estimated' : `$${viewing.estimatedCost.toFixed(2)}`}</strong>{viewing.costSource && <small>{viewing.costSource}{viewing.costAsOf ? ` · as of ${new Date(`${viewing.costAsOf}T00:00:00`).toLocaleDateString()}` : ''}</small>}</div>
+                <div><span>Times used</span><strong>{viewing.useCount}×</strong>{viewing.lastUsedAt && <small>last {new Date(viewing.lastUsedAt).toLocaleDateString()}</small>}</div>
+                <div><span>Cost per 100 cal</span><strong className="spend">{costPer100Cal(viewing.estimatedCost, viewing.nutrition.Calories)}</strong><small>what the energy costs</small></div>
+              </div>
               <div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div>
             </div>
           </aside>
