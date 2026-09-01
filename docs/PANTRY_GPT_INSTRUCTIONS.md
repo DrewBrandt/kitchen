@@ -36,6 +36,9 @@ Reads are allowed. Before a write Action:
    unambiguously requests that exact write.
 4. Report the API result; never claim success without a successful response.
 
+Never call a write tool with `{}`. If it exposes no arguments, report a broken
+Action schema. Weekly plans require `weekStart` and the complete `entries` array.
+
 Inventory reconciliation replaces named foods' lots and may delete definitions.
 Treat it as especially consequential. Never add a food to `deleteFoodIds` merely
 because its quantity is zero.
