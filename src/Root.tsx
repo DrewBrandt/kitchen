@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, savePrepFeedback, setInventoryLotQuantity, setPlannedMealsMade, setShoppingItemChecked, voidFoodLog } from './lib/pantry-repository';
+import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, logExternalProduct, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
@@ -105,13 +105,16 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onCookRecipe={async (id) => { const prepId = await cookRecipe(supabase, id); await refresh(); return prepId; }}
         onSavePrepFeedback={async (prepId, ease, taste, minutes) => { await savePrepFeedback(supabase, prepId, ease, taste, minutes); await refresh(); }}
         onCookRecipes={async (ids) => { await cookRecipes(supabase, ids); await refresh(); }}
-        onConsumePrepared={async (id) => { await consumePreparedLot(supabase, id); await refresh(); }}
+        onConsumePrepared={async (id) => { const logId = await consumePreparedLot(supabase, id); await refresh(); return logId; }}
         onRebuildShopping={async () => { const count = await rebuildShoppingFromPlan(supabase); await refresh(); return count; }}
         onRemovePlannedMeals={async (ids) => { await removePlannedMeals(supabase, ids); await refresh(); }}
         onSetPlannedMealsMade={async (ids, made) => { await setPlannedMealsMade(supabase, ids, made); await refresh(); }}
         onRemoveGrocery={async (id) => { await removeShoppingItem(supabase, id); await refresh(); }}
-        onConsumeInventoryLot={async (id, quantity) => { await consumeInventoryLot(supabase, id, quantity); await refresh(); }}
-        onSetInventoryLotQuantity={async (id, remaining, discard) => { await setInventoryLotQuantity(supabase, id, remaining, discard); await refresh(); }}
+        onConsumeInventoryLot={async (id, quantity) => { const logId = await consumeInventoryLot(supabase, id, quantity); await refresh(); return logId; }}
+        onSetInventoryLotQuantity={async (id, remaining, discard) => { const eventId = await setInventoryLotQuantity(supabase, id, remaining, discard); await refresh(); return eventId; }}
+        onRestoreFoodLog={async (id) => { await restoreFoodLog(supabase, id); await refresh(); }}
+        onUndoInventoryAdjustment={async (eventId) => { await undoInventoryAdjustment(supabase, eventId); await refresh(); }}
+        onUndoPrep={async (prepId) => { await undoPrep(supabase, prepId); await refresh(); }}
       />
     </PantryDataProvider>
   );

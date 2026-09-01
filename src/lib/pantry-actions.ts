@@ -247,9 +247,10 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       nutrition_fat_g: number(form, 'nutrition_fat_g'),
       nutrition_fiber_g: number(form, 'nutrition_fiber_g'),
       nutrition_sodium_mg: number(form, 'nutrition_sodium_mg'),
+      weekly_food_budget: number(form, 'weekly_food_budget'),
     }).eq('singleton', true);
     if (error) throw error;
-    return 'Nutrition targets updated.';
+    return 'Targets and food budget updated.';
   }
 
   if (kind === 'profile') {

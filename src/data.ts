@@ -145,12 +145,12 @@ export const GROCERY_SECTIONS = [
 ];
 
 export const NUTRIENTS = [
-  { label: 'Calories', value: '1,180', target: '/ 2,300 cal', pct: 51, color: '#86d7ac' },
-  { label: 'Protein', value: '74 g', target: '/ 130 g', pct: 57, color: '#86d7ac' },
-  { label: 'Carbs', value: '118 g', target: '/ 260 g', pct: 45, color: '#8fbce6' },
-  { label: 'Fat', value: '42 g', target: '/ 75 g', pct: 56, color: '#b0a6e0' },
-  { label: 'Fiber', value: '17 g', target: '/ 30 g', pct: 57, color: '#e5c07b' },
-  { label: 'Sodium', value: '1,420 mg', target: '/ 2,300 mg', pct: 62, color: '#e88592' },
+  { label: 'Calories', value: '1,180', target: '/ 2,300 cal', pct: 51, color: '#5fe0a0' },
+  { label: 'Protein', value: '74 g', target: '/ 130 g', pct: 57, color: '#5fe0a0' },
+  { label: 'Carbs', value: '118 g', target: '/ 260 g', pct: 45, color: '#57a8f2' },
+  { label: 'Fat', value: '42 g', target: '/ 75 g', pct: 56, color: '#a184f5' },
+  { label: 'Fiber', value: '17 g', target: '/ 30 g', pct: 57, color: '#f0b13f' },
+  { label: 'Sodium', value: '1,420 mg', target: '/ 2,300 mg', pct: 62, color: '#f2637a' },
 ];
 
 export const WEEK_DAYS = [
@@ -164,16 +164,41 @@ export const WEEK_DAYS = [
 ];
 
 export const FOOD_LOG = [
-  { emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#53d7a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
-  { emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#5eb5f5', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
-  { emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a78bfa', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
+  { id: 'preview-log-1', emoji: '🥞', label: 'Simple Pancakes', serving: '1 serving', calories: '310 cal', protein: '9 g protein', time: '8:04 AM', color: '#5fe0a0', cost: 1.18, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+  { id: 'preview-log-2', emoji: '🥣', label: '2× Greek yogurt', serving: '2 containers', calories: '280 cal', protein: '30 g protein', time: '1:15 PM', color: '#57a8f2', cost: 3.58, costIsEstimated: true, nutrition: { Calories: 280, Protein: 30, Carbs: 34, Fat: 2, Fiber: 0, Sodium: 180 } },
+  { id: 'preview-log-3', emoji: '🥪', label: 'Chicken sandwich', serving: '1 sandwich · estimated', calories: '590 cal', protein: '35 g protein', time: '6:48 PM', color: '#a184f5', cost: 8.49, costIsEstimated: true, nutrition: { Calories: 590, Protein: 35, Carbs: 36, Fat: 31, Fiber: 15, Sodium: 720 } },
 ];
 
+// Dates are relative to today so the preview always has a live 30-day window to
+// colour; the shape matches what the repository builds from real rows.
+const historyDayKey = (daysAgo: number) => {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
+  return date;
+};
+
 export const HISTORY = [
-  { day: 'Thursday', date: 'AUG 27', meals: ['Simple Pancakes', '2× Greek yogurt', 'Chicken sandwich'], totals: '1,180 cal\n74 g protein', cost: 13.25 },
-  { day: 'Wednesday', date: 'AUG 26', meals: ['Soft Scrambled Eggs', 'Chicken sandwich'], totals: '1,640 cal\n102 g protein' },
-  { day: 'Monday', date: 'AUG 24', meals: ['Simple Pancakes', 'Greek yogurt'], totals: '1,420 cal\n88 g protein' },
-  { day: 'Saturday', date: 'AUG 22', meals: ['Weekend brunch', 'Chicken sandwich'], totals: '1,830 cal\n111 g protein' },
-];
+  { daysAgo: 0, calories: 1180, protein: 74, meals: [{ label: 'Simple Pancakes', emoji: '🥞', cost: 1.18 }, { label: '2× Greek yogurt', emoji: '🥣', cost: 3.58 }, { label: 'Chicken sandwich', emoji: '🥪', cost: 8.49 }] },
+  { daysAgo: 1, calories: 1640, protein: 102, meals: [{ label: 'Soft Scrambled Eggs', emoji: '🍳', cost: 1.14 }, { label: 'Chicken sandwich', emoji: '🥪', cost: 8.49 }] },
+  { daysAgo: 3, calories: 1420, protein: 88, meals: [{ label: 'Simple Pancakes', emoji: '🥞', cost: 1.18 }, { label: 'Greek yogurt', emoji: '🥣', cost: 1.79 }] },
+  { daysAgo: 5, calories: 1830, protein: 111, meals: [{ label: 'Weekend brunch', emoji: '🍳', cost: 12.60 }, { label: 'Chicken sandwich', emoji: '🥪', cost: 8.49 }] },
+  { daysAgo: 8, calories: 1290, protein: 61, meals: [{ label: 'Soft Scrambled Eggs', emoji: '🍳', cost: 1.14 }, { label: 'Greek yogurt', emoji: '🥣', cost: 1.79 }] },
+  { daysAgo: 12, calories: 1710, protein: 96, meals: [{ label: 'Simple Pancakes', emoji: '🥞', cost: 1.18 }, { label: 'Chicken sandwich', emoji: '🥪', cost: 8.49 }] },
+].map((day) => {
+  const date = historyDayKey(day.daysAgo);
+  return {
+    dateKey: date.toLocaleDateString('en-CA'),
+    day: date.toLocaleDateString([], { weekday: 'long' }),
+    date: date.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase(),
+    meals: day.meals.map((meal) => meal.label),
+    mealDetails: day.meals.map((meal) => ({ ...meal, costIsEstimated: true })),
+    totals: `${day.calories.toLocaleString()} cal\n${day.protein} g protein`,
+    calories: day.calories,
+    protein: day.protein,
+    cost: day.meals.reduce((total, meal) => total + meal.cost, 0),
+    mealsMissingCost: 0,
+  };
+});
 
 export const TREND_VALUES = [72, 88, 131, 96, 140, 64, 102, 118, 126, 80, 134, 90, 110, 148, 70, 96, 122, 86, 138, 104, 92, 128, 76, 116, 142, 88, 98, 120, 84, 68];

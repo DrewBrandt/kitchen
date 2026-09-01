@@ -9,6 +9,7 @@ import {
   WEEK_DAYS,
   type Recipe,
 } from './data';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './lib/cost';
 
 export interface InventoryFood {
   productId?: string;
@@ -57,7 +58,18 @@ export interface PantryData {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
     foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; cost?: number | null; costIsEstimated?: boolean }>;
   }>;
-  history: Array<{ day: string; date: string; dateKey?: string; meals: string[]; totals: string; cost?: number | null }>;
+  history: Array<{
+    day: string;
+    date: string;
+    dateKey?: string;
+    meals: string[];
+    mealDetails?: Array<{ id?: string; label: string; emoji: string; cost: number | null; costIsEstimated: boolean }>;
+    totals: string;
+    calories?: number;
+    protein?: number;
+    cost?: number | null;
+    mealsMissingCost?: number;
+  }>;
   foods: Array<{ id: string; name: string; emoji: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
   products: ProductView[];
   units: Array<{ id: string; label: string; shortName: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
@@ -76,9 +88,12 @@ export interface PantryData {
     favorites: string[];
     timeZone: string;
     planningNotes: string;
+    weeklyFoodBudget: number;
   };
   externalProducts: Array<{ id: string; emoji: string; name: string; place: string; nutrition: string; cost: number | null }>;
-  preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; cost: number | null; costIsEstimated: boolean }>;
+  preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; batchCost: number | null; servingsTotal: number; servingsLeft: number; costPerServing: number | null; valueRemaining: number | null; costIsEstimated: boolean }>;
+  spendHistory: Array<{ dateKey: string; spend: number; waste: number }>;
+  wasteCauses: Array<{ label: string; note: string; amount: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
   nutritionHistory: Array<{ dateKey: string; label: string; values: NutritionValues; foods: Array<{ label: string; values: NutritionValues }> }>;
@@ -140,9 +155,19 @@ export const previewPantryData: PantryData = {
     favorites: [],
     timeZone: 'America/New_York',
     planningNotes: '',
+    weeklyFoodBudget: DEFAULT_WEEKLY_FOOD_BUDGET,
   },
   externalProducts: [],
-  preparedLots: [],
+  preparedLots: [
+    { id: 'preview-prep-1', emoji: '🥞', name: 'Simple Pancakes', location: 'fridge', remaining: '2 of 4 servings', due: '3 days left', progress: 50, batchCost: 4.72, servingsTotal: 4, servingsLeft: 2, costPerServing: perServingCost(4.72, 4), valueRemaining: remainingValue(4.72, 4, 2), costIsEstimated: true },
+    { id: 'preview-prep-2', emoji: '🍳', name: 'Soft Scrambled Eggs', location: 'fridge', remaining: '1 of 1 serving', due: '1 day left', progress: 100, batchCost: 1.14, servingsTotal: 1, servingsLeft: 1, costPerServing: perServingCost(1.14, 1), valueRemaining: remainingValue(1.14, 1, 1), costIsEstimated: true },
+  ],
+  spendHistory: [],
+  wasteCauses: [
+    { label: 'Expired in the fridge', note: 'produce and dairy', amount: 0 },
+    { label: 'Prepared batches discarded', note: 'leftovers past date', amount: 0 },
+    { label: 'Opened and forgotten', note: 'partial packages', amount: 0 },
+  ],
   proteinTrend: Array.from({ length: 30 }, (_, index) => ({ date: String(index + 1), value: 0 })),
   nutrientDrivers: { Protein: [], Calories: [], Sodium: [] },
   nutritionHistory: [],

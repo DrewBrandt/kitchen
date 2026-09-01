@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { NutritionValues, NutrientName, PantryData } from '../pantry-data';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 
 type Client = SupabaseClient<Database>;
 type FoodLogRow = Database['public']['Tables']['food_logs']['Row'];
@@ -135,7 +136,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     client.from('meal_plans').select('*').order('plan_date'),
     client.from('food_logs').select('*').is('voided_at', null).order('occurred_at', { ascending: false }),
     client.from('personal_settings').select('*').single(),
-    client.from('inventory_events').select('*').not('food_log', 'is', null),
+    client.from('inventory_events').select('*').is('voided_at', null).or('food_log.not.is.null,reason.eq.waste'),
     client.from('inventory_event_costs').select('*'),
   ]);
 
@@ -296,21 +297,31 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
     const recipe = prep ? recipeRows.find((candidate) => candidate.id === prep.recipe) : undefined;
-    const directValue = lotCost(lot, Number(lot.remaining_qty));
+    const servingsTotal = Number(lot.initial_qty);
+    const servingsLeft = Number(lot.remaining_qty);
+    // One unambiguous number per batch: what the whole batch cost. Per-serving and
+    // value-remaining are derived from it in src/lib/cost.ts and nowhere else.
+    const directBatch = lotCost(lot, servingsTotal);
     const recipeEstimate = prep ? recipeCosts.get(prep.recipe) : undefined;
-    const value = directValue.cost !== null || recipeEstimate?.costPerServing === null || recipeEstimate?.costPerServing === undefined
-      ? directValue
-      : { cost: recipeEstimate.costPerServing * Number(lot.remaining_qty), estimated: true, source: 'Recipe estimate' };
+    const batch: CostValue = directBatch.cost !== null
+      ? directBatch
+      : recipeEstimate?.costPerServing !== null && recipeEstimate?.costPerServing !== undefined
+        ? { cost: recipeEstimate.costPerServing * servingsTotal, estimated: true, source: 'Recipe estimate' }
+        : { cost: null, estimated: true, source: 'Price unavailable' };
     return {
       id: lot.id,
       emoji: recipe?.emoji ?? '🥘',
       name: recipe?.name ?? 'Prepared batch',
       location: lot.location ?? 'unassigned',
-      remaining: `${formatQuantity(Number(lot.remaining_qty))} of ${formatQuantity(Number(lot.initial_qty))} servings`,
+      remaining: `${formatQuantity(servingsLeft)} of ${formatQuantity(servingsTotal)} servings`,
       due: daysUntil(lot.use_by).label,
-      progress: Number(lot.initial_qty) ? Number(lot.remaining_qty) / Number(lot.initial_qty) * 100 : 0,
-      cost: value.cost,
-      costIsEstimated: value.estimated,
+      progress: servingsTotal ? servingsLeft / servingsTotal * 100 : 0,
+      batchCost: batch.cost,
+      servingsTotal,
+      servingsLeft,
+      costPerServing: perServingCost(batch.cost, servingsTotal),
+      valueRemaining: remainingValue(batch.cost, servingsTotal, servingsLeft),
+      costIsEstimated: batch.estimated,
     };
   });
 
@@ -338,23 +349,24 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const grocerySections = orderCategories([...groceryGroups.entries()]).map(([label, items]) => ({ emoji: categoryEmoji(label), label, items }));
 
   const settings = settingsResult.data;
+
   if (!settings) throw new Error('Personal settings are missing.');
   const logs = logsResult.data ?? [];
   const todayKey = dateKeyInZone(new Date(), settings.time_zone);
   const todayLogs = logs.filter((log) => dateKeyInZone(new Date(log.occurred_at), settings.time_zone) === todayKey);
   const nutrientSpec = [
-    ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#86d7ac'],
-    ['Protein', 'protein_g', settings.nutrition_protein_g, 'g', '#86d7ac'],
-    ['Carbs', 'carbs_g', settings.nutrition_carbs_g, 'g', '#8fbce6'],
-    ['Fat', 'fat_g', settings.nutrition_fat_g, 'g', '#b0a6e0'],
-    ['Fiber', 'fiber_g', settings.nutrition_fiber_g, 'g', '#e5c07b'],
-    ['Sodium', 'sodium_mg', settings.nutrition_sodium_mg, 'mg', '#e88592'],
+    ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#5fe0a0'],
+    ['Protein', 'protein_g', settings.nutrition_protein_g, 'g', '#5fe0a0'],
+    ['Carbs', 'carbs_g', settings.nutrition_carbs_g, 'g', '#57a8f2'],
+    ['Fat', 'fat_g', settings.nutrition_fat_g, 'g', '#a184f5'],
+    ['Fiber', 'fiber_g', settings.nutrition_fiber_g, 'g', '#f0b13f'],
+    ['Sodium', 'sodium_mg', settings.nutrition_sodium_mg, 'mg', '#f2637a'],
   ] as const;
   const buildNutrients = (dayLogs: FoodLogRow[]) => nutrientSpec.map(([label, field, target, unit, color]) => {
     const value = sum(dayLogs, field);
     return { label, value: `${Math.round(value).toLocaleString()}${unit === 'cal' ? '' : ` ${unit}`}`, target: `/ ${Number(target).toLocaleString()} ${unit}`, pct: Math.min(100, Math.round(value / Number(target) * 100)), color };
   });
-  const palette = ['#53d7a0', '#5eb5f5', '#a78bfa', '#f59e6b', '#f472b6', '#f2d06b', '#4fd1c5', '#ef7d7d'];
+  const palette = ['#5fe0a0', '#57a8f2', '#a184f5', '#f0b13f', '#f2637a', '#35d6c8', '#f59e6b', '#f472b6'];
   const eventCostById = new Map((eventCostsResult.data ?? []).map((row) => [row.inventory_event_id ?? '', row.cost === null ? null : Number(row.cost)]));
   const eventsByLog = new Map<string, NonNullable<typeof eventsResult.data>>();
   for (const event of eventsResult.data ?? []) if (event.food_log) eventsByLog.set(event.food_log, [...(eventsByLog.get(event.food_log) ?? []), event]);
@@ -405,17 +417,63 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     nutrients: buildNutrients(dayLogs),
     foodLog: buildFoodLog(dayLogs),
   }]));
-  const history = [...byDay.entries()].slice(0, 14).map(([date, dayLogs]) => {
+  // History carries the numbers the page renders rather than pre-formatted strings,
+  // so the heat strip and stat strip derive from real rows instead of re-parsing text.
+  const history = [...byDay.entries()].slice(0, 90).map(([date, dayLogs]) => {
     const parsed = new Date(`${date}T12:00:00`);
+    const priced = dayLogs.every((log) => costForLog(log).cost !== null);
     return {
       dateKey: date,
       day: parsed.toLocaleDateString([], { weekday: 'long' }),
       date: parsed.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase(),
       meals: dayLogs.map((log) => log.label),
+      mealDetails: dayLogs.map((log) => ({
+        id: log.id,
+        label: log.label,
+        emoji: (log.product ? products.get(log.product)?.emoji : undefined) ?? (log.recipe ? recipeRows.find((row) => row.id === log.recipe)?.emoji : undefined) ?? '🍽️',
+        cost: costForLog(log).cost,
+        costIsEstimated: costForLog(log).estimated,
+      })),
       totals: `${Math.round(sum(dayLogs, 'kcal')).toLocaleString()} cal\n${Math.round(sum(dayLogs, 'protein_g'))} g protein`,
-      cost: dayLogs.every((log) => costForLog(log).cost !== null) ? dayLogs.reduce((total, log) => total + Number(costForLog(log).cost), 0) : null,
+      calories: sum(dayLogs, 'kcal'),
+      protein: sum(dayLogs, 'protein_g'),
+      cost: priced ? dayLogs.reduce((total, log) => total + Number(costForLog(log).cost), 0) : null,
+      mealsMissingCost: dayLogs.filter((log) => costForLog(log).cost === null).length,
     };
   });
+
+  // Waste is a real series now: discards write 'waste' events, and the event-cost
+  // view prices each one from the lot it came off. Nothing here is estimated into
+  // existence — an unpriced discard contributes 0 rather than a guess.
+  const wasteEvents = (eventsResult.data ?? []).filter((event) => event.reason === 'waste');
+  const spendByDay = new Map<string, number>();
+  for (const [date, dayLogs] of byDay) {
+    spendByDay.set(date, dayLogs.reduce((total, log) => total + (costForLog(log).cost ?? 0), 0));
+  }
+  const wasteByDay = new Map<string, number>();
+  for (const event of wasteEvents) {
+    const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
+    wasteByDay.set(key, (wasteByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
+  }
+  const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys()])].sort().map((dateKey) => ({
+    dateKey,
+    spend: spendByDay.get(dateKey) ?? 0,
+    waste: wasteByDay.get(dateKey) ?? 0,
+  }));
+
+  // Three causes, each decided by what the lot actually was, not by a label.
+  const wasteCauses = [
+    { label: 'Expired in the fridge', note: 'produce and dairy', amount: 0 },
+    { label: 'Prepared batches discarded', note: 'leftovers past date', amount: 0 },
+    { label: 'Opened and forgotten', note: 'partial packages', amount: 0 },
+  ];
+  for (const event of wasteEvents) {
+    const lot = lotsResult.data?.find((candidate) => candidate.id === event.lot);
+    const cost = eventCostById.get(event.id) ?? 0;
+    if (lot?.prep) wasteCauses[1].amount += cost;
+    else if (lot?.use_by && lot.use_by <= dateKeyInZone(new Date(event.occurred_at), settings.time_zone)) wasteCauses[0].amount += cost;
+    else wasteCauses[2].amount += cost;
+  }
 
   const proteinTrend = Array.from({ length: 30 }, (_, index) => {
     const date = new Date();
@@ -518,9 +576,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       favorites: settings.favorites,
       timeZone: settings.time_zone,
       planningNotes: settings.planning_notes ?? '',
+      weeklyFoodBudget: Number(settings.weekly_food_budget ?? DEFAULT_WEEKLY_FOOD_BUDGET),
     },
     externalProducts,
     preparedLots,
+    spendHistory,
+    wasteCauses,
     proteinTrend,
     nutrientDrivers,
     nutritionHistory,
@@ -534,7 +595,22 @@ export async function setShoppingItemChecked(client: Client, id: string, checked
 }
 
 export async function voidFoodLog(client: Client, id: string) {
-  const { error } = await client.from('food_logs').update({ voided_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await client.rpc('void_food_log', { p_food_log: id });
+  if (error) throw error;
+}
+
+export async function restoreFoodLog(client: Client, id: string) {
+  const { error } = await client.rpc('restore_food_log', { p_food_log: id });
+  if (error) throw error;
+}
+
+export async function undoInventoryAdjustment(client: Client, eventId: string) {
+  const { error } = await client.rpc('undo_inventory_adjustment', { p_event: eventId });
+  if (error) throw error;
+}
+
+export async function undoPrep(client: Client, prepId: string) {
+  const { error } = await client.rpc('undo_prep', { p_prep: prepId });
   if (error) throw error;
 }
 
@@ -590,13 +666,15 @@ export async function removeShoppingItem(client: Client, itemId: string) {
 }
 
 export async function consumeInventoryLot(client: Client, lotId: string, quantity: number) {
-  const { error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
+  const { data, error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
+  return data;
 }
 
 export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false) {
-  const { error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
+  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
   if (error) throw error;
+  return data;
 }
 
 export async function cookRecipes(client: Client, recipeIds: string[]) {
@@ -605,8 +683,9 @@ export async function cookRecipes(client: Client, recipeIds: string[]) {
 }
 
 export async function consumePreparedLot(client: Client, lotId: string, quantity = 1) {
-  const { error } = await client.rpc('consume_prepared_lot', { p_lot: lotId, p_quantity: quantity });
+  const { data, error } = await client.rpc('consume_prepared_lot', { p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
+  return data;
 }
 
 export async function rebuildShoppingFromPlan(client: Client) {

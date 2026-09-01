@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(18);
+select plan(30);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -169,6 +169,88 @@ insert into transaction_test_results select is(
   (select count(*) from inventory_events where lot = '93000000-0000-0000-0000-000000000001' and reason = 'waste'),
   1::bigint,
   'The discard event is explicitly classified as waste'
+);
+
+-- Undo, as compensating events. Each of these asserts that the lot cache lands
+-- back where it started, since that cache is recomputed from non-voided events.
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000001'),
+  0::numeric,
+  'The discard left the lot empty before undo'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select undo_inventory_adjustment((select id from inventory_events where lot = '93000000-0000-0000-0000-000000000001' and reason = 'waste' and voided_at is null))$$,
+  'A discard can be undone'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000001'),
+  80::numeric,
+  'Undoing the discard restores exactly what the lot held before it'
+);
+
+insert into transaction_test_results select throws_ok(
+  $$select undo_inventory_adjustment((select id from inventory_events where reason = 'eaten' and voided_at is null limit 1))$$,
+  'P0001',
+  'Only a discard or adjustment can be undone this way',
+  'Undoing an adjustment cannot be aimed at an eaten event'
+);
+
+-- Undoing an eat: the log stops counting and the servings come back.
+insert into transaction_test_results select lives_ok(
+  $$select void_food_log((select id from food_logs where kind = 'prepared' order by occurred_at desc limit 1))$$,
+  'An eaten serving can be voided'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from inventory_events where food_log = (select id from food_logs where kind = 'prepared' order by occurred_at desc limit 1) and voided_at is null),
+  0::bigint,
+  'Voiding the log voids the inventory events it consumed'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select restore_food_log((select id from food_logs where kind = 'prepared' order by occurred_at desc limit 1))$$,
+  'A removed log entry can be restored'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from inventory_events where food_log = (select id from food_logs where kind = 'prepared' order by occurred_at desc limit 1) and voided_at is null),
+  1::bigint,
+  'Restoring the log reapplies its deduction'
+);
+
+-- Undoing a cook: refused once the batch has been eaten from, allowed otherwise.
+insert into transaction_test_results select throws_ok(
+  $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty < initial_qty limit 1))$$,
+  'P0001',
+  'This batch has already been eaten from and can no longer be undone',
+  'A batch that has been eaten from can no longer be uncooked'
+);
+
+-- Earlier transaction tests intentionally consume and recount the ingredient lot.
+-- Restock it here so this case tests undoing a cook rather than stock validation.
+select set_inventory_lot_quantity(
+  '93000000-0000-0000-0000-000000000001'::uuid,
+  180::numeric,
+  false
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select cook_recipe('94000000-0000-0000-0000-000000000001'::uuid, 1, null, 'fridge')$$,
+  'A second batch can be cooked for the undo case'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty = initial_qty limit 1))$$,
+  'An untouched batch can be uncooked'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from inventory_lots lot join preps prep on prep.id = lot.prep where prep.voided_at is null and lot.remaining_qty > 0),
+  1::bigint,
+  'Uncooking zeroes the batch it produced and leaves the earlier one alone'
 );
 
 insert into transaction_test_results select * from finish();
