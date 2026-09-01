@@ -61,11 +61,13 @@ Run these in Preview before relying on writes:
 5. Inspect `consumePurchasedProduct` in the Action tester and confirm its request
    body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `location`,
    timestamp, cost, label, and note fields.
+6. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
+   `costIsEstimated`, and `costSource` without requiring nutrition fields.
 
 The first three should call read Actions. The fourth must stop before writing.
-The fifth catches an imported empty `{}` tool contract before it can reach the
-database. Then explicitly confirm the test write, verify it in the web app, and
-remove it.
+The fifth and sixth catch imported empty `{}` tool contracts before they can
+reach the database. Then explicitly confirm the test write, verify it in the web
+app, and remove it.
 
 `401` means the Action bearer value does not match the Supabase secret. `422`
 means validation rejected the request without a partial compound write.

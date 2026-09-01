@@ -185,6 +185,9 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 - Undo a consumption event once by restoring all exact raw and prepared deductions.
 - Exclude undone events from nutrition totals and repetition analysis while retaining them for auditability.
 - Derive meal repetition frequency and the most recent occurrence from active history.
+- Correct an existing consumption's label, timestamp, note, nutrition, or linked single-purchase cost without creating a second history event.
+- Treat cost correction as an edit to the originating acquisition lot so every derived cost remains consistent.
+- Store before/after snapshots for food, product, recipe, lot, and consumption corrections in an append-only edit audit trail.
 
 ### 12. Nutrition tracking
 
@@ -323,6 +326,7 @@ The Custom GPT contract must support authenticated operations for:
 - consumption history and repetition trends;
 - current plans and groceries, seven-day plan replacement, and manual grocery items;
 - food and product definition lookup and writes;
+- partial correction of canonical foods, products, recipes, inventory lots, and existing consumption events;
 - multi-lot grocery-haul creation;
 - recipe lookup and writes;
 - canonical food and product lookup and writes for every acquisition source;
@@ -379,6 +383,7 @@ The names below describe logical records. A rebuild may choose different storage
 - Unknown data remains unknown; it is not replaced with fabricated precision.
 - An undone history event remains stored, cannot affect active totals, and cannot be undone twice.
 - Cloud/API success must be based on a committed server response, not optimistic conversational language.
+- Corrections preserve record identity, do not duplicate consumption history, and retain before/after audit state.
 - Calendar synchronization failure does not roll back a valid meal plan.
 - Calendar reconciliation may alter only events bearing Pantry's private managed identifier.
 - Reads may occur without confirmation. Writes require explicit intent and consequential writes require a clear summary.

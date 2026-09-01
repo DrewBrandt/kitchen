@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(11);
+select plan(26);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -72,6 +72,97 @@ select is(
   (select kind from food_logs where label = 'Away apple'),
   'inventory',
   'Purchased products use the unified inventory food-log kind'
+);
+
+select lives_ok(
+  $$select gpt_update_consumption((select id from food_logs where label = 'Away apple'), '{"purchaseTotalCost":4.05,"costIsEstimated":false,"costSource":"Receipt"}')$$,
+  'An existing purchased-food consumption cost can be corrected in place'
+);
+
+select is(
+  (select count(*) from food_logs where label = 'Away apple'),
+  1::bigint,
+  'Cost correction does not duplicate nutrition history'
+);
+
+select is(
+  (select total_cost from inventory_lots where product = 'a2000000-0000-4000-8000-000000000001' and is_external),
+  4.05::numeric,
+  'Consumption cost correction updates the originating purchase lot'
+);
+
+select is(
+  (select cost from inventory_event_costs event_cost join inventory_events event on event.id = event_cost.inventory_event_id join food_logs log on log.id = event.food_log where log.label = 'Away apple'),
+  2.0250::numeric,
+  'Corrected purchase cost is allocated to the consumed portion'
+);
+
+select is(
+  (select count(*) from record_edits where resource = 'consumption' and record_id = (select id from food_logs where label = 'Away apple')),
+  1::bigint,
+  'Consumption correction stores an audit record'
+);
+
+select lives_ok(
+  $$select gpt_update_inventory_lot((select id from inventory_lots where product = 'a2000000-0000-4000-8000-000000000001' and is_external), '{"remainingQuantity":0.25,"location":"freezer"}')$$,
+  'Lot metadata and remaining quantity can be corrected together'
+);
+
+select is(
+  (select remaining_qty from inventory_lots where product = 'a2000000-0000-4000-8000-000000000001' and is_external),
+  0.25::numeric,
+  'Lot correction changes the current remaining quantity'
+);
+
+select is(
+  (select count(*) from inventory_events event join inventory_lots lot on lot.id = event.lot where lot.is_external and event.reason = 'adjust' and event.quantity_delta = -0.25),
+  1::bigint,
+  'Lot quantity correction is represented by a ledger adjustment'
+);
+
+select lives_ok(
+  $$select gpt_update_product('a2000000-0000-4000-8000-000000000001', '{"name":"Corrected apple product","estimatedCost":4.05,"costSource":"Receipt"}')$$,
+  'A product definition can be partially edited'
+);
+
+select is(
+  (select name from products where id = 'a2000000-0000-4000-8000-000000000001'),
+  'Corrected apple product',
+  'Product edits preserve identity while changing selected fields'
+);
+
+insert into recipes(id, name, servings)
+values ('a3000000-0000-4000-8000-000000000001', 'GPT edit recipe', 2);
+insert into recipe_ingredients(recipe, ingredient, qty, unit)
+values ('a3000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000001', 1,
+  (select id from measure_conversions where short_name = 'ct'));
+
+select lives_ok(
+  $$select gpt_update_recipe('a3000000-0000-4000-8000-000000000001', '{"name":"Corrected GPT edit recipe","servings":3}')$$,
+  'A recipe can be partially edited without resupplying ingredients'
+);
+
+select is(
+  (select name from recipes where id = 'a3000000-0000-4000-8000-000000000001'),
+  'Corrected GPT edit recipe',
+  'Recipe metadata edit preserves recipe identity'
+);
+
+select is(
+  (select count(*) from recipe_ingredients where recipe = 'a3000000-0000-4000-8000-000000000001'),
+  1::bigint,
+  'Omitted recipe ingredients remain unchanged'
+);
+
+select lives_ok(
+  $$select gpt_update_food('a1000000-0000-4000-8000-000000000001', '{"name":"Corrected GPT API test apple","aliases":["edit apple"]}')$$,
+  'A canonical food can be partially edited'
+);
+
+select is(
+  (select aliases from base_foods where id = 'a1000000-0000-4000-8000-000000000001'),
+  array['edit apple']::text[],
+  'Food edit applies only the supplied fields'
 );
 
 select * from finish();

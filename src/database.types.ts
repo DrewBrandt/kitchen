@@ -897,6 +897,33 @@ export type Database = {
           },
         ]
       }
+      record_edits: {
+        Row: {
+          after_state: Json
+          before_state: Json
+          edited_at: string
+          id: string
+          record_id: string
+          resource: string
+        }
+        Insert: {
+          after_state: Json
+          before_state: Json
+          edited_at?: string
+          id?: string
+          record_id: string
+          resource: string
+        }
+        Update: {
+          after_state?: Json
+          before_state?: Json
+          edited_at?: string
+          id?: string
+          record_id?: string
+          resource?: string
+        }
+        Relationships: []
+      }
       recipe_ingredients: {
         Row: {
           id: string
@@ -1194,6 +1221,11 @@ export type Database = {
         }
         Returns: Json
       }
+      gpt_update_consumption: { Args: { p_food_log: string; p_patch: Json }; Returns: Json }
+      gpt_update_food: { Args: { p_food: string; p_patch: Json }; Returns: Json }
+      gpt_update_inventory_lot: { Args: { p_lot: string; p_patch: Json }; Returns: Json }
+      gpt_update_product: { Args: { p_patch: Json; p_product: string }; Returns: Json }
+      gpt_update_recipe: { Args: { p_patch: Json; p_recipe: string }; Returns: Json }
       save_prep_feedback: {
         Args: { p_actual_minutes?: number; p_ease?: number; p_prep: string; p_taste?: number }
         Returns: undefined

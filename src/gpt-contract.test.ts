@@ -51,6 +51,31 @@ describe('Pantry GPT operator pack', () => {
     expect(requestBody.content['application/json'].schema.required).toEqual(required);
   });
 
+  it.each([
+    ['/v1/foods/{id}', 'editFoodDefinition'],
+    ['/v1/products/{id}', 'editProductDefinition'],
+    ['/v1/recipes/{id}', 'editRecipe'],
+    ['/v1/lots/{id}', 'editInventoryLot'],
+    ['/v1/history/{id}', 'editConsumptionEvent'],
+  ])('exposes an inline partial-edit contract for %s', (route, operationId) => {
+    const operation = schema.paths[route].patch;
+    const bodySchema = operation.requestBody.content['application/json'].schema;
+    expect(operation.operationId).toBe(operationId);
+    expect(operation['x-openai-isConsequential']).toBe(true);
+    expect(operation.requestBody.$ref).toBeUndefined();
+    expect(bodySchema.type).toBe('object');
+    expect(bodySchema.minProperties).toBe(1);
+    expect(bodySchema.additionalProperties).toBe(false);
+  });
+
+  it('exposes in-place purchase cost correction without a relog operation', () => {
+    const properties = schema.paths['/v1/history/{id}'].patch.requestBody.content['application/json'].schema.properties;
+    expect(properties).toHaveProperty('purchaseTotalCost');
+    expect(properties).toHaveProperty('costIsEstimated');
+    expect(properties).toHaveProperty('costSource');
+    expect(schemaText).not.toContain('/v1/relog');
+  });
+
   it('contains no legacy outside-food or direct custom-log operations', () => {
     expect(schema.paths['/v1/external-foods']).toBeUndefined();
     expect(schema.paths['/v1/meals']).toBeUndefined();

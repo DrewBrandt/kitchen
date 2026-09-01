@@ -40,6 +40,20 @@ Inventory reconciliation replaces named foods' lots and may delete definitions.
 Treat it as especially consequential. Never add a food to `deleteFoodIds` merely
 because its quantity is zero.
 
+## Corrections
+
+- Correct an existing record with its edit Action; never create a replacement to
+  fix a name, date, nutrition value, location, quantity, or cost.
+- Read the exact food, product, recipe, lot, or history event first and use its ID.
+  Send only fields that should change. Ingredient edits replace the complete
+  recipe ingredient list; omit `ingredients` for metadata-only corrections.
+- History returns linked inventory events and lots. To correct the cost of a
+  single purchased-food consumption, edit that history event with
+  `purchaseTotalCost`, `costIsEstimated`, and `costSource`. This changes the
+  originating purchase lot without duplicating nutrition or history.
+- Use the lot edit for location, best-by, acquired time, purchase classification,
+  or lot cost. A remaining-quantity correction records a ledger adjustment.
+
 ## Quantities and groceries
 
 - Discrete foods use count units; measured foods use weight or volume units.
