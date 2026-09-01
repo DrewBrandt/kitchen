@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Drew's Pantry API
-  version: 2.0.0
+  version: 3.0.0
   description: Private Supabase-backed pantry operations. Read current state before mutations.
 servers:
   - url: https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
@@ -325,6 +325,29 @@ paths:
                 label: {type: string}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/consume/manual:
+    post:
+      operationId: logManualConsumption
+      summary: Log a one-off meal or snack without creating a product, lot, or inventory deduction
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [label]
+              properties:
+                label: {type: string, description: Human-readable description of what was eaten.}
+                portionLabel: {type: string, description: Free-form consumed portion such as one large plate.}
+                timestamp: {type: string, format: date-time}
+                nutrition: {oneOf: [{$ref: '#/components/schemas/ManualNutrition'}, {type: 'null'}], description: Total nutrition for the consumed portion. Omit unknown nutrients; omit the object when all nutrition is unknown.}
+                cost: {type: [number, 'null'], minimum: 0, description: Direct out-of-pocket cost; zero is valid for a free meal.}
+                costIsEstimated: {type: boolean}
+                costSource: {type: string}
+                note: {type: string}
+      responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/history:
     get:
       operationId: getMealHistory
@@ -335,7 +358,7 @@ paths:
   /v1/history/{id}:
     patch:
       operationId: editConsumptionEvent
-      summary: Correct an existing consumption and its single linked away-from-home purchase cost without relogging it
+      summary: Correct an existing consumption, including manual portions, nutrition, and direct cost, without relogging it
       x-openai-isConsequential: true
       parameters:
         - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
@@ -349,9 +372,11 @@ paths:
               minProperties: 1
               properties:
                 label: {type: string}
+                portionLabel: {type: [string, 'null']}
                 timestamp: {type: string, format: date-time}
                 note: {type: [string, 'null']}
-                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                nutrition: {oneOf: [{$ref: '#/components/schemas/ManualNutrition'}, {type: 'null'}]}
+                directCost: {type: [number, 'null'], minimum: 0, description: Corrected direct cost on a manual consumption event.}
                 purchaseTotalCost: {type: [number, 'null'], minimum: 0, description: Corrected total cost of the single away-from-home lot linked to this consumption.}
                 costIsEstimated: {type: boolean}
                 costSource: {type: [string, 'null']}
@@ -450,6 +475,20 @@ components:
       required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
       properties:
         basisQuantity: {type: number, exclusiveMinimum: 0}
+        calories: {type: number, minimum: 0}
+        proteinG: {type: number, minimum: 0}
+        carbsG: {type: number, minimum: 0}
+        fatG: {type: number, minimum: 0}
+        fiberG: {type: number, minimum: 0}
+        sugarG: {type: number, minimum: 0}
+        sodiumMg: {type: number, minimum: 0}
+        source: {type: string}
+        estimated: {type: boolean}
+    ManualNutrition:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
         calories: {type: number, minimum: 0}
         proteinG: {type: number, minimum: 0}
         carbsG: {type: number, minimum: 0}

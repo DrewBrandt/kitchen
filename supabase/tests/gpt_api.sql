@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(26);
+select plan(37);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -101,6 +101,67 @@ select is(
   (select count(*) from record_edits where resource = 'consumption' and record_id = (select id from food_logs where label = 'Away apple')),
   1::bigint,
   'Consumption correction stores an audit record'
+);
+
+select lives_ok(
+  $$select log_manual_consumption('Spaghetti at Mom''s', '1 large plate', '2026-09-01T19:15:00-04:00', null, 0, false, 'Shared family meal', null)$$,
+  'A manual meal can be logged with no product or nutrition'
+);
+
+select is(
+  (select kind from food_logs where label = 'Spaghetti at Mom''s'),
+  'manual',
+  'Manual consumption has its own event kind'
+);
+
+select is(
+  (select count(*) from inventory_events event join food_logs log on log.id = event.food_log where log.label = 'Spaghetti at Mom''s'),
+  0::bigint,
+  'Manual consumption creates no inventory deduction'
+);
+
+select is(
+  (select nutrition_status from food_logs where label = 'Spaghetti at Mom''s'),
+  'unknown',
+  'All-null nutrition is explicitly unknown'
+);
+
+select lives_ok(
+  $$select log_manual_consumption('Estimated snack', '1 bowl', now(), '{"calories":320,"proteinG":8,"estimated":true,"source":"Visual estimate"}', 2.50, true, 'Memory', null)$$,
+  'A manual meal accepts a partial estimated nutrition snapshot and direct cost'
+);
+
+select is(
+  (select nutrition_status from food_logs where label = 'Estimated snack'),
+  'partial',
+  'Missing nutrient fields produce partial status instead of zeroes'
+);
+
+select ok(
+  (select nutrition_is_estimated from food_logs where label = 'Estimated snack'),
+  'Nutrition confidence is independent from completeness'
+);
+
+select is(
+  (select cost from food_logs where label = 'Estimated snack'),
+  2.50::numeric,
+  'Manual consumption stores direct cost without a lot'
+);
+
+select lives_ok(
+  $$select gpt_update_consumption((select id from food_logs where label = 'Spaghetti at Mom''s'), '{"portionLabel":"2 small plates","nutrition":{"calories":700,"proteinG":25,"carbsG":90,"fatG":24,"fiberG":6,"sugarG":12,"sodiumMg":900,"estimated":true,"source":"Family recipe estimate"}}')$$,
+  'A manual consumption event can be corrected in place'
+);
+
+select is(
+  (select concat(portion_label, '/', nutrition_status) from food_logs where label = 'Spaghetti at Mom''s'),
+  '2 small plates/complete',
+  'Correction updates the portion and computed nutrition completeness'
+);
+
+select ok(
+  (select partial_entries >= 1 from daily_nutrition where local_date = (now() at time zone (select time_zone from app_settings where singleton))::date),
+  'Daily nutrition exposes incomplete entry counts'
 );
 
 select lives_ok(

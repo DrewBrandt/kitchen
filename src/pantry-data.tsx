@@ -52,10 +52,12 @@ export interface PantryData {
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean; cost?: number | null; costIsEstimated?: boolean }> }>;
   plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean; cost: number | null; costIsEstimated: boolean }>;
-  foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; cost?: number | null; costIsEstimated?: boolean }>;
+  foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; nutritionStatus?: 'complete' | 'partial' | 'unknown'; cost?: number | null; costIsEstimated?: boolean }>;
+  nutritionIncompleteEntries: number;
   foodLogByDate: Record<string, {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; cost?: number | null; costIsEstimated?: boolean }>;
+    foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; nutritionStatus?: 'complete' | 'partial' | 'unknown'; cost?: number | null; costIsEstimated?: boolean }>;
+    nutritionIncompleteEntries: number;
   }>;
   history: Array<{
     day: string;
@@ -68,6 +70,7 @@ export interface PantryData {
     protein?: number;
     cost?: number | null;
     mealsMissingCost?: number;
+    nutritionIncompleteEntries?: number;
   }>;
   foods: Array<{ id: string; name: string; emoji: string; measureStyle: 'discrete' | 'weight' | 'volume' }>;
   products: ProductView[];
@@ -94,7 +97,7 @@ export interface PantryData {
   wasteCauses: Array<{ label: string; note: string; amount: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
-  nutritionHistory: Array<{ dateKey: string; label: string; values: NutritionValues; foods: Array<{ label: string; values: NutritionValues }> }>;
+  nutritionHistory: Array<{ dateKey: string; label: string; values: NutritionValues; nutritionIncompleteEntries: number; foods: Array<{ label: string; values: NutritionValues }> }>;
   todayProjection: NutritionValues;
 }
 
@@ -127,8 +130,9 @@ export const previewPantryData: PantryData = {
   weekDays: WEEK_DAYS,
   plannedMeals: [],
   foodLog: FOOD_LOG,
+  nutritionIncompleteEntries: 0,
   foodLogByDate: {
-    [new Date().toLocaleDateString('en-CA')]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG },
+    [new Date().toLocaleDateString('en-CA')]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG, nutritionIncompleteEntries: 0 },
   },
   history: HISTORY,
   foods: [],

@@ -201,6 +201,30 @@ describe('Pantry web UI', () => {
     expect(form.get('location')).toBe('fridge');
   });
 
+  it('logs a one-off meal without requiring a product or complete nutrition', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Food logged without changing inventory.');
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    await user.click(screen.getByRole('button', { name: 'Log food' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText('Product')).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Meal or food'), "Spaghetti at Mom's");
+    await user.type(within(dialog).getByLabelText('Portion'), '1 large plate');
+    await user.type(within(dialog).getByLabelText('Calories'), '750');
+    await user.click(within(dialog).getByRole('checkbox', { name: /Nutrition is estimated/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Log food' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('manual-log');
+    expect(form.get('label')).toBe("Spaghetti at Mom's");
+    expect(form.get('portion_label')).toBe('1 large plate');
+    expect(form.get('kcal')).toBe('750');
+    expect(form.get('product')).toBeNull();
+  });
+
   it('scans and submits a barcode without the native BarcodeDetector API', async () => {
     const user = userEvent.setup();
     const save = vi.fn().mockResolvedValue('Found Oikos · Vanilla Greek yogurt.');

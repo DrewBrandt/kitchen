@@ -16,6 +16,7 @@ export type PanelKind =
   | 'recipe'
   | 'recipe-edit'
   | 'log'
+  | 'manual-log'
   | 'item'
   | 'meal'
   | 'targets'

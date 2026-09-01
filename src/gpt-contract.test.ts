@@ -41,6 +41,19 @@ describe('Pantry GPT operator pack', () => {
     );
   });
 
+  it('supports direct manual consumption without definition or inventory IDs', () => {
+    const operation = schema.paths['/v1/consume/manual'].post;
+    const bodySchema = operation.requestBody.content['application/json'].schema;
+
+    expect(operation.operationId).toBe('logManualConsumption');
+    expect(bodySchema.required).toEqual(['label']);
+    expect(Object.keys(bodySchema.properties)).toEqual(
+      expect.arrayContaining(['label', 'portionLabel', 'timestamp', 'nutrition', 'cost', 'costIsEstimated', 'costSource', 'note']),
+    );
+    expect(bodySchema.properties).not.toHaveProperty('productId');
+    expect(bodySchema.properties).not.toHaveProperty('foodId');
+  });
+
   it.each([
     ['/v1/foods', ['name', 'measureStyle', 'displayUnit']],
     ['/v1/products', ['foodId', 'name', 'packageQuantity', 'packageUnit']],
@@ -76,11 +89,10 @@ describe('Pantry GPT operator pack', () => {
     expect(schemaText).not.toContain('/v1/relog');
   });
 
-  it('contains no legacy outside-food or direct custom-log operations', () => {
+  it('contains no legacy outside-food catalog or fake-product log operation', () => {
     expect(schema.paths['/v1/external-foods']).toBeUndefined();
     expect(schema.paths['/v1/meals']).toBeUndefined();
     expect(schemaText).not.toContain('externalFoodId');
     expect(schemaText).not.toContain('saveOutsideFood');
-    expect(schemaText).not.toContain('logMealWithoutInventoryDeduction');
   });
 });

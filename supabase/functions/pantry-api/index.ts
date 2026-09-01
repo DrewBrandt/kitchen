@@ -251,6 +251,20 @@ async function route(request: Request, db: Supabase) {
       p_label: input.label ?? null,
       p_note: input.note ?? null,
     })), 201); }
+  if (method === "POST" && path === "/v1/consume/manual") { const input = await bodyObject(request);
+    if (input.nutrition !== undefined && input.nutrition !== null && (typeof input.nutrition !== "object" || Array.isArray(input.nutrition))) {
+      throw new ApiError("nutrition must be an object or null");
+    }
+    return reply(unwrap(await db.rpc("log_manual_consumption", {
+      p_label: requiredString(input.label, "label"),
+      p_portion_label: input.portionLabel ?? null,
+      p_occurred_at: input.timestamp ?? new Date().toISOString(),
+      p_nutrition: input.nutrition ?? null,
+      p_cost: input.cost === undefined || input.cost === null ? null : nonnegativeNumber(input.cost, "cost"),
+      p_cost_is_estimated: Boolean(input.costIsEstimated),
+      p_cost_source: input.costSource ?? null,
+      p_note: input.note ?? null,
+    })), 201); }
   if (method === "POST" && path === "/v1/prepare/recipe") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_prepare_recipe", { p_recipe: requiredString(input.recipeId, "recipeId"),
       p_servings: positiveNumber(input.servings, "servings"), p_location: input.location ?? "fridge",

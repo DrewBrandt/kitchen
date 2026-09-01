@@ -63,9 +63,11 @@ Run these in Preview before relying on writes:
    timestamp, cost, label, and note fields.
 6. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
    `costIsEstimated`, and `costSource` without requiring nutrition fields.
+7. Inspect `logManualConsumption` and confirm only `label` is required; verify it
+   has no `foodId`, `productId`, purchased quantity, or inventory location field.
 
 The first three should call read Actions. The fourth must stop before writing.
-The fifth and sixth catch imported empty `{}` tool contracts before they can
+The fifth through seventh catch imported empty `{}` tool contracts before they can
 reach the database. Then explicitly confirm the test write, verify it in the web
 app, and remove it.
 

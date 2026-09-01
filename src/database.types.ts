@@ -166,6 +166,9 @@ export type Database = {
       food_logs: {
         Row: {
           carbs_g: number | null
+          cost: number | null
+          cost_is_estimated: boolean
+          cost_source: string | null
           created_at: string
           fat_g: number | null
           fiber_g: number | null
@@ -176,7 +179,10 @@ export type Database = {
           legacy_firebase_id: string | null
           note: string | null
           nutrition_is_estimated: boolean
+          nutrition_source: string | null
+          nutrition_status: string
           occurred_at: string
+          portion_label: string | null
           product: string | null
           protein_g: number | null
           recipe: string | null
@@ -187,6 +193,9 @@ export type Database = {
         }
         Insert: {
           carbs_g?: number | null
+          cost?: number | null
+          cost_is_estimated?: boolean
+          cost_source?: string | null
           created_at?: string
           fat_g?: number | null
           fiber_g?: number | null
@@ -197,7 +206,10 @@ export type Database = {
           legacy_firebase_id?: string | null
           note?: string | null
           nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
+          nutrition_status?: never
           occurred_at?: string
+          portion_label?: string | null
           product?: string | null
           protein_g?: number | null
           recipe?: string | null
@@ -208,6 +220,9 @@ export type Database = {
         }
         Update: {
           carbs_g?: number | null
+          cost?: number | null
+          cost_is_estimated?: boolean
+          cost_source?: string | null
           created_at?: string
           fat_g?: number | null
           fiber_g?: number | null
@@ -218,7 +233,10 @@ export type Database = {
           legacy_firebase_id?: string | null
           note?: string | null
           nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
+          nutrition_status?: never
           occurred_at?: string
+          portion_label?: string | null
           product?: string | null
           protein_g?: number | null
           recipe?: string | null
@@ -1157,13 +1175,18 @@ export type Database = {
       daily_nutrition: {
         Row: {
           carbs_g: number | null
+          complete_entries: number | null
+          entry_count: number | null
           fat_g: number | null
           fiber_g: number | null
           kcal: number | null
           local_date: string | null
+          nutrition_is_complete: boolean | null
+          partial_entries: number | null
           protein_g: number | null
           sodium_mg: number | null
           sugar_g: number | null
+          unknown_entries: number | null
         }
         Relationships: []
       }
@@ -1218,6 +1241,19 @@ export type Database = {
           p_purchased_quantity: number
           p_consumed_quantity: number
           p_total_cost?: number
+        }
+        Returns: Json
+      }
+      log_manual_consumption: {
+        Args: {
+          p_cost?: number
+          p_cost_is_estimated?: boolean
+          p_cost_source?: string
+          p_label: string
+          p_note?: string
+          p_nutrition?: Json
+          p_occurred_at?: string
+          p_portion_label?: string
         }
         Returns: Json
       }
