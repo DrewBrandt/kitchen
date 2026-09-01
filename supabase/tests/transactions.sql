@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(16);
+select plan(18);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -123,6 +123,19 @@ insert into transaction_test_results select is(
 insert into meal_plans(plan_date, daypart, recipe, scale_factor, status)
 values (current_date, 'dinner', '94000000-0000-0000-0000-000000000001', 2, 'planned');
 
+insert into shopping_items(food, qty_needed, unit, source, checked_at, quantity_label)
+values (
+  '91000000-0000-0000-0000-000000000001',
+  999,
+  (select id from measure_conversions where short_name = 'oz'),
+  'generated',
+  now(),
+  'stale checked item'
+);
+
+insert into shopping_items(free_text, source)
+values ('Manual transaction-test item', 'manual');
+
 insert into transaction_test_results select is(
   rebuild_shopping_from_plan(current_date, current_date),
   1,
@@ -133,6 +146,18 @@ insert into transaction_test_results select is(
   (select round(qty_needed, 2) from shopping_items where food = '91000000-0000-0000-0000-000000000001' and source = 'generated'),
   4.23::numeric,
   'Generated grocery quantity subtracts available inventory and uses the food display unit'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from shopping_items where source = 'generated' and checked_at is null),
+  1::bigint,
+  'Rebuilding replaces checked generated items with the current plan projection'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from shopping_items where source = 'manual' and free_text = 'Manual transaction-test item'),
+  1::bigint,
+  'Rebuilding preserves manually added shopping items'
 );
 
 insert into transaction_test_results select lives_ok(
