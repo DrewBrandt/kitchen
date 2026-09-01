@@ -28,6 +28,48 @@ describe('Pantry GPT operator pack', () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
 
+  it('exposes every write body directly without importer-hostile references', () => {
+    const writes: Array<{ route: string; method: string; operation: Record<string, unknown> }> = [];
+    for (const [route, methods] of Object.entries(schema.paths as Record<string, Record<string, Record<string, unknown>>>)) {
+      for (const [method, operation] of Object.entries(methods)) {
+        if (method !== 'get') writes.push({ route, method, operation });
+      }
+    }
+
+    expect(writes).toHaveLength(20);
+    for (const { route, method, operation } of writes) {
+      const requestBody = operation.requestBody as Record<string, any>;
+      expect(requestBody, `${method.toUpperCase()} ${route} must have a request body`).toBeDefined();
+      expect(requestBody.$ref, `${method.toUpperCase()} ${route} request body must be inline`).toBeUndefined();
+      expect(JSON.stringify(requestBody), `${method.toUpperCase()} ${route} request body must contain no nested refs`).not.toContain('"$ref"');
+      const bodySchema = requestBody.content?.['application/json']?.schema;
+      expect(bodySchema?.type, `${method.toUpperCase()} ${route} body must be an object`).toBe('object');
+      expect(Object.keys(bodySchema?.properties ?? {}).length, `${method.toUpperCase()} ${route} must expose fields`).toBeGreaterThan(0);
+      expect((bodySchema?.required?.length ?? 0) > 0 || bodySchema?.minProperties > 0,
+        `${method.toUpperCase()} ${route} must reject an empty object`).toBe(true);
+    }
+    expect(schema.components.requestBodies).toBeUndefined();
+  });
+
+  it.each([
+    ['/v1/inventory', 'reconcilePantryInventory', ['replacements']],
+    ['/v1/groceries', 'addGroceryHaul', ['items']],
+    ['/v1/recipes', 'saveRecipe', ['name', 'servings', 'ingredients']],
+    ['/v1/plans', 'replaceWeeklyMealPlan', ['weekStart', 'entries']],
+    ['/v1/targets', 'saveNutritionTargets', ['calories', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sodiumMg']],
+    ['/v1/preferences', 'saveFoodPreferences', ['allergies', 'dislikes', 'favorites', 'dietaryRules', 'planningNotes']],
+    ['/v1/routine', 'savePersonalRoutine', ['timeZone', 'days', 'dinnerWindow', 'commuteMinutes', 'preparationBufferMinutes']],
+  ])('exposes all required arguments for %s', (route, operationId, required) => {
+    const operation = schema.paths[route].post;
+    expect(operation.operationId).toBe(operationId);
+    expect(operation.requestBody.content['application/json'].schema.required).toEqual(required);
+  });
+
+  it('maps weekly-plan body fields to the parameterized database function', () => {
+    expect(edgeFunction).toContain('p_week_start: requiredString(input.weekStart, "weekStart")');
+    expect(edgeFunction).toContain('p_entries: requiredArray(input.entries, "entries")');
+  });
+
   it('exposes purchased-product consumption inputs directly to the Action importer', () => {
     const operation = schema.paths['/v1/consume/product'].post;
     const bodySchema = operation.requestBody.content['application/json'].schema;

@@ -17,7 +17,39 @@ paths:
       operationId: reconcilePantryInventory
       summary: Atomically replace live lots for selected foods using auditable adjustments
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/InventoryReconciliation'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [replacements]
+              properties:
+                source: {type: string}
+                replacements:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [foodId, lots]
+                    properties:
+                      foodId: {type: string, format: uuid}
+                      lots:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [productId, quantity, unit]
+                          properties:
+                            productId: {type: string, format: uuid}
+                            quantity: {type: number, exclusiveMinimum: 0}
+                            unit: {type: string}
+                            location: {type: string, enum: [pantry, fridge, freezer]}
+                            bestBy: {type: string, format: date}
+                            totalCost: {type: number, minimum: 0}
+                            costIsEstimated: {type: boolean}
+                            note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods:
     get:
@@ -51,7 +83,21 @@ paths:
                 gPerFlOz: {type: number, exclusiveMinimum: 0}
                 gPerCount: {type: number, exclusiveMinimum: 0}
                 aliases: {type: array, items: {type: string}}
-                nutrition: {$ref: '#/components/schemas/Nutrition'}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods/{id}:
     get:
@@ -86,7 +132,21 @@ paths:
                 gPerFlOz: {type: [number, 'null'], exclusiveMinimum: 0}
                 gPerCount: {type: [number, 'null'], exclusiveMinimum: 0}
                 aliases: {type: array, items: {type: string}}
-                nutrition: {$ref: '#/components/schemas/Nutrition'}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/products:
     post:
@@ -111,7 +171,21 @@ paths:
                 packageQuantity: {type: number, exclusiveMinimum: 0}
                 packageUnit: {type: string}
                 servingQuantity: {type: number, exclusiveMinimum: 0}
-                nutrition: {$ref: '#/components/schemas/Nutrition'}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/products/{id}:
     patch:
@@ -137,7 +211,21 @@ paths:
                 packageQuantity: {type: number, exclusiveMinimum: 0, description: Supply together with packageUnit.}
                 packageUnit: {type: string, description: Supply together with packageQuantity.}
                 servingQuantity: {type: [number, 'null'], exclusiveMinimum: 0}
-                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
                 estimatedCost: {type: [number, 'null'], minimum: 0}
                 costSource: {type: [string, 'null']}
                 costAsOf: {type: [string, 'null'], format: date}
@@ -147,7 +235,32 @@ paths:
       operationId: addGroceryHaul
       summary: Atomically add reviewed product lots to inventory
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/GroceryHaul'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                source: {type: string}
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [productId, quantity, unit]
+                    properties:
+                      productId: {type: string, format: uuid}
+                      quantity: {type: number, exclusiveMinimum: 0}
+                      unit: {type: string}
+                      location: {type: string, enum: [pantry, fridge, freezer]}
+                      bestBy: {type: string, format: date}
+                      totalCost: {type: number, minimum: 0}
+                      costIsEstimated: {type: boolean}
+                      note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes:
     get:
@@ -160,7 +273,53 @@ paths:
       operationId: saveRecipe
       summary: Atomically create or update a recipe and all ingredients
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Recipe'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, servings, ingredients]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+                emoji: {type: string}
+                servings: {type: number, exclusiveMinimum: 0}
+                sourceUrl: {type: string, format: uri}
+                sourceNote: {type: string}
+                promptForFeedback: {type: boolean}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
+                instructions: {type: array, items: {type: string}}
+                portions: {type: array, items: {type: object, additionalProperties: true}}
+                preparationRules: {type: array, items: {type: object, additionalProperties: true}}
+                ingredients:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [foodId, quantity, unit]
+                    properties:
+                      foodId: {type: string, format: uuid}
+                      quantity: {type: number, exclusiveMinimum: 0}
+                      unit: {type: string}
+                      sortOrder: {type: integer, minimum: 0}
+                      note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes/{id}:
     get:
@@ -190,7 +349,21 @@ paths:
                 sourceUrl: {type: [string, 'null'], format: uri}
                 sourceNote: {type: [string, 'null']}
                 promptForFeedback: {type: boolean}
-                nutrition: {oneOf: [{$ref: '#/components/schemas/Nutrition'}, {type: 'null'}]}
+                nutrition:
+                  type: object
+                  additionalProperties: false
+                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  properties:
+                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
                 instructions: {type: array, items: {type: string}}
                 portions: {type: array, items: {type: object, additionalProperties: true}}
                 preparationRules: {type: array, items: {type: object, additionalProperties: true}}
@@ -342,7 +515,23 @@ paths:
                 label: {type: string, description: Human-readable description of what was eaten.}
                 portionLabel: {type: string, description: Free-form consumed portion such as one large plate.}
                 timestamp: {type: string, format: date-time}
-                nutrition: {oneOf: [{$ref: '#/components/schemas/ManualNutrition'}, {type: 'null'}], description: Total nutrition for the consumed portion. Omit unknown nutrients; omit the object when all nutrition is unknown.}
+                nutrition:
+                  description: Total nutrition for the consumed portion. Omit unknown nutrients; omit the object when all nutrition is unknown.
+                  oneOf:
+                    - type: object
+                      additionalProperties: false
+                      minProperties: 1
+                      properties:
+                        calories: {type: number, minimum: 0}
+                        proteinG: {type: number, minimum: 0}
+                        carbsG: {type: number, minimum: 0}
+                        fatG: {type: number, minimum: 0}
+                        fiberG: {type: number, minimum: 0}
+                        sugarG: {type: number, minimum: 0}
+                        sodiumMg: {type: number, minimum: 0}
+                        source: {type: string}
+                        estimated: {type: boolean}
+                    - {type: 'null'}
                 cost: {type: [number, 'null'], minimum: 0, description: Direct out-of-pocket cost; zero is valid for a free meal.}
                 costIsEstimated: {type: boolean}
                 costSource: {type: string}
@@ -375,7 +564,22 @@ paths:
                 portionLabel: {type: [string, 'null']}
                 timestamp: {type: string, format: date-time}
                 note: {type: [string, 'null']}
-                nutrition: {oneOf: [{$ref: '#/components/schemas/ManualNutrition'}, {type: 'null'}]}
+                nutrition:
+                  oneOf:
+                    - type: object
+                      additionalProperties: false
+                      minProperties: 1
+                      properties:
+                        calories: {type: number, minimum: 0}
+                        proteinG: {type: number, minimum: 0}
+                        carbsG: {type: number, minimum: 0}
+                        fatG: {type: number, minimum: 0}
+                        fiberG: {type: number, minimum: 0}
+                        sugarG: {type: number, minimum: 0}
+                        sodiumMg: {type: number, minimum: 0}
+                        source: {type: string}
+                        estimated: {type: boolean}
+                    - {type: 'null'}
                 directCost: {type: [number, 'null'], minimum: 0, description: Corrected direct cost on a manual consumption event.}
                 purchaseTotalCost: {type: [number, 'null'], minimum: 0, description: Corrected total cost of the single away-from-home lot linked to this consumption.}
                 costIsEstimated: {type: boolean}
@@ -390,7 +594,36 @@ paths:
       operationId: replaceWeeklyMealPlan
       summary: Atomically replace seven days and rebuild generated groceries
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/WeeklyPlan'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [weekStart, entries]
+              properties:
+                weekStart: {type: string, format: date}
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [date, slot, source, sourceId, scaleFactor]
+                    properties:
+                      date: {type: string, format: date}
+                      slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
+                      source: {type: string, enum: [recipe, meal]}
+                      sourceId: {type: string, format: uuid}
+                      scaleFactor: {type: number, exclusiveMinimum: 0}
+                      scheduledTime: {type: string}
+                      groupId: {type: string}
+                      leftoverOfGroupId: {type: string}
+                      intent: {type: string, enum: [prepare, leftover]}
+                      name: {type: string}
+                      emoji: {type: string}
+                      preparationTasks: {type: array, items: {type: object, additionalProperties: true}}
+                      note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/grocery-items:
     post:
@@ -416,7 +649,22 @@ paths:
       operationId: saveNutritionTargets
       summary: Replace nutrition targets
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Targets'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [calories, proteinG, carbsG, fatG, fiberG, sodiumMg]
+              properties:
+                calories: {type: number, exclusiveMinimum: 0}
+                proteinG: {type: number, minimum: 0}
+                carbsG: {type: number, minimum: 0}
+                fatG: {type: number, minimum: 0}
+                fiberG: {type: number, minimum: 0}
+                sodiumMg: {type: number, minimum: 0}
+                label: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/preferences:
     get:
@@ -427,7 +675,20 @@ paths:
       operationId: saveFoodPreferences
       summary: Replace allergies and food preferences
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Preferences'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [allergies, dislikes, favorites, dietaryRules, planningNotes]
+              properties:
+                allergies: {type: array, items: {type: string}}
+                dislikes: {type: array, items: {type: string}}
+                favorites: {type: array, items: {type: string}}
+                dietaryRules: {type: array, items: {type: string}}
+                planningNotes: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/routine:
     get:
@@ -438,7 +699,26 @@ paths:
       operationId: savePersonalRoutine
       summary: Replace routine and meal-planning availability
       x-openai-isConsequential: true
-      requestBody: {$ref: '#/components/requestBodies/Routine'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [timeZone, days, dinnerWindow, commuteMinutes, preparationBufferMinutes]
+              properties:
+                timeZone: {type: string}
+                days: {type: object, additionalProperties: true}
+                dinnerWindow:
+                  type: object
+                  additionalProperties: false
+                  required: [start, end]
+                  properties: {start: {type: string}, end: {type: string}}
+                commuteMinutes: {type: integer, minimum: 0, maximum: 1440}
+                preparationBufferMinutes: {type: integer, minimum: 0, maximum: 1440}
+                defaultThawHours: {type: number, minimum: 0, maximum: 168}
+                notes: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
 components:
   securitySchemes:
@@ -456,14 +736,6 @@ components:
     NotFound:
       description: Resource not found
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
-  requestBodies:
-    GroceryHaul: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GroceryHaul'}}}}
-    InventoryReconciliation: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryReconciliation'}}}}
-    Recipe: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Recipe'}}}}
-    WeeklyPlan: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyPlan'}}}}
-    Targets: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Targets'}}}}
-    Preferences: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
-    Routine: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Routine'}}}}
   schemas:
     Error:
       type: object
@@ -475,20 +747,6 @@ components:
       required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
       properties:
         basisQuantity: {type: number, exclusiveMinimum: 0}
-        calories: {type: number, minimum: 0}
-        proteinG: {type: number, minimum: 0}
-        carbsG: {type: number, minimum: 0}
-        fatG: {type: number, minimum: 0}
-        fiberG: {type: number, minimum: 0}
-        sugarG: {type: number, minimum: 0}
-        sodiumMg: {type: number, minimum: 0}
-        source: {type: string}
-        estimated: {type: boolean}
-    ManualNutrition:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      properties:
         calories: {type: number, minimum: 0}
         proteinG: {type: number, minimum: 0}
         carbsG: {type: number, minimum: 0}

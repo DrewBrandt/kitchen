@@ -10,6 +10,10 @@ https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
 ```
 
 The complete Custom GPT contract is `docs/pantry-gpt-openapi.yaml`.
+Every mutation defines its request object directly at the operation. Component
+request-body references are intentionally forbidden because the Custom GPT Action
+importer can collapse them to an empty `{}` call; the contract test enforces this
+for every current and future write route.
 
 ## Authentication
 
