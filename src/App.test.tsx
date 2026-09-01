@@ -1,17 +1,23 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, greetingFor } from './App';
 
-const scannerMocks = vi.hoisted(() => ({ decodeFromConstraints: vi.fn() }));
+const scannerMocks = vi.hoisted(() => ({ decodeFromStream: vi.fn() }));
 
 vi.mock('@zxing/browser', () => ({
   BarcodeFormat: { UPC_A: 1, UPC_E: 2, EAN_8: 3, EAN_13: 4, CODE_128: 5 },
   BrowserMultiFormatReader: class {
     possibleFormats: number[] = [];
-    decodeFromConstraints = scannerMocks.decodeFromConstraints;
+    decodeFromStream = scannerMocks.decodeFromStream;
   },
 }));
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  scannerMocks.decodeFromStream.mockReset();
+});
 
 describe('Pantry web UI', () => {
   it('renders the mockup-inspired dashboard and complete navigation', () => {
@@ -176,7 +182,11 @@ describe('Pantry web UI', () => {
     const user = userEvent.setup();
     const save = vi.fn().mockResolvedValue('Found Oikos · Vanilla Greek yogurt.');
     const stop = vi.fn();
-    scannerMocks.decodeFromConstraints.mockImplementationOnce(async (_constraints, _video, callback) => {
+    const stopTrack = vi.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) } });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    scannerMocks.decodeFromStream.mockImplementationOnce(async (_stream, _video, callback) => {
       const controls = { stop };
       callback({ getText: () => '036632032093' }, undefined, controls);
       return controls;
@@ -185,7 +195,7 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Look up barcode' })[0]);
     const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Scan with camera' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Enable camera' }));
 
     await waitFor(() => expect(within(dialog).getByLabelText('UPC / EAN')).toHaveValue('036632032093'));
     expect(within(dialog).getByText('Found 036632032093')).toBeInTheDocument();
@@ -196,5 +206,18 @@ describe('Pantry web UI', () => {
     const [kind, form] = save.mock.calls[0] as [string, FormData];
     expect(kind).toBe('scan');
     expect(form.get('barcode')).toBe('036632032093');
+  });
+
+  it('explains when Firefox denies mobile camera permission', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn().mockRejectedValue(new DOMException('Denied', 'NotAllowedError')) } });
+    render(<App onSaveAction={vi.fn()} />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Look up barcode' })[0]);
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Enable camera' }));
+
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Firefox blocked the camera');
+    expect(within(dialog).getByRole('button', { name: 'Enable camera' })).toBeEnabled();
   });
 });
