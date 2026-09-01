@@ -139,15 +139,18 @@ async function prepared(db: Supabase) {
 }
 
 async function planning(db: Supabase) {
-  const [planResult, groceryResult, recipeResult, mealResult] = await Promise.all([
+  const [planResult, consumptionResult, groceryResult, recipeResult, mealResult] = await Promise.all([
     db.from("meal_plans").select("*").order("plan_date").order("scheduled_time"),
+    db.from("planned_consumptions").select("*"),
     db.from("shopping_items").select("*").is("lot", null).order("created_at"),
     db.from("recipes").select("id,name,emoji"), db.from("meals").select("id,name,emoji"),
   ]);
   const recipeRows = unwrap(recipeResult) as Json[]; const meals = unwrap(mealResult) as Json[];
+  const consumptions = unwrap(consumptionResult) as Json[];
   return { entries: (unwrap(planResult) as Json[]).map((entry) => ({ ...entry,
     source: entry.recipe ? "recipe" : "meal", sourceId: entry.recipe ?? entry.meal,
     sourceName: entry.recipe ? recipeRows.find((row) => row.id === entry.recipe)?.name : meals.find((row) => row.id === entry.meal)?.name,
+    plannedConsumption: consumptions.find((consumption) => consumption.meal_plan === entry.id) ?? null,
   })), groceries: unwrap(groceryResult) };
 }
 

@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, greetingFor } from './App';
+import { PantryDataProvider, previewPantryData } from './pantry-data';
 
 const scannerMocks = vi.hoisted(() => ({ decodeFromStream: vi.fn() }));
 
@@ -87,6 +88,21 @@ describe('Pantry web UI', () => {
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     expect(screen.getByText("Today's plan")).toBeInTheDocument();
     expect(container.querySelectorAll('.contribution-card .projection-segment').length).toBeGreaterThan(0);
+  });
+
+  it('does not present one priced recipe as a complete grouped-meal total', async () => {
+    const user = userEvent.setup();
+    const dateKey = new Date().toLocaleDateString('en-CA');
+    const plannedMeals = [
+      { id: 'plan-priced', groupId: 'group-1', dateKey, slot: 'DINNER', name: 'Priced main', emoji: '🍔', recipeId: 'recipe-main', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'planned', cost: 6.5, costIsEstimated: false },
+      { id: 'plan-unpriced', groupId: 'group-1', dateKey, slot: 'DINNER', name: 'Unpriced side', emoji: '🥦', recipeId: 'recipe-side', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'planned', cost: null, costIsEstimated: true },
+    ];
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'This week' }));
+    expect(screen.getAllByText('Price unavailable').length).toBeGreaterThan(0);
+    expect(screen.getByText(/\$6\.50 known/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Planned servings for Priced main')).toHaveValue(1);
   });
 
   it('opens recipe detail and tracks cooking steps', async () => {

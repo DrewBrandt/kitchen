@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { NutritionValues, NutrientName, PantryData } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
+import { nutritionForServings } from './nutrition';
 
 type Client = SupabaseClient<Database>;
 type FoodLogRow = Database['public']['Tables']['food_logs']['Row'];
@@ -124,7 +125,7 @@ const dateKeyInZone = (date: Date, timeZone: string) => {
 };
 
 export async function loadPantryData(client: Client): Promise<PantryData> {
-  const [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, logsResult, settingsResult, eventsResult, eventCostsResult] = await Promise.all([
+  const [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, plannedConsumptionsResult, logsResult, settingsResult, eventsResult, eventCostsResult] = await Promise.all([
     client.from('base_foods').select('*'),
     client.from('products').select('*'),
     client.from('inventory_lots').select('*'),
@@ -136,13 +137,14 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     client.from('preps').select('*').is('voided_at', null),
     client.from('shopping_items').select('*').is('lot', null).order('created_at'),
     client.from('meal_plans').select('*').order('plan_date'),
+    client.from('planned_consumptions').select('*'),
     client.from('food_logs').select('*').is('voided_at', null).order('occurred_at', { ascending: false }),
     client.from('personal_settings').select('*').single(),
     client.from('inventory_events').select('*').is('voided_at', null).or('food_log.not.is.null,reason.eq.waste'),
     client.from('inventory_event_costs').select('*'),
   ]);
 
-  const firstError = [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, logsResult, settingsResult, eventsResult, eventCostsResult]
+  const firstError = [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, plannedConsumptionsResult, logsResult, settingsResult, eventsResult, eventCostsResult]
     .find((result) => result.error)?.error;
   if (firstError) throw firstError;
 
@@ -311,6 +313,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     };
   });
   const recipeCosts = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const plannedConsumptions = new Map((plannedConsumptionsResult.data ?? []).map((consumption) => [consumption.meal_plan, consumption]));
 
   const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
@@ -541,7 +544,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const meals = (plansResult.data ?? []).filter((plan) => plan.plan_date === key).map((plan) => {
       const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
       const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
-      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
+      const consumption = plannedConsumptions.get(plan.id);
+      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
     });
     return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
   });
@@ -549,7 +553,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const plannedMeals = (plansResult.data ?? []).map((plan) => {
     const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
     const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
-    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
+    const consumption = plannedConsumptions.get(plan.id);
+    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
   });
   const nutritionHistory = [...byDay.entries()].map(([dateKey, dayLogs]) => ({
     dateKey,
@@ -558,11 +563,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
     foods: dayLogs.map((log) => ({ label: log.label, values: nutritionValues(log) })),
   }));
-  const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey).reduce((totals, plan) => {
+  const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey && plan.status === 'planned' && plannedConsumptions.get(plan.id)?.status === 'planned').reduce((totals, plan) => {
     const recipe = plan.recipe ? recipeCosts.get(plan.recipe) : undefined;
     if (!recipe) return totals;
-    const values = recipe.nutritionValues;
-    for (const label of Object.keys(totals) as NutrientName[]) totals[label] += values[label] * Number(plan.scale_factor);
+    const servings = Number(plannedConsumptions.get(plan.id)?.servings ?? 1);
+    const values = nutritionForServings(recipe.nutritionValues, recipe.servings, servings);
+    for (const label of Object.keys(totals) as NutrientName[]) totals[label] += values[label];
     return totals;
   }, emptyNutrition());
 
@@ -670,6 +676,12 @@ export async function removePlannedMeals(client: Client, planIds: string[]) {
 
 export async function setPlannedMealsMade(client: Client, planIds: string[], made: boolean) {
   const { error } = await client.from('meal_plans').update({ status: made ? 'made' : 'planned', made_at: made ? new Date().toISOString() : null }).in('id', planIds);
+  if (error) throw error;
+}
+
+export async function setPlannedConsumptionServings(client: Client, planId: string, servings: number) {
+  if (!Number.isFinite(servings) || servings <= 0) throw new Error('Planned servings must be positive.');
+  const { error } = await client.from('planned_consumptions').update({ servings }).eq('meal_plan', planId).eq('status', 'planned').select('id').single();
   if (error) throw error;
 }
 

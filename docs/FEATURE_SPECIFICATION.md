@@ -70,6 +70,11 @@ the nutrition known for that consumed portion and any exact inventory lots or
 prepared batches deducted. One-off homemade, shared, catered, or undocumented
 food can be logged directly without creating a product or inventory lot.
 
+A planned consumption is an expected portion linked to a planned meal component.
+It is not consumption history and does not deduct inventory. It drives projected
+daily nutrition until it is fulfilled or cancelled, and may link to the eventual
+actual consumption event.
+
 ### Plan and grocery shortage
 
 A planned meal represents an intention on a date and meal slot. It can refer to a recipe, a combined meal, or a custom description. The grocery list contains durable manual requests plus shortages calculated from the plan after considering inventory and prepared servings.
@@ -218,6 +223,8 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 - Maintain meal plans by local calendar date and breakfast, lunch, dinner, or snack slot.
 - Plan a saved recipe, reusable combined meal, or custom meal.
 - Store servings, notes, optional exact local time, completion state, and preparation tasks.
+- Store expected consumed servings separately from recipe preparation scale so
+  daily projections never assume that an entire prepared batch will be eaten.
 - Group independent recipes as components of one planned meal without merging their identities.
 - Represent a later leftover meal by referencing the earlier preparation group rather than duplicating recipe demand.
 - Replace exactly one requested seven-day plan while preserving data outside that range.

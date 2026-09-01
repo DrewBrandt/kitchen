@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dailyFoodBudget, perServingCost, remainingValue } from './cost';
+import { completeCost, dailyFoodBudget, perServingCost, remainingValue } from './cost';
 
 describe('cost model', () => {
   it('derives one per-serving price for a batch no matter how much is left', () => {
@@ -29,6 +29,8 @@ describe('cost model', () => {
     expect(perServingCost(4.72, 0)).toBeNull();
     expect(perServingCost(4.72, -1)).toBeNull();
     expect(remainingValue(null, 4, 2)).toBeNull();
+    expect(completeCost([6.5, null, null])).toBeNull();
+    expect(completeCost([6.5, 2.25])).toBe(8.75);
   });
 
   it('derives the daily budget from the one weekly number', () => {

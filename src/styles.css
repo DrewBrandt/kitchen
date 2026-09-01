@@ -766,6 +766,10 @@ button.soon-row:hover { background: #121715; }
 .plan-status.missed { color: var(--faint); }
 .planned-components button { width: 100%; padding: 5px 9px; display: flex; align-items: flex-start; gap: 6px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 11.5px; cursor: pointer; }
 .planned-components button:hover { background: #202725; }
+.planned-portions { margin-top: 5px; display: grid; gap: 3px; }
+.planned-portion { display: flex; align-items: center; gap: 5px; color: var(--faint); font: 9px 'JetBrains Mono', monospace; }
+.planned-portion input { width: 52px; height: 25px; padding: 0 5px; border: 1px solid var(--line); border-radius: 5px; background: #111513; color: var(--text); font: inherit; }
+.planned-portion button { padding: 2px 5px; border: 1px solid var(--mint-dim); border-radius: 4px; background: transparent; color: var(--mint); font: inherit; cursor: pointer; }
 .plan-actions { padding: 7px 9px 9px; display: flex; gap: 6px; }
 .plan-actions button { width: auto; padding: 4px 6px; display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--faint); font-size: 9px; cursor: pointer; }
 .plan-actions button:hover { color: var(--text); }

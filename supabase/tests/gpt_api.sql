@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(37);
+select plan(40);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -197,6 +197,27 @@ values ('a3000000-0000-4000-8000-000000000001', 'GPT edit recipe', 2);
 insert into recipe_ingredients(recipe, ingredient, qty, unit)
 values ('a3000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000001', 1,
   (select id from measure_conversions where short_name = 'ct'));
+
+select lives_ok(
+  $$select gpt_replace_weekly_plan(current_date, jsonb_build_array(jsonb_build_object(
+    'date', current_date, 'slot', 'dinner', 'source', 'recipe',
+    'sourceId', 'a3000000-0000-4000-8000-000000000001',
+    'scaleFactor', 2, 'plannedServings', 0.5
+  )))$$,
+  'GPT weekly planning stores preparation and consumption quantities separately'
+);
+
+select is(
+  (select scale_factor from meal_plans where recipe = 'a3000000-0000-4000-8000-000000000001'),
+  2::numeric,
+  'GPT weekly planning preserves preparation scale'
+);
+
+select is(
+  (select consumption.servings from planned_consumptions consumption join meal_plans plan on plan.id = consumption.meal_plan where plan.recipe = 'a3000000-0000-4000-8000-000000000001'),
+  0.5::numeric,
+  'GPT weekly planning stores expected eaten servings independently'
+);
 
 select lives_ok(
   $$select gpt_update_recipe('a3000000-0000-4000-8000-000000000001', '{"name":"Corrected GPT edit recipe","servings":3}')$$,

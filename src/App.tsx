@@ -38,7 +38,7 @@ import {
   type Recipe,
 } from './data';
 import { usePantryData, type InventoryFood, type PantryData, type ProductView } from './pantry-data';
-import { dailyFoodBudget, perServingCost, usd } from './lib/cost';
+import { completeCost, dailyFoodBudget, perServingCost, usd } from './lib/cost';
 
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
   today: House,
@@ -100,7 +100,7 @@ function calendarDateKey(date: Date) {
 
 const servingLabel = (count: number) => `${count} serving${count === 1 ? '' : 's'}`;
 
-export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeals, onSetPlannedMealsMade, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<string | null>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeals?: (ids: string[]) => Promise<void>; onSetPlannedMealsMade?: (ids: string[], made: boolean) => Promise<void>; onRemoveGrocery?: (id: string) => Promise<void>; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; onRestoreFoodLog?: (id: string) => Promise<void>; onUndoInventoryAdjustment?: (eventId: string) => Promise<void>; onUndoPrep?: (prepId: string) => Promise<void> } = {}) {
+export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeals, onSetPlannedMealsMade, onSetPlannedConsumptionServings, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<string | null>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeals?: (ids: string[]) => Promise<void>; onSetPlannedMealsMade?: (ids: string[], made: boolean) => Promise<void>; onSetPlannedConsumptionServings?: (id: string, servings: number) => Promise<void>; onRemoveGrocery?: (id: string) => Promise<void>; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; onRestoreFoodLog?: (id: string) => Promise<void>; onUndoInventoryAdjustment?: (eventId: string) => Promise<void>; onUndoPrep?: (prepId: string) => Promise<void> } = {}) {
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
@@ -283,7 +283,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
           {page === 'food-log' && <FoodLogPage onOpen={open} notify={notify} onVoid={onVoidFoodLog} undo={reversals} />}
           {page === 'history' && <HistoryPage onOpen={open} onNavigate={setPage} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
-          {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onSetMade={onSetPlannedMealsMade} />}
+          {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onSetMade={onSetPlannedMealsMade} onSetServings={onSetPlannedConsumptionServings} />}
           {page === 'grocery' && (
             <GroceryPage
               checked={checkedGroceries}
@@ -588,7 +588,15 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, 
   );
 }
 
-function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onSetMade?: (ids: string[], made: boolean) => Promise<void> }) {
+function PlannedServingEditor({ meal, notify, onSave }: { meal: { id?: string; name: string; plannedServings?: number }; notify: Notify; onSave?: (id: string, servings: number) => Promise<void> }) {
+  const [value, setValue] = useState(String(meal.plannedServings ?? 1));
+  useEffect(() => setValue(String(meal.plannedServings ?? 1)), [meal.plannedServings]);
+  const servings = Number(value);
+  const changed = Number.isFinite(servings) && servings > 0 && servings !== (meal.plannedServings ?? 1);
+  return <span className="planned-portion"><input aria-label={`Planned servings for ${meal.name}`} type="number" min="0.25" step="0.25" value={value} onChange={(event) => setValue(event.target.value)} /><span>serving{servings === 1 ? '' : 's'} to eat</span>{changed && meal.id && onSave ? <button type="button" onClick={() => void onSave(meal.id!, servings).then(() => notify(`Planned portion updated to ${servings} serving${servings === 1 ? '' : 's'}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update the planned portion.'))}>Save</button> : null}</span>;
+}
+
+function WeekPage({ onOpen, notify, onRemove, onSetMade, onSetServings }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onSetMade?: (ids: string[], made: boolean) => Promise<void>; onSetServings?: (id: string, servings: number) => Promise<void> }) {
   const { plannedMeals, recipes, settings } = usePantryData();
   const [weekOffset, setWeekOffset] = useState(0);
   const weekDays = useMemo(() => {
@@ -612,7 +620,9 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
   const todayKey = calendarDateKey(new Date());
   const weekly = settings.weeklyFoodBudget;
   const weekMeals = weekDays.flatMap((day) => day.meals);
+  const weekMealCount = new Set(weekMeals.map((meal) => meal.groupId ?? meal.id ?? meal.name)).size;
   const committed = weekMeals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+  const unavailableMealPrices = new Set(weekMeals.filter((meal) => meal.cost === null || meal.cost === undefined).map((meal) => meal.groupId ?? meal.id ?? meal.name)).size;
   const unspent = Math.max(0, weekly - committed);
   const committedPct = weekly > 0 ? Math.min(100, committed / weekly * 100) : 0;
 
@@ -620,11 +630,11 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
     <Card className="week-card">
       <div className="week-header">
         <div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
-        <p>{weekMeals.length} meal{weekMeals.length === 1 ? '' : 's'} planned · <span className="spend">{usd(unspent)}</span> of the week's budget still unspent</p>
-        <div className="week-budget-bar"><Progress value={committedPct} color="var(--spend)" /><small>{usd(committed)} of {usd(weekly)}</small></div>
+        <p>{weekMealCount} meal{weekMealCount === 1 ? '' : 's'} planned · {unavailableMealPrices ? <><span className="spend">{usd(committed)}</span> known · {unavailableMealPrices} meal price{unavailableMealPrices === 1 ? '' : 's'} unavailable</> : <><span className="spend">{usd(unspent)}</span> of the week's budget still unspent</>}</p>
+        <div className="week-budget-bar"><Progress value={committedPct} color="var(--spend)" /><small>{usd(committed)} known of {usd(weekly)}{unavailableMealPrices ? ' · incomplete' : ''}</small></div>
       </div>
       <div className="week-list">{weekDays.map((day) => {
-        const dayCost = day.meals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+        const dayCost = completeCost(day.meals.map((meal) => meal.cost));
         const groups = [...day.meals.reduce((map, meal) => { const key = meal.groupId ?? meal.id ?? meal.name; map.set(key, [...(map.get(key) ?? []), meal]); return map; }, new Map<string, typeof day.meals>()).entries()];
         return (
           <div className={cx('week-row', day.today && 'today', day.dateKey < todayKey && 'past')} key={day.dateKey}>
@@ -632,13 +642,13 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
               <strong>{day.day}</strong>
               <small>{day.date}</small>
               <em className="spend">{day.meals.length ? usd(dayCost) : '—'}</em>
-              <small>{day.meals.length} meal{day.meals.length === 1 ? '' : 's'}</small>
+              <small>{groups.length} meal{groups.length === 1 ? '' : 's'}</small>
             </div>
             <div className="week-row-meals">
               {groups.map(([groupId, meals]) => {
                 const made = meals.every((meal) => meal.status === 'made');
                 const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []);
-                const groupCost = meals.reduce((total, meal) => total + (meal.cost ?? 0), 0);
+                const groupCost = completeCost(meals.map((meal) => meal.cost));
                 const recipe = recipes.find((candidate) => candidate.id === meals[0].recipeId);
                 return (
                   <div className={cx('week-meal-card', made && 'made', meals[0].isLeftover && 'leftover')} key={groupId}>
@@ -646,6 +656,7 @@ function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: Pane
                     <div className="grow">
                       <strong>{meals.map((meal) => meal.name).join(' + ')}</strong>
                       <small>{meals[0].slot.split(' · ')[0]}{meals[0].isLeftover ? ' · leftovers' : ''}</small>
+                      <div className="planned-portions">{meals.map((meal) => <PlannedServingEditor key={meal.id ?? meal.name} meal={meal} notify={notify} onSave={onSetServings} />)}</div>
                     </div>
                     <span className={cx('plan-status', made ? 'made' : day.dateKey < todayKey ? 'missed' : 'planned')}>{made ? 'Made' : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span>
                     <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}</strong>
@@ -1191,8 +1202,8 @@ function panelContext(state: PanelState, data: Pick<PantryData, 'nutrients' | 'f
     return `List total so far: ${usd(sumCosts(grocerySections.flatMap((section) => section.items.map((item) => item.cost))))} of ${usd(weekly)} for the week.`;
   }
   if (state.kind === 'meal') {
-    const planned = plannedMeals.length;
-    return `This week: ${planned} meal${planned === 1 ? '' : 's'} planned · ${usd(sumCosts(plannedMeals.map((meal) => meal.cost)))} of ${usd(weekly)} committed.`;
+    const planned = new Set(plannedMeals.map((meal) => meal.groupId)).size;
+    return `This week: ${planned} meal${planned === 1 ? '' : 's'} planned · ${usd(completeCost(plannedMeals.map((meal) => meal.cost)))} of ${usd(weekly)} committed.`;
   }
   if (state.kind === 'targets') {
     return `One food budget: ${usd(weekly)} a week works out to ${usd(daily)} a day.`;
@@ -1257,7 +1268,7 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
     <SelectField name="recipe" label="Recipe (for a newly prepared meal)" defaultValue={values.recipe} options={recipes.map((recipe) => ({ value: recipe.id, label: `${recipe.emoji} ${recipe.name}` }))} />
     <SelectField name="source_group_id" label="Original meal (for leftovers)" options={[...plannedMeals.reduce((groups, meal) => { const group = groups.get(meal.groupId) ?? { value: meal.groupId, label: `${meal.dateKey} · ${meal.name}` }; if (!group.label.includes(meal.name)) group.label += ` + ${meal.name}`; groups.set(meal.groupId, group); return groups; }, new Map<string, { value: string; label: string }>()).values()]} />
     <div className="form-grid two"><Field name="plan_date" label="Date" type="date" defaultValue={values.plan_date || today} required /><SelectField name="daypart" label="Meal" defaultValue={values.daypart || 'dinner'} options={['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} required /></div>
-    <Field name="scale_factor" label="Recipe scale" type="number" defaultValue="1" step="0.25" min="0.25" required />
+    <div className="form-grid two"><Field name="scale_factor" label="Recipe preparation scale" type="number" defaultValue="1" step="0.25" min="0.25" required /><Field name="planned_servings" label="Servings you plan to eat" type="number" defaultValue="1" step="0.25" min="0.25" required /></div>
     <Field name="note" label="Notes" placeholder="Optional planning note" />
   </div>;
 

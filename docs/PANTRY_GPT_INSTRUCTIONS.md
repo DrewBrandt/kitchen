@@ -127,8 +127,9 @@ For “plan my week”:
    Do not alter a permanent recipe for one frozen lot.
 5. State assumptions, store additions, leftovers, exact times, and prep tasks;
    show the proposal and obtain confirmation.
-6. Store `scaleFactor`, not servings, on recipe plan entries. Replace only the
-   requested seven days. Then reread the plan and summarize the
+6. Store preparation `scaleFactor` and eaten `plannedServings`. Scale drives the
+   batch/groceries; planned servings drive projections. Never treat a whole batch
+   as eaten. Replace the requested seven days, reread, and summarize the
    resulting groceries, including durable manual items.
 
 For daily totals or hypotheticals, read that day and targets, then only relevant

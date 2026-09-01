@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(31);
+select plan(33);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -122,6 +122,18 @@ insert into transaction_test_results select is(
 
 insert into meal_plans(plan_date, daypart, recipe, scale_factor, status)
 values (current_date, 'dinner', '94000000-0000-0000-0000-000000000001', 2, 'planned');
+
+insert into transaction_test_results select is(
+  (select count(*) from planned_consumptions consumption join meal_plans plan on plan.id = consumption.meal_plan where plan.recipe = '94000000-0000-0000-0000-000000000001'),
+  1::bigint,
+  'Every meal-plan component receives a planned consumption record'
+);
+
+insert into transaction_test_results select is(
+  (select consumption.servings from planned_consumptions consumption join meal_plans plan on plan.id = consumption.meal_plan where plan.recipe = '94000000-0000-0000-0000-000000000001'),
+  1::numeric,
+  'Existing direct plan writes default to one eaten serving instead of the prepared batch size'
+);
 
 insert into shopping_items(food, qty_needed, unit, source, checked_at, quantity_label)
 values (

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
+import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
@@ -108,6 +108,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onRebuildShopping={async () => { const count = await rebuildShoppingFromPlan(supabase); await refresh(); return count; }}
         onRemovePlannedMeals={async (ids) => { await removePlannedMeals(supabase, ids); await refresh(); }}
         onSetPlannedMealsMade={async (ids, made) => { await setPlannedMealsMade(supabase, ids, made); await refresh(); }}
+        onSetPlannedConsumptionServings={async (id, servings) => { await setPlannedConsumptionServings(supabase, id, servings); await refresh(); }}
         onRemoveGrocery={async (id) => { await removeShoppingItem(supabase, id); await refresh(); }}
         onConsumeInventoryLot={async (id, quantity) => { const logId = await consumeInventoryLot(supabase, id, quantity); await refresh(); return logId; }}
         onSetInventoryLotQuantity={async (id, remaining, discard) => { const eventId = await setInventoryLotQuantity(supabase, id, remaining, discard); await refresh(); return eventId; }}

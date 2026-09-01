@@ -25,6 +25,12 @@ export function dailyFoodBudget(weeklyFoodBudget: number): number {
   return weeklyFoodBudget / 7;
 }
 
+/** A group has a total only when every component has a price. */
+export function completeCost(values: Array<number | null | undefined>): number | null {
+  if (values.some((value) => value === null || value === undefined)) return null;
+  return values.reduce<number>((total, value) => total + Number(value), 0);
+}
+
 export function usd(value: number | null | undefined, estimated = false): string {
   if (value === null || value === undefined) return 'Price unavailable';
   return `${estimated ? '~' : ''}$${value.toFixed(2)}`;

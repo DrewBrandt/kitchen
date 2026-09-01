@@ -50,8 +50,8 @@ export interface PantryData {
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null }> }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean; cost?: number | null; costIsEstimated?: boolean }> }>;
-  plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean; cost: number | null; costIsEstimated: boolean }>;
+  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean; plannedServings?: number; consumptionStatus?: string; cost?: number | null; costIsEstimated?: boolean }> }>;
+  plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean; plannedServings: number; consumptionStatus: string; cost: number | null; costIsEstimated: boolean }>;
   foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues; nutritionStatus?: 'complete' | 'partial' | 'unknown'; cost?: number | null; costIsEstimated?: boolean }>;
   nutritionIncompleteEntries: number;
   foodLogByDate: Record<string, {

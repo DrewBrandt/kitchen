@@ -603,13 +603,14 @@ paths:
                   items:
                     type: object
                     additionalProperties: false
-                    required: [date, slot, source, sourceId, scaleFactor]
+                    required: [date, slot, source, sourceId, scaleFactor, plannedServings]
                     properties:
                       date: {type: string, format: date}
                       slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
                       source: {type: string, enum: [recipe, meal]}
                       sourceId: {type: string, format: uuid}
                       scaleFactor: {type: number, exclusiveMinimum: 0}
+                      plannedServings: {type: number, exclusiveMinimum: 0, description: Expected servings eaten at this meal; independent of preparation scale.}
                       scheduledTime: {type: string}
                       groupId: {type: string}
                       leftoverOfGroupId: {type: string}
@@ -828,13 +829,14 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [date, slot, source, sourceId, scaleFactor]
+            required: [date, slot, source, sourceId, scaleFactor, plannedServings]
             properties:
               date: {type: string, format: date}
               slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
               source: {type: string, enum: [recipe, meal]}
               sourceId: {type: string, format: uuid}
               scaleFactor: {type: number, exclusiveMinimum: 0}
+              plannedServings: {type: number, exclusiveMinimum: 0, description: Expected servings eaten at this meal; independent of preparation scale.}
               scheduledTime: {type: string}
               groupId: {type: string}
               leftoverOfGroupId: {type: string}
