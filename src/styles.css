@@ -609,6 +609,48 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .rating-input button.selected { color: var(--warn); }
 .rating-input small { text-align: right; color: var(--muted); }
 .feedback-form { display: grid; gap: 14px; }
+.pin-emoji { flex: 0 0 18px !important; font-size: 15px; }
+.pinned-recipes { margin-bottom: 8px; }
+.grocery-row { padding: 0 10px 0 18px; }
+.grocery-toggle { min-height: 47px; padding: 9px 0; flex: 1; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.grocery-toggle strong { flex: 1; }
+.grocery-remove { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; }
+.grocery-remove:hover { color: var(--urgent); background: #25191b; }
+.grocery-remove svg { width: 15px; }
+.product-toolbar select { min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); }
+.brand-group > .product-grid { padding: 0; gap: 0; }
+.brand-group .product-card { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.brand-group .product-card:nth-child(even) { border-right: 0; }
+.planned-meal-group { margin-top: 8px; border-left: 2px solid var(--mint); border-radius: 0 9px 9px 0; background: #1a201d; overflow: hidden; }
+.planned-meal-group.leftover { border-left-color: var(--warn); }
+.planned-meal-group.made { border-left-color: var(--info); }
+.planned-meal-head { padding: 8px 9px 5px; display: flex; align-items: center; gap: 5px; }
+.planned-meal-head > small { flex: 1; }
+.plan-status { padding: 3px 5px; border-radius: 4px; color: var(--muted); background: #202725; font: 8px 'JetBrains Mono', monospace; text-transform: uppercase; }
+.plan-status.made { color: var(--info); }
+.plan-status.missed { color: var(--faint); }
+.planned-components button { width: 100%; padding: 5px 9px; display: flex; align-items: flex-start; gap: 6px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 11.5px; cursor: pointer; }
+.planned-components button:hover { background: #202725; }
+.plan-actions { padding: 7px 9px 9px; display: flex; gap: 6px; }
+.plan-actions button { width: auto; padding: 4px 6px; display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--faint); font-size: 9px; cursor: pointer; }
+.plan-actions button:hover { color: var(--text); }
+.plan-actions button:last-child:hover { color: var(--urgent); }
+.plan-actions svg { width: 11px; }
+.week-day.past { background: #101412; opacity: .62; }
+.week-day.past:hover { opacity: .85; }
+.lot-detail-list { display: grid; gap: 12px; }
+.lot-detail-card { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: var(--card-2); }
+.lot-detail-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.lot-detail-head strong { font-size: 16px; }
+.lot-detail-head span { color: var(--muted); }
+.lot-detail-head em { margin-left: auto; font: normal 10px 'JetBrains Mono', monospace; }
+.lot-detail-head em.urgent { color: var(--urgent); }
+.lot-detail-head em.warn { color: var(--warn); }
+.lot-actions { margin-top: 12px; display: flex; align-items: end; gap: 8px; }
+.lot-actions label { flex: 1; display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
+.lot-actions input { width: 100%; height: 36px; padding: 0 9px; border: 1px solid #2b3430; border-radius: 8px; background: #111513; color: var(--text); }
+.button.danger { border: 1px solid #593036; background: #281719; color: #f0a0aa; }
+.button.danger:hover { background: #351d20; }
 
 @media (max-width: 720px) {
   .product-grid { grid-template-columns: 1fr; }
@@ -618,4 +660,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .week-switcher { position: sticky; top: 0; z-index: 2; background: var(--bg); }
   .rating-input { grid-template-columns: 60px 1fr; }
   .rating-input small { grid-column: 2; text-align: left; }
+  .product-toolbar select { flex: 1; }
+  .lot-actions { align-items: stretch; flex-wrap: wrap; }
+  .lot-actions label { flex-basis: 100%; }
 }

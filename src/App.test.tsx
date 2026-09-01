@@ -49,7 +49,7 @@ describe('Pantry web UI', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
-    await user.click(screen.getAllByRole('button', { name: 'View recipe' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('INGREDIENTS')).toBeInTheDocument();
@@ -58,6 +58,22 @@ describe('Pantry web UI', () => {
 
     await user.click(within(dialog).getByRole('button', { name: /all-purpose flour/i }));
     expect(within(dialog).getByText('1 of 8 complete')).toBeInTheDocument();
+  });
+
+  it('edits recipes and pins started cooking to the sidebar', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getAllByRole('button', { name: 'Edit recipe' })[0]);
+    expect(within(screen.getByRole('dialog')).getByLabelText('Recipe name')).toHaveValue('Simple Pancakes');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /all-purpose flour/i }));
+    await user.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' }).at(-1)!);
+    expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
   });
 
   it('checks grocery rows and updates the shopping summary', async () => {

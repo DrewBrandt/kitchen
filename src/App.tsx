@@ -34,7 +34,7 @@ import {
   type PanelKind,
   type Recipe,
 } from './data';
-import { usePantryData } from './pantry-data';
+import { usePantryData, type InventoryFood } from './pantry-data';
 
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
   today: House,
@@ -64,6 +64,7 @@ interface PanelState {
   kind: PanelKind;
   recipe?: Recipe;
   values?: Record<string, string>;
+  inventoryFood?: InventoryFood;
 }
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ');
@@ -85,7 +86,7 @@ function calendarDateKey(date: Date) {
 
 const servingLabel = (count: number) => `${count} serving${count === 1 ? '' : 's'}`;
 
-export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeal }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeal?: (id: string) => Promise<void> } = {}) {
+export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onLogExternal, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onRebuildShopping, onRemovePlannedMeals, onSetPlannedMealsMade, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity }: { ownerName?: string; syncStatus?: 'connecting' | 'synced' | 'error'; onSignOut?: () => void; onToggleGrocery?: (id: string, checked: boolean) => Promise<void>; onVoidFoodLog?: (id: string) => Promise<void>; onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>; onLogExternal?: (id: string) => Promise<void>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onConsumePrepared?: (id: string) => Promise<void>; onRebuildShopping?: () => Promise<number>; onRemovePlannedMeals?: (ids: string[]) => Promise<void>; onSetPlannedMealsMade?: (ids: string[], made: boolean) => Promise<void>; onRemoveGrocery?: (id: string) => Promise<void>; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<void>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<void> } = {}) {
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
@@ -97,6 +98,9 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const [shoppingMode, setShoppingMode] = useState(false);
+  const [activeRecipeIds, setActiveRecipeIds] = useState<Set<string>>(() => new Set(recipes.filter((recipe) => {
+    try { return (JSON.parse(localStorage.getItem(`mise.recipe-progress.${recipe.id}`) ?? '[]') as string[]).length > 0; } catch { return false; }
+  }).map((recipe) => recipe.id)));
 
   useEffect(() => {
     setCheckedGroceries(new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map(groceryKey)));
@@ -115,7 +119,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   const inventoryLotCount = inventorySections.reduce((total, section) => total + section.foods.reduce((foodTotal, food) => foodTotal + food.lots.length, 0), 0);
   const groceryTotal = grocerySections.flatMap((section) => section.items).length;
   const groceryDone = checkedGroceries.size;
-  const plannedMealCount = weekDays.reduce((total, day) => total + day.meals.length, 0);
+  const plannedMealCount = new Set(weekDays.flatMap((day) => day.meals.map((meal) => meal.groupId ?? meal.id ?? `${day.dateKey ?? `${day.day}-${day.date}`}-${meal.name}`))).size;
   const now = new Date();
   const dateLabel = localDateLabel(now, pantryData.settings.timeZone);
   const greeting = greetingFor(now, pantryData.settings.timeZone);
@@ -151,6 +155,13 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   function open(kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) {
     setPanel({ kind, recipe, values });
   }
+
+  function openInventory(food: InventoryFood) {
+    setPanel({ kind: 'inventory-detail', inventoryFood: food });
+  }
+
+  const todayPins = weekDays.find((day) => day.today)?.meals.flatMap((meal) => recipes.filter((recipe) => recipe.id === meal.recipeId)) ?? [];
+  const pinnedRecipes = [...new Map([...todayPins, ...recipes.filter((recipe) => activeRecipeIds.has(recipe.id))].map((recipe) => [recipe.id, recipe])).values()];
 
   function notify(message: string) {
     setToast(message);
@@ -191,6 +202,8 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         badges={{ inventory: inventoryFoodCount, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
         onNavigate={setPage}
         onProfile={() => open('profile')}
+        pinnedRecipes={pinnedRecipes}
+        onPinnedRecipe={(recipe) => open('cook', recipe)}
         onSignOut={onSignOut}
       />
 
@@ -225,6 +238,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
               onFilter={setInventoryFilter}
               onSearch={setSearch}
               onOpen={open}
+              onOpenFood={openInventory}
             />
           )}
           {page === 'recipes' && <RecipesPage filter={recipeFilter} onFilter={setRecipeFilter} onOpen={open} />}
@@ -232,26 +246,28 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
           {page === 'food-log' && <FoodLogPage onOpen={open} notify={notify} onVoid={onVoidFoodLog} />}
           {page === 'history' && <HistoryPage onOpen={open} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
-          {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeal} />}
+          {page === 'week' && <WeekPage onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onSetMade={onSetPlannedMealsMade} />}
           {page === 'grocery' && (
             <GroceryPage
               checked={checkedGroceries}
               toggle={toggleGrocery}
               shoppingMode={shoppingMode}
               onShoppingMode={setShoppingMode}
+              onRemove={onRemoveGrocery}
+              notify={notify}
             />
           )}
         </div>
       </main>
 
       <MobileNav page={page} onNavigate={setPage} onScan={() => open('scan')} />
-      {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} />}
+      {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} onRecipeProgress={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} onConsumeInventoryLot={onConsumeInventoryLot} onSetInventoryLotQuantity={onSetInventoryLotQuantity} />}
       {toast && <div className="toast" role="status"><Check />{toast}</div>}
     </div>
   );
 }
 
-function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, onNavigate, onProfile, onSignOut }: { page: PageId; ownerName: string; syncStatus: 'connecting' | 'synced' | 'error'; groceryLeft: number; badges: Partial<Record<PageId, number>>; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
+function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, pinnedRecipes, onPinnedRecipe, onNavigate, onProfile, onSignOut }: { page: PageId; ownerName: string; syncStatus: 'connecting' | 'synced' | 'error'; groceryLeft: number; badges: Partial<Record<PageId, number>>; pinnedRecipes: Recipe[]; onPinnedRecipe: (recipe: Recipe) => void; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
   const initials = ownerName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   return (
     <aside className="sidebar">
@@ -270,6 +286,7 @@ function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, onNavigate,
           })}
         </nav>
       ))}
+      {pinnedRecipes.length > 0 && <nav className="nav-group pinned-recipes" aria-label="Pinned cooking"><div className="nav-label">On deck</div>{pinnedRecipes.slice(0, 4).map((recipe) => <button className="nav-item" key={recipe.id} onClick={() => onPinnedRecipe(recipe)}><span className="pin-emoji">{recipe.emoji}</span><span>{recipe.name}</span><small>Open</small></button>)}</nav>}
       <div className="sidebar-spacer" />
       <button className="profile-row" aria-label={`${ownerName} — Routine & food profile`} onClick={onProfile}>
         <span className="avatar">{initials}</span><span><strong>{ownerName}</strong><small>Routine & food profile</small></span><Settings2 />
@@ -347,7 +364,7 @@ function TodayPage({ onNavigate, onOpen, notify, onConsumePrepared }: { onNaviga
       </div>
 
       <Card>
-        <SectionTitle title="Ready to eat" subtitle="Leftovers and prepared batches, separate from raw inventory." />
+        <SectionTitle title="Ready to eat" />
         {preparedLots.map((lot) => <PreparedRow key={lot.id} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} due={lot.due} progress={lot.progress} onEat={() => { if (onConsumePrepared) void onConsumePrepared(lot.id).then(() => notify(`One serving of ${lot.name} logged and deducted.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
         {!preparedLots.length && <div className="empty-ready"><CookingPot /><div><strong>Nothing prepared yet</strong><small>Cook a recipe to keep ready-to-eat servings here.</small></div><button className="button secondary compact" onClick={() => onNavigate('recipes')}>Find a recipe</button></div>}
       </Card>
@@ -374,7 +391,7 @@ function PreparedRow({ emoji, name, where, servings, due, progress, onEat }: { e
   return <div className="prepared-row"><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong><small>{where}</small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><button className="button compact" onClick={onEat}>Eat</button></div>;
 }
 
-function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void }) {
+function InventoryPage({ filter, search, onFilter, onSearch, onOpen, onOpenFood }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void }) {
   const { inventorySections } = usePantryData();
   const sections = useMemo(() => inventorySections.map((section) => ({
     ...section,
@@ -394,7 +411,7 @@ function InventoryPage({ filter, search, onFilter, onSearch, onOpen }: { filter:
         <Card className="inventory-section" key={section.label}>
           <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.foods.length} foods</small></div>
           {section.foods.map((food) => (
-            <button className="inventory-row" key={food.name} onClick={() => onOpen('lot', undefined, food.productId ? { product: food.productId } : undefined)}>
+            <button className="inventory-row" key={food.name} onClick={() => onOpenFood(food)}>
               <span className="row-emoji">{food.emoji}</span><div className="inventory-name"><strong>{food.name}</strong><small>{food.sub}</small></div>
               <div className="lot-meter"><div>{food.lots.map((lot, index) => <span key={lot} className={cx('lot-bar', index === 0 && food.tone)} />)}</div><small>{food.lots.join(' · ')}</small></div>
               <strong className="inventory-total">{food.total}</strong><small className={cx('inventory-due', food.tone)}>{food.due}</small>
@@ -424,7 +441,7 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
             <div className="recipe-head"><span>{recipe.emoji}</span><div className="grow"><div className="title-with-badge"><h2>{recipe.name}</h2></div><small>{recipe.minutes} min · {servingLabel(recipe.servings)} · {recipe.prepCount ?? 0} preparation{recipe.prepCount === 1 ? '' : 's'}</small></div><div><Rating label="EASE" value={recipe.ease} /><Rating label="TASTE" value={recipe.taste} /></div></div>
             <div className="ingredient-chips">{recipe.ingredients.map((item) => { const short = item.stock.includes('· short'); return <span className={short ? 'short' : ''} key={item.label}>{short ? '!' : '✓'} {item.label}</span>; })}</div>
             <p className="recipe-nutrition">{recipe.nutrition}</p>
-            <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-detail', recipe)}>View recipe</button></div>
+            <div className="card-actions"><button className="button primary" onClick={() => onOpen('cook', recipe)}>Make batch</button><button className="button secondary" onClick={() => onOpen('recipe-edit', recipe)}>Edit recipe</button></div>
           </Card>
         ))}
         {!visibleRecipes.length && <Card className="empty-state"><CookingPot /><h2>Nothing is fully stocked</h2><p>Add the missing ingredients, then check again.</p></Card>}
@@ -438,7 +455,7 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
   );
 }
 
-function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void }) {
+function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, notify }: { checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void; onRemove?: (id: string) => Promise<void>; notify: (message: string) => void }) {
   const { grocerySections, inventorySections } = usePantryData();
   const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const total = grocerySections.flatMap((section) => section.items).length;
@@ -448,7 +465,7 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checke
   return (
     <div className={cx(shoppingMode && 'shopping-mode')}>
       <Card className="grocery-summary">
-        <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /><small>Manual items and meal-plan shortages are kept together.</small></div>
+        <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{total - done === 0 ? 'Shopping complete' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /></div>
         <div className="next-aisle"><span>{next ? 'NEXT AISLE' : 'ALL DONE'}</span><strong>{next?.label ?? 'Everything checked'}</strong><button className="button compact" onClick={() => onShoppingMode(!shoppingMode)}>{shoppingMode ? 'Exit shopping mode' : 'Start shopping mode'}</button></div>
       </Card>
       <div className="grocery-grid">
@@ -456,9 +473,7 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checke
           <Card className={cx('grocery-section', section.items.every((item) => checked.has(itemKey(item))) && 'complete')} key={section.label}>
             <div className="inventory-section-head"><span>{section.emoji}</span><strong>{section.label}</strong><small>{section.items.filter((item) => !checked.has(itemKey(item))).length} left</small></div>
             {section.items.map((item) => (
-              <button className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} onClick={() => toggle(item)} key={itemKey(item)}>
-                <span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity}</small>
-              </button>
+              <div className={cx('grocery-row', checked.has(itemKey(item)) && 'checked')} key={itemKey(item)}><button className="grocery-toggle" onClick={() => toggle(item)}><span className="check-box">{checked.has(itemKey(item)) && <Check />}</span><strong>{item.name}</strong><small>{item.quantity}</small></button>{item.id && <button className="grocery-remove" aria-label={`Remove ${item.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(item.id!).then(() => notify(`${item.name} removed from the grocery list.`)).catch(() => notify(`Could not remove ${item.name}.`)); }}><Trash2 /></button>}</div>
             ))}
           </Card>
         ))}
@@ -468,7 +483,7 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode }: { checke
   );
 }
 
-function WeekPage({ onOpen, notify, onRemove }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: (message: string) => void; onRemove?: (id: string) => Promise<void> }) {
+function WeekPage({ onOpen, notify, onRemove, onSetMade }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: (message: string) => void; onRemove?: (ids: string[]) => Promise<void>; onSetMade?: (ids: string[], made: boolean) => Promise<void> }) {
   const { plannedMeals, recipes, settings } = usePantryData();
   const [weekOffset, setWeekOffset] = useState(0);
   const weekDays = useMemo(() => {
@@ -489,12 +504,13 @@ function WeekPage({ onOpen, notify, onRemove }: { onOpen: (kind: PanelKind, reci
     });
   }, [plannedMeals, settings.timeZone, weekOffset]);
   const weekLabel = `${new Date(`${weekDays[0].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(`${weekDays[6].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const todayKey = calendarDateKey(new Date());
   return (
     <Card className="week-card"><div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
       <div className="week-grid">{weekDays.map((day) => (
-        <div className={cx('week-day', day.today && 'today')} key={day.dateKey}>
+        <div className={cx('week-day', day.today && 'today', day.dateKey < todayKey && 'past')} key={day.dateKey}>
           <div className="week-date"><strong>{day.day}</strong><small>{day.date}</small></div>
-          <div className="week-meals">{day.meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <div className="planned-meal" key={meal.id}><button onClick={() => recipe ? onOpen('recipe-detail', recipe) : onOpen('meal', undefined, { plan_date: day.dateKey, daypart: meal.slot.toLowerCase() })}><small>{meal.slot}</small><span>{meal.emoji} {meal.name}</span></button><button className="plan-remove" aria-label={`Remove ${meal.name}`} disabled={!onRemove} onClick={() => { if (onRemove) void onRemove(meal.id).then(() => notify(`${meal.name} removed from the plan.`)).catch(() => notify(`Could not remove ${meal.name}.`)); }}><X /></button></div>; })}</div>
+          <div className="week-meals">{[...day.meals.reduce((groups, meal) => { const key = meal.groupId ?? meal.id ?? meal.name; groups.set(key, [...(groups.get(key) ?? []), meal]); return groups; }, new Map<string, typeof day.meals>()).entries()].map(([groupId, meals]) => { const made = meals.every((meal) => meal.status === 'made'); const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []); return <div className={cx('planned-meal-group', made && 'made', meals[0].isLeftover && 'leftover')} key={groupId}><div className="planned-meal-head"><small>{meals[0].slot}{meals[0].isLeftover ? ' · LEFTOVERS' : ''}</small><span className={cx('plan-status', made ? 'made' : day.dateKey < todayKey ? 'missed' : 'planned')}>{made ? 'Made' : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span></div><div className="planned-components">{meals.map((meal) => { const recipe = recipes.find((candidate) => candidate.id === meal.recipeId); return <button key={meal.id} disabled={!recipe} onClick={() => recipe && onOpen('recipe-detail', recipe)}><span>{meal.emoji}</span>{meal.name}</button>; })}</div><div className="plan-actions"><button disabled={!onSetMade || !ids.length} onClick={() => { if (onSetMade) void onSetMade(ids, !made).then(() => notify(made ? 'Meal marked as planned.' : 'Meal marked as made.')).catch(() => notify('Could not update the meal status.')); }}>{made ? 'Undo made' : 'Mark made'}</button><button aria-label={`Remove ${meals.map((meal) => meal.name).join(', ')}`} disabled={!onRemove || !ids.length} onClick={() => { if (onRemove) void onRemove(ids).then(() => notify('Meal removed from the plan.')).catch(() => notify('Could not remove the meal.')); }}><Trash2 /> Remove</button></div></div>; })}</div>
           <button className="day-add" aria-label={`Add meal on ${day.day}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Plus /></button>
         </div>
       ))}</div>
@@ -620,9 +636,13 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
 function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => void; notify: (message: string) => void; onLog?: (id: string) => Promise<void> }) {
   const { products } = usePantryData();
   const [query, setQuery] = useState('');
+  const [brandFilter, setBrandFilter] = useState('All brands');
+  const [sort, setSort] = useState<'used' | 'recent' | 'name'>('used');
   const [viewing, setViewing] = useState<(typeof products)[number] | null>(null);
   const [comparison, setComparison] = useState<string[]>([]);
-  const visible = products.filter((product) => `${product.label} ${product.foodName} ${product.barcode}`.toLowerCase().includes(query.toLowerCase()));
+  const brands = [...new Set(products.map((product) => product.brand || 'Unbranded'))].sort();
+  const visible = products.filter((product) => `${product.label} ${product.foodName} ${product.barcode}`.toLowerCase().includes(query.toLowerCase()) && (brandFilter === 'All brands' || (product.brand || 'Unbranded') === brandFilter));
+  const brandGroups = [...visible.reduce((groups, product) => { const brand = product.brand || 'Unbranded'; groups.set(brand, [...(groups.get(brand) ?? []), product]); return groups; }, new Map<string, typeof products>()).entries()].sort((left, right) => sort === 'name' ? left[0].localeCompare(right[0]) : Math.max(...right[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0)) - Math.max(...left[1].map((item) => sort === 'used' ? item.useCount : Date.parse(item.lastUsedAt) || 0)));
   const compared = comparison.map((id) => products.find((product) => product.id === id)).filter(Boolean) as typeof products;
   function toggleCompare(id: string) {
     const product = products.find((candidate) => candidate.id === id);
@@ -634,17 +654,18 @@ function ProductsPage({ onOpen, notify, onLog }: { onOpen: (kind: PanelKind) => 
       return [...current, id].slice(-2);
     });
   }
-  return <div className="stack"><div className="toolbar"><label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, or barcode…" /></label><button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan barcode</button></div>{compared.length > 0 && <Card className="comparison-card"><SectionTitle title={`Compare ${compared[0].foodName}`} subtitle="Nutrition values use each product's stored nutrition basis." action="Clear" onAction={() => setComparison([])} /><div className="comparison-grid"><span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [<span key={`${label}-label`}>{label}</span>, ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>), ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : [])])}</div></Card>}<div className="product-grid">{visible.map((product) => <Card className="product-card" key={product.id}><div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName}</small><strong>{product.label}</strong><em>{product.barcode || 'No barcode'}</em></div></div><div className="product-macros"><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div><div className="card-actions"><button className="button secondary" onClick={() => setViewing(product)}>View</button><button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>{product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} added to today's food log.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}</div></Card>)}</div>{!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2><p>Try another name, brand, food, or barcode.</p></Card>}{viewing && <div className="panel-layer"><button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} /><aside className="action-panel product-detail" role="dialog" aria-modal="true"><PanelHeader eyebrow={viewing.foodName.toUpperCase()} title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} /><div className="panel-body"><div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></div></aside></div>}</div>;
+  return <div className="stack"><div className="toolbar product-toolbar"><label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, or barcode…" /></label><select aria-label="Filter by brand" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option>All brands</option>{brands.map((brand) => <option key={brand}>{brand}</option>)}</select><select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="used">Most used</option><option value="recent">Recently used</option><option value="name">Brand A–Z</option></select><button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan</button></div>{compared.length > 0 && <Card className="comparison-card"><SectionTitle title={`Compare ${compared[0].foodName}`} action="Clear" onAction={() => setComparison([])} /><div className="comparison-grid"><span /><strong>{compared[0]?.label}</strong><strong>{compared[1]?.label ?? 'Select one more'}</strong>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber', 'Sodium'] as const).flatMap((label) => [<span key={`${label}-label`}>{label}</span>, ...compared.map((product) => <em key={`${label}-${product.id}`}>{Math.round(product.nutrition[label]).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</em>), ...(compared.length === 1 ? [<em key={`${label}-empty`}>—</em>] : [])])}</div></Card>}{brandGroups.map(([brand, items]) => <Card className="brand-group" key={brand}><SectionTitle title={brand} action={`${items.length} product${items.length === 1 ? '' : 's'}`} /><div className="product-grid">{[...items].sort((left, right) => sort === 'name' ? left.name.localeCompare(right.name) : sort === 'used' ? right.useCount - left.useCount : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)).map((product) => <div className="product-card" key={product.id}><div className="product-title"><span>{product.emoji}</span><div className="grow"><small>{product.foodName} · used {product.useCount}×</small><strong>{product.name}</strong><em>{product.barcode || 'No barcode'}</em></div></div><div className="product-macros"><span>{Math.round(product.nutrition.Calories)} cal</span><span>{Math.round(product.nutrition.Protein)} g protein</span><span>{Math.round(product.nutrition.Sodium)} mg sodium</span></div><div className="card-actions"><button className="button secondary" onClick={() => setViewing(product)}>View</button><button className={cx('button secondary', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>{product.isExternal && <button className="button primary" disabled={!onLog} onClick={() => { if (onLog) void onLog(product.id).then(() => notify(`${product.name} logged.`)).catch(() => notify(`Could not log ${product.name}.`)); }}>Log</button>}</div></div>)}</div></Card>)}{!visible.length && <Card className="empty-state"><Store /><h2>No matching products</h2></Card>}{viewing && <div className="panel-layer"><button className="panel-scrim" aria-label="Close product details" onClick={() => setViewing(null)} /><aside className="action-panel product-detail" role="dialog" aria-modal="true"><PanelHeader eyebrow={viewing.foodName.toUpperCase()} title={`${viewing.emoji} ${viewing.label}`} subtitle={viewing.barcode ? `Barcode ${viewing.barcode}` : 'No barcode saved'} onClose={() => setViewing(null)} /><div className="panel-body"><div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></div></aside></div>}</div>;
 }
 
-const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>, { eyebrow: string; title: string; subtitle: string; save: string }> = {
-  lot: { eyebrow: 'PUT AWAY', title: 'Add a lot', subtitle: 'One purchase, one expiry date. Lots deduct earliest-first.', save: 'Save lot' },
+const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal' | 'inventory-detail'>, { eyebrow: string; title: string; subtitle: string; save: string }> = {
+  lot: { eyebrow: 'PUT AWAY', title: 'Add a lot', subtitle: 'Track a quantity, location, and date.', save: 'Save lot' },
   groceries: { eyebrow: 'GROCERY LIST', title: 'Add several grocery items', subtitle: 'Add one manual shopping-list item per line.', save: 'Add items' },
   food: { eyebrow: 'DEFINE', title: 'Define a food', subtitle: 'Units, conversions, nutrition, and where this food normally lives.', save: 'Save food' },
   recipe: { eyebrow: 'RECIPE', title: 'New recipe', subtitle: 'Ingredients are matched against tracked foods for availability.', save: 'Save recipe' },
+  'recipe-edit': { eyebrow: 'RECIPE', title: 'Edit recipe', subtitle: 'Update the recipe, ingredients, or method.', save: 'Save changes' },
   external: { eyebrow: 'PRODUCTS', title: 'Add a product', subtitle: 'Add a known restaurant item or packaged product with its nutrition.', save: 'Save product' },
   log: { eyebrow: 'FOOD LOG', title: 'Log food', subtitle: 'Enter a meal and its nutrition by hand.', save: 'Log it' },
-  item: { eyebrow: 'GROCERY LIST', title: 'Add an item', subtitle: 'Add a durable manual item alongside plan-generated shortages.', save: 'Add item' },
+  item: { eyebrow: 'GROCERY LIST', title: 'Add an item', subtitle: '', save: 'Add item' },
   meal: { eyebrow: 'PLANNING', title: 'Add a recipe to the plan', subtitle: 'Choose a saved recipe, date, meal, and scale.', save: 'Add to plan' },
   targets: { eyebrow: 'PROFILE', title: 'Edit targets', subtitle: 'Goals and limits used across Today, Food log, and Trends.', save: 'Save targets' },
   export: { eyebrow: 'HISTORY', title: 'Export range', subtitle: 'A CSV of every logged meal in the selected range.', save: 'Download CSV' },
@@ -653,12 +674,13 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
   calendar: { eyebrow: 'CALENDAR', title: 'Mise Planner', subtitle: 'Schedule-aware grocery and preparation reminders.', save: 'Sync now' },
 };
 
-function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes }: { state: PanelState; onClose: () => void; notify: (message: string) => void; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void> }) {
+function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity }: { state: PanelState; onClose: () => void; notify: (message: string) => void; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string) => Promise<string>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<void>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<void> }) {
   const { history, recipes } = usePantryData();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (state.kind === 'recipe-detail' || state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={state.kind === 'cook'} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} />;
+  if (state.kind === 'recipe-detail' || state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={state.kind === 'cook'} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} />;
   if (state.kind === 'combined-meal') return <CombinedMealPanel onClose={onClose} notify={notify} onCook={onCookRecipes} />;
+  if (state.kind === 'inventory-detail') return state.inventoryFood ? <InventoryLotsPanel food={state.inventoryFood} onClose={onClose} notify={notify} onConsume={onConsumeInventoryLot} onSetQuantity={onSetInventoryLotQuantity} /> : null;
   const copy = PANEL_COPY[state.kind];
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -698,7 +720,7 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepF
       <aside className="action-panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
         <PanelHeader eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} onClose={onClose} />
         <form id="panel-action-form" onSubmit={(event) => void submit(event)}>
-          <div className="panel-body"><PanelFields kind={state.kind} values={state.values} />{error && <div className="auth-error" role="alert">{error}</div>}</div>
+          <div className="panel-body"><PanelFields kind={state.kind} values={state.values} recipe={state.recipe} />{error && <div className="auth-error" role="alert">{error}</div>}</div>
         </form>
         <div className="panel-footer"><button className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" type="submit" form="panel-action-form" disabled={saving}>{saving ? 'Saving…' : copy.save}</button></div>
       </aside>
@@ -710,8 +732,8 @@ function PanelHeader({ eyebrow, title, subtitle, onClose }: { eyebrow: string; t
   return <div className="panel-header"><div className="grow"><div className="eyebrow">{eyebrow}</div><h2 id="panel-title">{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X /></button></div>;
 }
 
-function PanelFields({ kind, values = {} }: { kind: Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal'>; values?: Record<string, string> }) {
-  const { categories, locations, products, recipes, settings, units } = usePantryData();
+function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined-meal' | 'inventory-detail'>; values?: Record<string, string>; recipe?: Recipe }) {
+  const { categories, locations, plannedMeals, products, recipes, settings, units } = usePantryData();
   const today = new Date().toLocaleDateString('en-CA');
   const defaultUnit = units.find((unit) => unit.shortName === 'ct')?.id ?? units[0]?.id ?? '';
 
@@ -741,19 +763,22 @@ function PanelFields({ kind, values = {} }: { kind: Exclude<PanelKind, 'recipe-d
   if (kind === 'export') return <div className="form-grid"><div className="form-grid two"><Field name="date_from" label="From" type="date" required /><Field name="date_to" label="Through" type="date" defaultValue={today} required /></div><label className="field"><span>Format</span><select name="format"><option value="csv">CSV</option></select></label></div>;
 
   if (kind === 'meal') return <div className="form-grid">
-    <SelectField name="recipe" label="Recipe" defaultValue={values.recipe} options={recipes.map((recipe) => ({ value: recipe.id, label: `${recipe.emoji} ${recipe.name}` }))} required />
+    <SelectField name="intent" label="Plan type" defaultValue="prepare" options={[{ value: 'prepare', label: 'Prepare a meal' }, { value: 'leftover', label: 'Eat leftovers from a planned meal' }]} required />
+    <SelectField name="recipe" label="Recipe (for a newly prepared meal)" defaultValue={values.recipe} options={recipes.map((recipe) => ({ value: recipe.id, label: `${recipe.emoji} ${recipe.name}` }))} />
+    <SelectField name="source_group_id" label="Original meal (for leftovers)" options={[...plannedMeals.reduce((groups, meal) => { const group = groups.get(meal.groupId) ?? { value: meal.groupId, label: `${meal.dateKey} · ${meal.name}` }; if (!group.label.includes(meal.name)) group.label += ` + ${meal.name}`; groups.set(meal.groupId, group); return groups; }, new Map<string, { value: string; label: string }>()).values()]} />
     <div className="form-grid two"><Field name="plan_date" label="Date" type="date" defaultValue={values.plan_date || today} required /><SelectField name="daypart" label="Meal" defaultValue={values.daypart || 'dinner'} options={['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} required /></div>
     <Field name="scale_factor" label="Recipe scale" type="number" defaultValue="1" step="0.25" min="0.25" required />
     <Field name="note" label="Notes" placeholder="Optional planning note" />
   </div>;
 
-  if (kind === 'recipe') return <div className="form-grid">
-    <div className="form-grid two"><Field name="name" label="Recipe name" placeholder="Recipe name" required /><Field name="emoji" label="Emoji" placeholder="🍳" /></div>
-    <div className="form-grid two"><Field name="servings" label="Servings" type="number" defaultValue="4" min="0.25" step="0.25" required /><Field name="source_url" label="Source URL" type="url" placeholder="https://…" /></div>
-    <label className="field"><span>Ingredients</span><textarea name="ingredients" required rows={7} placeholder={'1.5 cup All-purpose flour\n2 ct Egg'} /></label>
+  if (kind === 'recipe' || kind === 'recipe-edit') return <div className="form-grid">
+    {recipe && <input type="hidden" name="recipe_id" value={recipe.id} />}
+    <div className="form-grid two"><Field name="name" label="Recipe name" defaultValue={recipe?.name} placeholder="Recipe name" required /><Field name="emoji" label="Emoji" defaultValue={recipe?.emoji} placeholder="🍳" /></div>
+    <div className="form-grid two"><Field name="servings" label="Servings" type="number" defaultValue={String(recipe?.servings ?? 4)} min="0.25" step="0.25" required /><Field name="source_url" label="Source URL" type="url" defaultValue={recipe?.sourceUrl} placeholder="https://…" /></div>
+    <label className="field"><span>Ingredients</span><textarea name="ingredients" required rows={7} defaultValue={recipe?.ingredientText} placeholder={'1.5 cup All-purpose flour\n2 ct Egg'} /></label>
     <small>Use: quantity, unit abbreviation, then the exact tracked food name.</small>
-    <label className="field"><span>Method</span><textarea name="instructions" rows={7} placeholder="One step per line" /></label>
-    <label className="toggle-row"><input name="prompt_for_feedback" type="checkbox" defaultChecked /><span><strong>Ask how it went after making</strong><small>Collect taste, ease, and actual cooking time.</small></span></label>
+    <label className="field"><span>Method</span><textarea name="instructions" rows={7} defaultValue={recipe?.instructionText} placeholder="One step per line" /></label>
+    <label className="toggle-row"><input name="prompt_for_feedback" type="checkbox" defaultChecked={recipe?.promptForFeedback ?? true} /><span><strong>Ask how it went after making</strong></span></label>
   </div>;
 
   if (kind === 'lot') return <div className="form-grid">
@@ -813,7 +838,7 @@ function SelectField({ name, label, options, defaultValue, required }: { name: s
   return <label className="field"><span>{label}</span><select name={name} defaultValue={defaultValue} required={required}><option value="">Choose…</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback }: { recipe: Recipe; cooking: boolean; onClose: () => void; notify: (message: string) => void; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void> }) {
+function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback, onProgressChange }: { recipe: Recipe; cooking: boolean; onClose: () => void; notify: (message: string) => void; onCook?: (id: string) => Promise<string>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void }) {
   const storageKey = `mise.recipe-progress.${recipe.id}`;
   const [checks, setChecks] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]); } catch { return new Set(); }
@@ -824,11 +849,20 @@ function RecipePanel({ recipe, cooking, onClose, notify, onCook, onFeedback }: {
   const [taste, setTaste] = useState(0);
   const [minutes, setMinutes] = useState(0);
   const total = recipe.ingredients.length + recipe.steps.length;
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); }, [checks, storageKey]);
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); onProgressChange(recipe.id, checks.size > 0); }, [checks, recipe.id, storageKey]);
   function toggle(key: string) { setChecks((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); }
   const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); };
   if (prepId) return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close feedback" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow="PREPARATION SAVED" title={`How was ${recipe.name}?`} subtitle="This feedback belongs to this preparation and updates the recipe's averages." onClose={onClose} /><div className="panel-body feedback-form"><RatingInput label="Ease" value={ease} onChange={setEase} /><RatingInput label="Taste" value={taste} onChange={setTaste} /><label className="field"><span>Actual time (minutes)</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label><small>Ratings default to 0, which means “not rated” and is excluded from the average.</small></div><div className="panel-footer"><button className="button secondary" onClick={() => { clearProgress(); onClose(); }}>Skip</button><button className="button primary" disabled={saving || !onFeedback} onClick={() => { if (!onFeedback) return; setSaving(true); void onFeedback(prepId, ease, taste, minutes).then(() => { clearProgress(); onClose(); notify('Preparation feedback saved.'); }).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not save feedback.')).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : 'Save feedback'}</button></div></aside></div>;
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow={cooking ? 'COOKING MODE' : 'RECIPE'} title={`${recipe.emoji} ${recipe.name}`} subtitle={`${recipe.servings} servings · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}<div className="deduction-preview"><strong>Progress is remembered</strong><small>You can close this recipe and return without losing checked ingredients or steps. Mark cooked deducts inventory atomically.</small></div></div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow={cooking ? 'COOKING MODE' : 'RECIPE'} title={`${recipe.emoji} ${recipe.name}`} subtitle={`${servingLabel(recipe.servings)} · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button><button className="button primary" disabled={!onCook || saving} onClick={() => { if (!onCook) return; setSaving(true); void onCook(recipe.id).then((id) => { setPrepId(id); notify(`${recipe.name} cooked and inventory deducted.`); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Mark cooked' : 'Cook and deduct'}</button></div></aside></div>;
+}
+
+function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity }: { food: InventoryFood; onClose: () => void; notify: (message: string) => void; onConsume?: (id: string, quantity: number) => Promise<void>; onSetQuantity?: (id: string, remaining: number, discard: boolean) => Promise<void> }) {
+  const [busy, setBusy] = useState('');
+  const run = (id: string, action: () => Promise<void>, message: string) => {
+    setBusy(id);
+    void action().then(() => { notify(message); onClose(); }).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update this lot.')).finally(() => setBusy(''));
+  };
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close lot details" /><aside className="action-panel lot-detail-panel" role="dialog" aria-modal="true"><PanelHeader eyebrow="INVENTORY LOTS" title={`${food.emoji} ${food.name}`} subtitle={`${food.total} across ${food.lotDetails?.length ?? 0} lot${food.lotDetails?.length === 1 ? '' : 's'}`} onClose={onClose} /><div className="panel-body lot-detail-list">{food.lotDetails?.map((lot) => <form className="lot-detail-card" key={lot.id} onSubmit={(event) => event.preventDefault()}><div className="lot-detail-head"><strong>{lot.quantity}</strong><span>{lot.location}</span><em className={lot.tone}>{lot.dateLabel}</em></div><div className="lot-actions"><label><span>Consume</span><input name="consume" type="number" min="0.001" max={lot.remainingBase} step="any" defaultValue={Math.min(1, lot.remainingBase)} /></label><button className="button secondary" disabled={!onConsume || busy === lot.id} onClick={(event) => { const form = event.currentTarget.form!; const quantity = Number(new FormData(form).get('consume')); if (onConsume) run(lot.id, () => onConsume(lot.id, quantity), `${quantity} consumed and logged.`); }}>Consume</button></div><div className="lot-actions"><label><span>Set remaining</span><input name="remaining" type="number" min="0" step="any" defaultValue={lot.remainingBase} /></label><button className="button secondary" disabled={!onSetQuantity || busy === lot.id} onClick={(event) => { const form = event.currentTarget.form!; const remaining = Number(new FormData(form).get('remaining')); if (onSetQuantity) run(lot.id, () => onSetQuantity(lot.id, remaining, false), 'Lot quantity adjusted.'); }}>Adjust</button><button className="button danger" disabled={!onSetQuantity || busy === lot.id} onClick={() => { if (onSetQuantity && window.confirm(`Discard all remaining ${food.name} in this lot as waste?`)) run(lot.id, () => onSetQuantity(lot.id, 0, true), 'Lot discarded as waste.'); }}><Trash2 /> Discard all</button></div></form>)}{!food.lotDetails?.length && <div className="empty-inline">No available lots.</div>}</div><div className="panel-footer"><button className="button secondary" onClick={onClose}>Close</button></div></aside></div>;
 }
 
 function BarcodeScanner() {

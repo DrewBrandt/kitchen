@@ -14,6 +14,7 @@ export type PanelKind =
   | 'groceries'
   | 'food'
   | 'recipe'
+  | 'recipe-edit'
   | 'external'
   | 'log'
   | 'item'
@@ -25,7 +26,8 @@ export type PanelKind =
   | 'calendar'
   | 'recipe-detail'
   | 'cook'
-  | 'combined-meal';
+  | 'combined-meal'
+  | 'inventory-detail';
 
 export interface NavItem {
   id: PageId;
@@ -95,6 +97,10 @@ export interface Recipe {
   taste: number;
   prepCount?: number;
   nutritionValues?: Record<'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium', number>;
+  sourceUrl?: string;
+  promptForFeedback?: boolean;
+  ingredientText?: string;
+  instructionText?: string;
   cookable?: boolean;
 }
 
@@ -102,6 +108,8 @@ export const RECIPES: Recipe[] = [
   {
     id: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', servings: 4, minutes: 24,
     nutrition: '310 cal · 9 g protein per serving', ease: 0, taste: 0, cookable: true,
+    ingredientText: '1.5 cup All-purpose flour\n1.25 cup Milk\n1 ct Egg\n2 tbsp Butter\n0.5 tsp Salt',
+    instructionText: 'Whisk the dry ingredients.\nWhisk in milk and egg until just combined.\nCook portions in butter on a hot skillet.',
     ingredients: [
       { label: '1½ cups all-purpose flour', stock: '1.1 kg in stock' },
       { label: '1¼ cups milk', stock: '1.4 L · expires in 3 days' },
@@ -114,6 +122,8 @@ export const RECIPES: Recipe[] = [
   {
     id: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', servings: 1, minutes: 9,
     nutrition: '220 cal · 13 g protein per serving', ease: 0, taste: 0, cookable: true,
+    ingredientText: '2 ct Egg\n0.5 tbsp Butter\n0.125 tsp Salt',
+    instructionText: 'Beat the eggs with a pinch of salt.\nMelt butter over medium-low heat.\nStir gently until softly set.',
     ingredients: [
       { label: '2 eggs', stock: '14 in stock' },
       { label: '½ tbsp butter', stock: '340 g in stock' },

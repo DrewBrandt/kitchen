@@ -19,6 +19,7 @@ export interface InventoryFood {
   due: string;
   tone: string;
   lots: string[];
+  lotDetails?: Array<{ id: string; quantity: string; location: string; dateLabel: string; tone: string; remainingBase: number }>;
 }
 
 export type NutrientName = 'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium';
@@ -35,6 +36,8 @@ export interface ProductView {
   emoji: string;
   isExternal: boolean;
   nutrition: NutritionValues;
+  useCount: number;
+  lastUsedAt: string;
 }
 
 export interface PantryData {
@@ -42,8 +45,8 @@ export interface PantryData {
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean }> }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; slot: string; name: string; emoji: string; recipeId?: string }> }>;
-  plannedMeals: Array<{ id: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string }>;
+  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean }> }>;
+  plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean }>;
   foodLog: Array<{ id?: string; emoji: string; label: string; serving: string; calories: string; protein: string; time: string; color: string; nutrition?: NutritionValues }>;
   foodLogByDate: Record<string, {
     nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
@@ -78,7 +81,20 @@ export interface PantryData {
 }
 
 export const previewPantryData: PantryData = {
-  inventorySections: INVENTORY_SECTIONS,
+  inventorySections: INVENTORY_SECTIONS.map((section) => ({
+    ...section,
+    foods: section.foods.map((food, index) => ({
+      ...food,
+      lotDetails: [{
+        id: `preview-${section.label}-${index}`,
+        quantity: food.total,
+        location: food.sub.split(' · ')[0] ?? 'pantry',
+        dateLabel: food.due,
+        tone: food.tone,
+        remainingBase: 1,
+      }],
+    })),
+  })),
   recipes: RECIPES,
   grocerySections: GROCERY_SECTIONS.map((section) => ({
     ...section,
@@ -93,7 +109,11 @@ export const previewPantryData: PantryData = {
   },
   history: HISTORY,
   foods: [],
-  products: [],
+  products: [
+    { id: 'preview-product-1', foodId: 'preview-food-milk', foodName: 'Chocolate milk', name: 'Chocolate milk', label: 'Chocolate milk', brand: 'Fairlife', barcode: '811620020657', emoji: '🥛', isExternal: false, nutrition: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, useCount: 8, lastUsedAt: '2026-08-30T12:00:00Z' },
+    { id: 'preview-product-2', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Salted caramel mix-in yogurt', label: 'Salted caramel mix-in yogurt', brand: 'Oikos', barcode: '036632019742', emoji: '🥣', isExternal: false, nutrition: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, useCount: 5, lastUsedAt: '2026-08-29T12:00:00Z' },
+    { id: 'preview-product-3', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Vanilla Greek yogurt', label: 'Vanilla Greek yogurt', brand: 'Oikos', barcode: '036632032093', emoji: '🥣', isExternal: false, nutrition: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, useCount: 3, lastUsedAt: '2026-08-27T12:00:00Z' },
+  ],
   units: [],
   categories: [],
   locations: ['pantry', 'fridge', 'freezer'],
