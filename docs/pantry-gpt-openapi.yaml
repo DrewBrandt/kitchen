@@ -100,12 +100,6 @@ paths:
                     estimated: {type: boolean}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods/{id}:
-    get:
-      operationId: getPantryFood
-      summary: Read one canonical food and its products
-      parameters:
-        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
     patch:
       operationId: editFoodDefinition
       summary: Correct selected fields on an existing canonical food

@@ -26,6 +26,7 @@ describe('Pantry GPT operator pack', () => {
       }
     }
     expect(new Set(operationIds).size).toBe(operationIds.length);
+    expect(operationIds.length).toBeLessThanOrEqual(30);
   });
 
   it('exposes every write body directly without importer-hostile references', () => {
