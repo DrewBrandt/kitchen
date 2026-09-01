@@ -448,17 +448,52 @@ button.soon-row:hover { background: #121715; }
 .panel-scrim { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(4, 6, 5, .7); backdrop-filter: blur(2px); cursor: default; }
 .action-panel { position: relative; width: min(680px, 100%); max-height: min(860px, calc(100vh - 48px)); background: #0f1311; border: 1px solid #2a322f; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 90px rgba(0,0,0,.5); animation: modal-in .18s ease-out; }
 .action-panel.recipe-panel { width: min(760px, 100%); }
-.on-deck-tabs { display: flex; gap: 8px; padding: 12px 24px; overflow-x: auto; border-bottom: 1px solid var(--line); background: #0b0e0d; scrollbar-width: none; }
-.on-deck-tabs::-webkit-scrollbar { display: none; }
-.on-deck-tabs button { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 12px; border: 1px solid #2b3430; border-radius: 9px; background: #151a18; color: var(--muted); cursor: pointer; font-size: 12px; }
-.on-deck-tabs button[aria-selected="true"] { border-color: #648572; background: #1d2923; color: var(--text); box-shadow: inset 0 0 0 1px rgba(95, 224, 160, .12); }
-.on-deck-tabs button span { font-size: 16px; }
-.on-deck-recipe-heading { margin: -4px 0 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
-.on-deck-recipe-heading > div { display: flex; align-items: center; gap: 12px; }
-.on-deck-recipe-heading > div > span { font-size: 30px; }
-.on-deck-recipe-heading h2 { margin: 0 0 4px; font-size: 20px; }
-.on-deck-recipe-heading p, .on-deck-recipe-heading > small { margin: 0; color: var(--muted); font-size: 11.5px; }
-.on-deck-recipe-heading > small { display: block; margin-top: 10px; }
+.on-deck-shell .page-header-inner, .on-deck-page-content { max-width: 1600px; }
+.on-deck-page-content { padding-top: 18px; padding-bottom: 20px; }
+.on-deck-workspace { display: flex; flex-direction: column; gap: 14px; }
+.on-deck-toolbar { min-height: 58px; padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.on-deck-toolbar > div:first-child { flex: 1; min-width: 0; }
+.on-deck-toolbar strong, .on-deck-toolbar span { display: block; }
+.on-deck-toolbar strong { font-size: 12.5px; }
+.on-deck-toolbar > div:first-child span { margin-top: 3px; color: var(--faint); font-size: 10.5px; }
+.layout-switcher { display: flex; gap: 5px; }
+.layout-switcher button { min-height: 36px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #2a332f; border-radius: 8px; background: #151a18; color: var(--muted); cursor: pointer; }
+.layout-switcher button:hover { color: var(--text); border-color: #3d4944; }
+.layout-switcher button.active { color: var(--text); border-color: #648572; background: #1d2923; }
+.layout-switcher svg { width: 15px; height: 15px; }
+.layout-switcher b { width: 15px; font: 700 11px 'JetBrains Mono', monospace; text-align: center; }
+.layout-switcher span { font-size: 10.5px; }
+.on-deck-board { height: calc(100vh - 205px); min-height: 520px; display: grid; gap: 12px; min-width: 0; }
+.on-deck-board.layout-stack { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(520px, calc(100vh - 205px)); overflow-y: auto; padding-right: 3px; }
+.on-deck-board.layout-split { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.on-deck-board.layout-three { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.on-deck-board.layout-quad { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.on-deck-card { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #2a322f; border-radius: 14px; background: #0f1311; box-shadow: 0 12px 36px rgba(0,0,0,.18); transition: opacity .15s, border-color .15s; }
+.on-deck-card.dragging { opacity: .45; border-color: var(--mint); }
+.deck-card-header { min-height: 65px; padding: 10px 10px 10px 8px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); background: #121715; }
+.deck-drag-handle { align-self: stretch; width: 27px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #53615b; cursor: grab; }
+.deck-drag-handle:active { cursor: grabbing; }
+.deck-drag-handle:focus-visible { outline: 1px solid var(--mint); color: var(--mint); }
+.deck-drag-handle svg { width: 16px; }
+.deck-recipe-emoji { font-size: 25px; }
+.deck-card-header > div:nth-of-type(1) { flex: 1; min-width: 0; }
+.deck-card-header h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.deck-card-header p { margin: 3px 0 0; color: var(--faint); font-size: 10.5px; }
+.deck-card-actions { display: flex; gap: 4px; }
+.deck-card-actions .icon-button { width: 28px; height: 28px; font-size: 12px; }
+.deck-card-actions .icon-button:disabled { opacity: .25; cursor: default; }
+.deck-card-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 18px 28px; }
+.deck-card-body h3 { margin: 19px 0 8px; color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; }
+.deck-card-body .cooking-progress { margin-top: 13px; }
+.deck-nutrition { display: block; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.deck-card-footer { min-height: 55px; padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: #0b0e0d; }
+.deck-feedback { display: flex; flex-direction: column; gap: 14px; }
+.deck-feedback .rating-input { grid-template-columns: 58px 1fr; }
+.deck-feedback .rating-input small { grid-column: 1 / -1; text-align: left; }
+.empty-deck { min-height: 420px; display: grid; place-items: center; align-content: center; gap: 10px; border: 1px dashed #303a36; border-radius: 16px; color: var(--muted); text-align: center; }
+.empty-deck > svg { width: 42px; height: 42px; color: #4e5b55; }
+.empty-deck h2, .empty-deck p { margin: 0; }
+.empty-deck p { margin-bottom: 8px; color: var(--faint); font-size: 12px; }
 .action-panel > form { flex: 1; min-height: 0; display: flex; }
 .action-panel > form > .panel-body { width: 100%; }
 @keyframes modal-in { from { transform: translateY(10px) scale(.985); opacity: 0; } }
@@ -554,10 +589,23 @@ button.soon-row:hover { background: #121715; }
   .page-heading h1 { font-size: 22px; margin-top: 5px; }
   .page-heading p { display: none; }
   .header-actions .button { display: none; }
+  .on-deck-shell .header-actions .button { display: inline-flex; min-height: 38px; padding: 0 11px; }
+  .on-deck-shell .header-actions .button span { display: none; }
   .header-actions .icon-button { width: 34px; height: 34px; border-radius: 10px; font-family: 'JetBrains Mono', monospace; }
   .header-actions .icon-button svg { display: none; }
   .header-actions .icon-button::after { content: 'DB'; font-size: 10px; }
   .page-content { padding: 0 14px 24px; }
+  .on-deck-page-content { padding-top: 0; }
+  .on-deck-toolbar { align-items: flex-start; flex-direction: column; gap: 10px; padding: 12px; }
+  .on-deck-toolbar > div:first-child span { display: none; }
+  .layout-switcher { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .layout-switcher::-webkit-scrollbar { display: none; }
+  .layout-switcher button { flex: 1 0 auto; }
+  .layout-switcher button span { display: none; }
+  .on-deck-board.layout-stack, .on-deck-board.layout-split, .on-deck-board.layout-three, .on-deck-board.layout-quad { height: auto; min-height: 0; display: flex; flex-direction: column; overflow: visible; padding: 0; }
+  .on-deck-card { height: min(680px, calc(100vh - 190px)); min-height: 520px; }
+  .deck-card-actions .icon-button:nth-child(-n+2) { display: none; }
+  .deck-card-body { padding: 15px 16px 24px; }
   .today-grid { display: flex; flex-direction: column; gap: 12px; }
   .today-grid > .card { padding: 16px; border-radius: 16px; }
   .nutrition-card .card-kicker { display: none; }
