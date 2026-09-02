@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 
 type Json = Record<string, unknown>;
 type Supabase = ReturnType<typeof createClient>;
+const INVENTORY_QUANTITY_EPSILON = 0.000001;
 const headers = {
   "access-control-allow-origin": "https://chatgpt.com",
   "access-control-allow-headers": "authorization, content-type",
@@ -144,7 +145,7 @@ async function inventory(db: Supabase, includeDepleted = false) {
   const [lotResult, productResult, foodResult, unitResult] = await Promise.all([
     (() => {
       const query = db.from("inventory_lots").select("*").order("use_by");
-      return includeDepleted ? query : query.gt("remaining_qty", 0);
+      return includeDepleted ? query : query.gt("remaining_qty", INVENTORY_QUANTITY_EPSILON);
     })(),
     db.from("products").select("*"),
     db.from("base_foods").select("*"), db.from("measure_conversions").select("*"),
@@ -158,7 +159,7 @@ async function inventory(db: Supabase, includeDepleted = false) {
     return { lotId: lot.id, productId: product?.id,
       product: product ? [product.brand, product.name].filter(Boolean).join(" · ") : null,
       foodId: food?.id, food: food?.name, quantityBase: Number(lot.remaining_qty), displayUnit: unit?.short_name,
-      status: Number(lot.remaining_qty) > 0 ? "available" : "depleted",
+      status: Number(lot.remaining_qty) > INVENTORY_QUANTITY_EPSILON ? "available" : "depleted",
       acquisitionType: lot.acquisition_type,
       totalPrice: lot.total_cost, outOfPocketCost: lot.out_of_pocket_cost, paidBy: lot.paid_by,
       costIsEstimated: lot.cost_is_estimated, costSource: lot.cost_source, priceAsOf: lot.price_as_of,
@@ -186,7 +187,7 @@ async function prepared(db: Supabase, includeDepleted = false, includeVoided = f
   const [lotResult, prepResult, recipeResult] = await Promise.all([
     (() => {
       const query = db.from("inventory_lots").select("*").not("prep", "is", null).order("use_by");
-      return includeDepleted ? query : query.gt("remaining_qty", 0);
+      return includeDepleted ? query : query.gt("remaining_qty", INVENTORY_QUANTITY_EPSILON);
     })(),
     (() => {
       const query = db.from("preps").select("*");
@@ -199,7 +200,7 @@ async function prepared(db: Supabase, includeDepleted = false, includeVoided = f
     return { batchId: lot.id, prepId: prep?.id, recipeId: recipe?.id ?? null,
       sourceType: recipe ? "recipe" : "manual", name: recipe?.name ?? prep?.label, emoji: recipe?.emoji ?? prep?.emoji,
       servingsRemaining: Number(lot.remaining_qty), servingsPrepared: Number(lot.initial_qty), location: lot.location,
-      status: prep?.voided_at ? "voided" : Number(lot.remaining_qty) > 0 ? "available" : "depleted",
+      status: prep?.voided_at ? "voided" : Number(lot.remaining_qty) > INVENTORY_QUANTITY_EPSILON ? "available" : "depleted",
       bestBy: lot.use_by, preparedAt: prep?.prepped_at, timePrecision: prep?.time_precision,
       nutrition: recipe ? null : { calories: prep?.kcal, proteinG: prep?.protein_g, carbsG: prep?.carbs_g,
         fatG: prep?.fat_g, fiberG: prep?.fiber_g, sugarG: prep?.sugar_g, sodiumMg: prep?.sodium_mg,

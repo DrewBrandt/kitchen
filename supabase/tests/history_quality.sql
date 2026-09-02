@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(18);
+select plan(20);
 
 select is(
   (select count(*) from history_quality_issues),
@@ -97,6 +97,18 @@ select is(
   (select count(*) from inventory_events where lot = 'e79cd9a4-31d6-5276-8fbf-fd3680b3cf5e' and food_log = 'd671891e-9f16-4e1a-a080-60d6c6323e2e' and quantity_delta = -4.5),
   1::bigint,
   'The Baileys consumed while cooking now deducts the existing bottle lot'
+);
+
+select is(
+  (select remaining_qty from inventory_lots where id = '8bd01078-77db-4d28-b3f9-d87daab08a09'),
+  0::numeric,
+  'The broccoli lot is exactly depleted rather than retaining conversion residue'
+);
+
+select is(
+  (select count(*) from inventory_events where lot = '8bd01078-77db-4d28-b3f9-d87daab08a09' and note = 'Automatically cleared unit-conversion residue'),
+  1::bigint,
+  'The broccoli residue repair remains explicit in the inventory ledger'
 );
 
 select ok(

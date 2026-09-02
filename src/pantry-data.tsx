@@ -22,7 +22,7 @@ export interface InventoryFood {
   lots: string[];
   cost: number | null;
   costIsEstimated: boolean;
-  lotDetails?: Array<{ id: string; quantity: string; location: string; dateLabel: string; tone: string; remainingBase: number; cost: number | null; costIsEstimated: boolean; costSource: string }>;
+  lotDetails?: Array<{ id: string; quantity: string; location: string; dateLabel: string; tone: string; remainingBase: number; remainingDisplay: number; displayUnit: string; displayPerBase: number; cost: number | null; costIsEstimated: boolean; costSource: string }>;
 }
 
 export type NutrientName = 'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium';
@@ -182,6 +182,9 @@ export const previewPantryData: PantryData = {
         dateLabel: food.due,
         tone: food.tone,
         remainingBase: 1,
+        remainingDisplay: 1,
+        displayUnit: '',
+        displayPerBase: 1,
         cost: [3.18, 4.29, 4.76, 3.89, 2.44, 1.35][index] ?? 2.5,
         costIsEstimated: true,
         costSource: 'Product price estimate',
