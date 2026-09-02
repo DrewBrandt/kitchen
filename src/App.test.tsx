@@ -207,19 +207,40 @@ describe('Pantry web UI', () => {
     expect(screen.getByText('1.5 servings of Simple Pancakes logged as eaten.')).toBeInTheDocument();
   });
 
-  it('separates making a planned meal from eating its planned servings', async () => {
+  it('logs an editable actual serving amount without changing the planned amount', async () => {
     const user = userEvent.setup();
     const todayKey = currentDateKey();
-    const plannedMeals = [{ ...previewPantryData.plannedMeals[0], id: 'made-plan', groupId: 'made-group', dateKey: todayKey, status: 'made' as const, consumptionStatus: 'planned', prepId: 'made-prep', preparedLotId: 'made-lot' }];
+    const plannedMeals = [{ ...previewPantryData.plannedMeals[0], id: 'made-plan', groupId: 'made-group', dateKey: todayKey, status: 'made' as const, plannedServings: 1.5, consumptionStatus: 'planned', prepId: 'made-prep', preparedLotId: 'made-lot' }];
     const consume = vi.fn().mockResolvedValue(['made-log']);
     render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App onConsumePlannedMeals={consume} /></PantryDataProvider>);
 
     await user.click(screen.getByRole('button', { name: /This week/ }));
     expect(screen.getByText('Made · not eaten')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Log it' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Eat planned servings/ }));
+    const amount = screen.getByLabelText('Servings of Simple Pancakes eaten now');
+    expect(amount).toHaveValue(1.5);
+    await user.clear(amount);
+    await user.type(amount, '0.75');
+    const button = screen.getByRole('button', { name: 'Log eaten' });
+    expect(button).toBeEnabled();
+    expect(button).toHaveClass('primary');
+    expect(button.closest('.week-meal-card')).toHaveClass('ready-to-eat');
+    await user.click(button);
 
-    await waitFor(() => expect(consume).toHaveBeenCalledWith(['made-plan']));
+    await waitFor(() => expect(consume).toHaveBeenCalledWith([{ mealPlanId: 'made-plan', servings: 0.75 }]));
+    expect(screen.getByText('0.75 servings logged as eaten.')).toBeInTheDocument();
+  });
+
+  it('shows planned and actual servings separately after a meal is eaten', async () => {
+    const user = userEvent.setup();
+    const todayKey = currentDateKey();
+    const plannedMeals = [{ ...previewPantryData.plannedMeals[0], id: 'eaten-plan', groupId: 'eaten-group', dateKey: todayKey, status: 'made' as const, plannedServings: 1.5, actualServings: 0.75, consumptionStatus: 'fulfilled' }];
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    expect(screen.getByLabelText('Planned servings for Simple Pancakes')).toHaveValue(1.5);
+    expect(screen.getByText('servings planned')).toBeInTheDocument();
+    expect(screen.getByText('0.75 eaten')).toBeInTheDocument();
   });
 
   it('checks grocery rows and updates the shopping summary', async () => {

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(44);
+select plan(46);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -204,14 +204,26 @@ insert into transaction_test_results select is(
 );
 
 insert into transaction_test_results select lives_ok(
-  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000001'::uuid], now())$$,
-  'The planned eaten portion can be logged from its linked prepared batch'
+  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000001'::uuid], array[0.75::numeric], now())$$,
+  'An explicit eaten portion can be logged from the linked prepared batch'
 );
 
 insert into transaction_test_results select is(
   (select remaining_qty from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000002'),
+  2.25::numeric,
+  'Eating deducts the explicit actual quantity from prepared servings'
+);
+
+insert into transaction_test_results select is(
+  (select servings from planned_consumptions where meal_plan = '96000000-0000-0000-0000-000000000001'),
   1.5::numeric,
-  'Eating the planned portion deducts only that many prepared servings'
+  'Eating preserves the original planned serving quantity'
+);
+
+insert into transaction_test_results select is(
+  (select log.servings from planned_consumptions consumption join food_logs log on log.id = consumption.food_log where consumption.meal_plan = '96000000-0000-0000-0000-000000000001'),
+  0.75::numeric,
+  'The linked food log records the actual serving quantity eaten'
 );
 
 insert into transaction_test_results select ok(

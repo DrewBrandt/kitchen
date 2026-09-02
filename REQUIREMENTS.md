@@ -29,8 +29,9 @@ A personal kitchen inventory that tracks pantry, fridge, and freezer stock; stor
 9. Highlight lots expiring within seven days.
 10. Every successful recipe preparation creates a prepared inventory lot measured in servings, even when the recipe has no reusable `output_food`.
 11. A planned meal becomes `made` only through a linked preparation. Eating is a separate explicit action that deducts prepared servings, writes the food log, and fulfills the planned consumption.
-10. Create and edit food definitions, conversions, and recipes in the app.
-11. Review structured grocery rows before applying any of them.
+12. The planned serving quantity remains the original intent. The user enters the actual serving quantity at consumption time, and the food log records it without overwriting the plan.
+13. Create and edit food definitions, conversions, and recipes in the app.
+14. Review structured grocery rows before applying any of them.
 
 ## Codex interaction contract
 

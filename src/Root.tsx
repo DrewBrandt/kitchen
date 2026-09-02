@@ -105,7 +105,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onSavePrepFeedback={async (prepId, ease, taste, minutes) => { await savePrepFeedback(supabase, prepId, ease, taste, minutes); await refresh(); }}
         onCookRecipes={async (ids) => { await cookRecipes(supabase, ids); await refresh(); }}
         onConsumePrepared={async (id, quantity) => { const logId = await consumePreparedLot(supabase, id, quantity); await refresh(); return logId; }}
-        onConsumePlannedMeals={async (ids) => { const logIds = await consumePlannedMeals(supabase, ids); await refresh(); return logIds; }}
+        onConsumePlannedMeals={async (consumptions) => { const logIds = await consumePlannedMeals(supabase, consumptions); await refresh(); return logIds; }}
         onRebuildShopping={async () => { const count = await rebuildShoppingFromPlan(supabase); await refresh(); return count; }}
         onRemovePlannedMeals={async (ids) => { await removePlannedMeals(supabase, ids); await refresh(); }}
         onSetPlannedConsumptionServings={async (id, servings) => { await setPlannedConsumptionServings(supabase, id, servings); await refresh(); }}

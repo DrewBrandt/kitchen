@@ -78,6 +78,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .button.secondary { background: transparent; border: 1px solid #262e2b; color: var(--text-2); }
 .button.secondary:hover, .button.compact:hover { background: #1c2320; border-color: #313b37; }
 .button.compact { min-height: 30px; padding: 0 13px; background: #1c2320; font-weight: 600; }
+.button.primary.compact { background: var(--mint); color: #06170f; }
+.button.primary.compact:hover { background: #7ee9b4; }
 .button.full { width: 100%; }
 .button:disabled { opacity: .45; cursor: not-allowed; }
 .icon-button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #262e2b; background: transparent; display: grid; place-items: center; color: var(--muted); }
@@ -365,7 +367,8 @@ button.soon-row:hover { background: #121715; }
 .week-row { display: flex; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line-soft); }
 .week-row:last-child { border-bottom: 0; }
 .week-row.today { background: #101512; }
-.week-row.past { opacity: .72; }
+.week-row.past { opacity: 1; }
+.week-row.past > .week-row-date, .week-row.past .week-add, .week-row.past .week-meal-card:not(.ready-to-eat) { opacity: .72; }
 .week-row-date { width: 118px; flex: 0 0 118px; }
 .week-row-date strong { display: block; font: 500 11px 'JetBrains Mono', monospace; letter-spacing: .08em; color: var(--muted); }
 .week-row.today .week-row-date strong { color: var(--mint); }
@@ -373,7 +376,7 @@ button.soon-row:hover { background: #121715; }
 .week-row-date em { display: block; margin-top: 8px; font: normal 12px 'JetBrains Mono', monospace; }
 .week-row-date > small:last-child { margin-top: 3px; font: 10.5px 'JetBrains Mono', monospace; color: var(--faint); }
 .week-row-meals { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.week-meal-card { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--card-2); }
+.week-meal-card { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--card-2); }
 .week-meal-card.made { border-color: #2f4a3c; }
 .week-meal-card.eaten { border-color: var(--mint-dim); background: #111a16; }
 .week-meal-card.leftover { border-style: dashed; }
@@ -381,6 +384,15 @@ button.soon-row:hover { background: #121715; }
 .week-meal-card small { display: block; margin-top: 3px; color: var(--faint); font-size: 11px; text-transform: lowercase; }
 .week-meal-cost { font: 500 12px 'JetBrains Mono', monospace; }
 .week-meal-actions { display: flex; align-items: center; gap: 6px; }
+.meal-eat-control { flex: 0 0 calc(100% - 42px); margin-left: 42px; display: flex; align-items: flex-end; gap: 10px; padding: 10px; border: 1px solid #315344; border-radius: 9px; background: #132019; }
+.meal-eat-fields { flex: 1; display: flex; flex-wrap: wrap; gap: 10px; }
+.meal-eat-fields label { min-width: 145px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 8px; }
+.meal-eat-fields label > span:first-child { grid-column: 1 / -1; color: var(--mint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .07em; text-transform: uppercase; }
+.meal-eat-input { display: flex; align-items: center; gap: 5px; }
+.meal-eat-input input { width: 60px; height: 32px; padding: 0 7px; border: 1px solid #47705e; border-radius: 7px; background: #0d1511; color: var(--text); font: 500 12px 'JetBrains Mono', monospace; }
+.meal-eat-input em { color: var(--text-2); font: normal 10.5px 'JetBrains Mono', monospace; }
+.meal-eat-fields small { margin: 0; color: var(--faint); font: 9.5px 'JetBrains Mono', monospace; text-align: right; text-transform: none; }
+.meal-eat-button { min-height: 34px; }
 .week-add { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; border: 1px dashed #2b3430; border-radius: 10px; background: transparent; color: var(--faint); font-size: 12px; cursor: pointer; }
 .week-add:hover { border-color: #3a463f; color: var(--text-2); }
 .week-add svg { width: 14px; }
@@ -598,6 +610,7 @@ button.soon-row:hover { background: #121715; }
   .history-layout > .card, .two-column > .card { width: 100%; }
   .inventory-row { flex-wrap: wrap; }
   .lot-meter { order: 3; flex-basis: calc(100% - 40px); margin-left: 40px; }
+  .meal-eat-control { flex-basis: 100%; margin-left: 0; }
 }
 
 @media (max-width: 720px) {
@@ -928,6 +941,10 @@ button.soon-row:hover { background: #121715; }
   .week-meal-card > .grow { flex-basis: calc(100% - 46px); }
   .week-meal-cost { margin-left: 46px; }
   .week-meal-actions { flex: 1; justify-content: flex-end; }
+  .meal-eat-control { align-items: stretch; flex-direction: column; }
+  .meal-eat-fields { display: grid; grid-template-columns: 1fr; }
+  .meal-eat-fields label { min-width: 0; }
+  .meal-eat-button { width: 100%; min-height: 40px; }
   .log-event-button { gap: 9px; }
   .log-event-button > span:not(.row-emoji), .log-event-button > small { display: none; }
   .consumption-summary { grid-template-columns: 1fr; }

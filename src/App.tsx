@@ -41,7 +41,7 @@ import {
   type PanelKind,
   type Recipe,
 } from './data';
-import { usePantryData, type FoodLogEntry, type InventoryFood, type PantryData, type PlannedMealView, type PreparationOptions, type PreparationResult, type ProductView } from './pantry-data';
+import { usePantryData, type FoodLogEntry, type InventoryFood, type PantryData, type PlannedMealConsumption, type PlannedMealView, type PreparationOptions, type PreparationResult, type ProductView } from './pantry-data';
 import { completeCost, dailyFoodBudget, perServingCost, usd } from './lib/cost';
 
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
@@ -128,7 +128,7 @@ interface AppProps {
   onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>;
   onCookRecipes?: (ids: string[]) => Promise<void>;
   onConsumePrepared?: (id: string, quantity: number) => Promise<string | null>;
-  onConsumePlannedMeals?: (ids: string[]) => Promise<string[]>;
+  onConsumePlannedMeals?: (consumptions: PlannedMealConsumption[]) => Promise<string[]>;
   onRebuildShopping?: () => Promise<number>;
   onRemovePlannedMeals?: (ids: string[]) => Promise<void>;
   onSetPlannedConsumptionServings?: (id: string, servings: number) => Promise<void>;
@@ -680,16 +680,31 @@ function GroceryPage({ checked, toggle, shoppingMode, onShoppingMode, onRemove, 
   );
 }
 
-function PlannedServingEditor({ meal, notify, onSave }: { meal: { id?: string; name: string; plannedServings?: number; consumptionStatus?: string }; notify: Notify; onSave?: (id: string, servings: number) => Promise<void> }) {
+function PlannedServingEditor({ meal, notify, onSave }: { meal: { id?: string; name: string; plannedServings?: number; actualServings?: number; consumptionStatus?: string }; notify: Notify; onSave?: (id: string, servings: number) => Promise<void> }) {
   const [value, setValue] = useState(String(meal.plannedServings ?? 1));
   useEffect(() => setValue(String(meal.plannedServings ?? 1)), [meal.plannedServings]);
   const servings = Number(value);
   const changed = Number.isFinite(servings) && servings > 0 && servings !== (meal.plannedServings ?? 1);
   const eaten = meal.consumptionStatus === 'fulfilled';
-  return <span className="planned-portion"><input aria-label={`Planned servings for ${meal.name}`} type="number" min="0.25" step="0.25" value={value} disabled={eaten} onChange={(event) => setValue(event.target.value)} /><span>serving{servings === 1 ? '' : 's'} {eaten ? 'eaten' : 'to eat'}</span>{changed && meal.id && onSave && !eaten ? <button type="button" onClick={() => void onSave(meal.id!, servings).then(() => notify(`Planned portion updated to ${servings} serving${servings === 1 ? '' : 's'}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update the planned portion.'))}>Save</button> : null}</span>;
+  return <span className="planned-portion"><input aria-label={`Planned servings for ${meal.name}`} type="number" min="0.25" step="0.25" value={value} disabled={eaten} onChange={(event) => setValue(event.target.value)} /><span>serving{servings === 1 ? '' : 's'} planned</span>{eaten && meal.actualServings !== undefined ? <strong>{meal.actualServings} eaten</strong> : null}{changed && meal.id && onSave && !eaten ? <button type="button" onClick={() => void onSave(meal.id!, servings).then(() => notify(`Planned portion updated to ${servings} serving${servings === 1 ? '' : 's'}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update the planned portion.'))}>Save</button> : null}</span>;
 }
 
-function WeekPage({ onOpen, notify, onRemove, onConsume, onSetServings }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onConsume?: (ids: string[]) => Promise<string[]>; onSetServings?: (id: string, servings: number) => Promise<void> }) {
+function PlannedMealEatEditor({ meals, notify, onConsume }: { meals: Array<{ id?: string; name: string; plannedServings?: number }>; notify: Notify; onConsume?: (consumptions: PlannedMealConsumption[]) => Promise<string[]> }) {
+  const defaultsKey = meals.map((meal) => `${meal.id ?? meal.name}:${meal.plannedServings ?? 1}`).join('|');
+  const buildDefaults = () => Object.fromEntries(meals.map((meal) => [meal.id ?? meal.name, String(meal.plannedServings ?? 1)]));
+  const [values, setValues] = useState<Record<string, string>>(buildDefaults);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setValues(buildDefaults()), [defaultsKey]);
+  const consumptions = meals.flatMap((meal) => {
+    const servings = Number(values[meal.id ?? meal.name]);
+    return meal.id && Number.isFinite(servings) && servings > 0 ? [{ mealPlanId: meal.id, servings }] : [];
+  });
+  const valid = consumptions.length === meals.length;
+  const total = consumptions.reduce((sum, consumption) => sum + consumption.servings, 0);
+  return <div className="meal-eat-control"><div className="meal-eat-fields">{meals.map((meal) => { const key = meal.id ?? meal.name; const amount = Number(values[key]); return <label key={key}><span>{meals.length === 1 ? 'Eating now' : meal.name}</span><span className="meal-eat-input"><input aria-label={`Servings of ${meal.name} eaten now`} type="number" min="0.25" step="0.25" value={values[key] ?? ''} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} /><em>serving{amount === 1 ? '' : 's'}</em></span><small>{meal.plannedServings ?? 1} planned</small></label>; })}</div><button className="button primary compact meal-eat-button" disabled={!onConsume || !valid || saving} onClick={() => { if (!onConsume || !valid) return; setSaving(true); void onConsume(consumptions).then(() => notify(`${total} serving${total === 1 ? '' : 's'} logged as eaten.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not log the meal as eaten.')).finally(() => setSaving(false)); }}><Utensils />{saving ? 'Logging…' : 'Log eaten'}</button></div>;
+}
+
+function WeekPage({ onOpen, notify, onRemove, onConsume, onSetServings }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onConsume?: (consumptions: PlannedMealConsumption[]) => Promise<string[]>; onSetServings?: (id: string, servings: number) => Promise<void> }) {
   const { plannedMeals, recipes, settings } = usePantryData();
   const [weekOffset, setWeekOffset] = useState(0);
   const weekDays = useMemo(() => {
@@ -744,13 +759,12 @@ function WeekPage({ onOpen, notify, onRemove, onConsume, onSetServings }: { onOp
                 const eaten = meals.every((meal) => meal.consumptionStatus === 'fulfilled');
                 const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []);
                 const mealsLeftToEat = meals.filter((meal) => meal.consumptionStatus !== 'fulfilled');
-                const consumeIds = mealsLeftToEat.flatMap((meal) => meal.id ? [meal.id] : []);
                 const groupCost = completeCost(meals.map((meal) => meal.cost));
                 const nextMeal = meals.find((meal) => meal.status !== 'made' && !meal.isLeftover);
                 const recipe = recipes.find((candidate) => candidate.id === (nextMeal?.recipeId ?? meals[0].recipeId));
                 const canEat = !eaten && meals.every((meal) => meal.status === 'made' || meal.isLeftover);
                 return (
-                  <div className={cx('week-meal-card', made && 'made', eaten && 'eaten', meals[0].isLeftover && 'leftover')} key={groupId}>
+                  <div className={cx('week-meal-card', made && 'made', eaten && 'eaten', canEat && 'ready-to-eat', meals[0].isLeftover && 'leftover')} key={groupId}>
                     <span className="row-emoji">{meals[0].emoji}</span>
                     <div className="grow">
                       <button className="week-meal-detail" disabled={!recipe} onClick={() => recipe && onOpen('recipe-detail', recipe)} aria-label={recipe ? `View ${meals.map((meal) => meal.name).join(', ')} details` : undefined}>
@@ -763,10 +777,10 @@ function WeekPage({ onOpen, notify, onRemove, onConsume, onSetServings }: { onOp
                     <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}</strong>
                     <div className="week-meal-actions">
                       {recipe && nextMeal ? <button className="button compact" onClick={() => onOpen('cook', recipe, { meal_plan_id: nextMeal.id ?? '' })}><CookingPot />Cook {recipe.name}</button> : null}
-                      {canEat ? <button className="button compact" disabled={!onConsume || !consumeIds.length} onClick={() => { if (onConsume) void onConsume(consumeIds).then(() => notify(`${mealsLeftToEat.map((meal) => meal.plannedServings ?? 1).reduce((total, value) => total + value, 0)} planned servings logged as eaten.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not log the planned meal.')); }}><Utensils />Eat planned servings</button> : null}
                       <button className="row-icon-button" aria-label={`Edit ${meals.map((meal) => meal.name).join(', ')}`} onClick={() => onOpen('meal', undefined, { plan_date: day.dateKey ?? '' })}><Pencil /></button>
                       <button className="row-icon-button" aria-label={`Remove ${meals.map((meal) => meal.name).join(', ')}`} disabled={!onRemove || !ids.length} onClick={() => { if (onRemove) void onRemove(ids).then(() => notify('Meal removed from the plan.')).catch(() => notify('Could not remove the meal.')); }}><Trash2 /></button>
                     </div>
+                    {canEat ? <PlannedMealEatEditor meals={mealsLeftToEat} notify={notify} onConsume={onConsume} /> : null}
                   </div>
                 );
               })}
