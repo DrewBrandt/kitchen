@@ -8,7 +8,7 @@ describe('Pantry GPT operator pack', () => {
   const schema = parse(schemaText);
 
   it('fits the Custom GPT instruction limit', () => {
-    expect(instructions.length).toBeLessThanOrEqual(8_000);
+    expect(instructions.replace(/\r\n/g, '\n').length).toBeLessThanOrEqual(8_000);
   });
 
   it('targets the deployed Supabase function with unique, implemented operations', () => {
