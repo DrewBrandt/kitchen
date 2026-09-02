@@ -67,6 +67,51 @@ describe('Pantry web UI', () => {
     expect(screen.queryByText('All-purpose flour')).not.toBeInTheDocument();
   });
 
+  it('edits inventory lots in their displayed unit and converts actions to the canonical quantity', async () => {
+    const user = userEvent.setup();
+    const displayPerBase = 16 / 453.59237;
+    const templateSection = previewPantryData.inventorySections[0];
+    const templateFood = templateSection.foods[0];
+    const food = {
+      ...templateFood,
+      name: 'Unit-aware flour',
+      total: '1 lb',
+      lots: ['1 lb pantry'],
+      lotDetails: [{
+        ...templateFood.lotDetails![0],
+        id: 'unit-aware-lot',
+        quantity: '1 lb',
+        remainingBase: 453.59237,
+        remainingDisplay: 16,
+        displayUnit: 'oz',
+        displayPerBase,
+      }],
+    };
+    const data = { ...previewPantryData, inventorySections: [{ ...templateSection, foods: [food] }] };
+    const onConsume = vi.fn().mockResolvedValue('food-log');
+    const onSetQuantity = vi.fn().mockResolvedValue('inventory-event');
+    render(<PantryDataProvider data={data}><App onConsumeInventoryLot={onConsume} onSetInventoryLotQuantity={onSetQuantity} /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'Inventory' }));
+    await user.click(screen.getByRole('button', { name: /Unit-aware flour/ }));
+    const consume = screen.getByLabelText('Consume (oz)');
+    const remaining = screen.getByLabelText('Set remaining (oz)');
+    expect(consume).toHaveValue(1);
+    expect(remaining).toHaveValue(16);
+
+    await user.clear(consume);
+    await user.type(consume, '8');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Consume' }));
+    await waitFor(() => expect(onConsume).toHaveBeenCalledWith('unit-aware-lot', 226.796185));
+
+    await user.click(screen.getByRole('button', { name: /Unit-aware flour/ }));
+    const adjustedRemaining = screen.getByLabelText('Set remaining (oz)');
+    await user.clear(adjustedRemaining);
+    await user.type(adjustedRemaining, '4');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Adjust' }));
+    await waitFor(() => expect(onSetQuantity).toHaveBeenCalledWith('unit-aware-lot', 113.3980925, false));
+  });
+
   it('carries estimated costs through inventory, recipes, and the food log', async () => {
     const user = userEvent.setup();
     render(<App />);

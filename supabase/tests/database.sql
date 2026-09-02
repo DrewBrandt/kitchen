@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(17);
+select plan(19);
 
 select ok(
   not public.is_app_owner(),
@@ -75,6 +75,33 @@ select is(
   453.59237::numeric,
   'A new lot always starts at its initial quantity'
 );
+
+insert into inventory_events (
+  id,
+  lot,
+  quantity_delta,
+  reason
+) values (
+  '40000000-0000-0000-0000-000000000002',
+  '30000000-0000-0000-0000-000000000001',
+  -453.5923697,
+  'adjust'
+);
+
+select is(
+  (select remaining_qty from inventory_lots where id = '30000000-0000-0000-0000-000000000001'),
+  0::numeric,
+  'A sub-epsilon unit-conversion remainder is normalized to zero'
+);
+
+select is(
+  (select quantity_delta from inventory_events where id = '40000000-0000-0000-0000-000000000002'),
+  -453.59237::numeric,
+  'The inventory ledger records exact depletion when normalizing residue'
+);
+
+delete from inventory_events
+where id = '40000000-0000-0000-0000-000000000002';
 
 select is(
   round(to_base_quantity(

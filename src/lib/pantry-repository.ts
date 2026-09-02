@@ -10,6 +10,7 @@ type LotRow = Database['public']['Tables']['inventory_lots']['Row'];
 type ProductRow = Database['public']['Tables']['products']['Row'];
 
 type CostValue = { cost: number | null; estimated: boolean; source: string };
+const INVENTORY_QUANTITY_EPSILON = 0.000001;
 
 const productUnitCost = (product?: ProductRow): number | null => {
   if (!product || product.estimated_cost === null || Number(product.package_qty_base) <= 0) return null;
@@ -164,7 +165,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const categoryOrder = new Map((categoriesResult.data ?? []).map((category, index) => [category.category, index]));
   const orderCategories = <T,>(entries: Array<[string, T]>) => entries.sort(([left], [right]) =>
     (categoryOrder.get(left) ?? Number.MAX_SAFE_INTEGER) - (categoryOrder.get(right) ?? Number.MAX_SAFE_INTEGER) || left.localeCompare(right));
-  const availableLots = (lotsResult.data ?? []).filter((lot) => Number(lot.remaining_qty) > 0);
+  const availableLots = (lotsResult.data ?? []).filter((lot) => Number(lot.remaining_qty) > INVENTORY_QUANTITY_EPSILON);
   const rawLots = availableLots.filter((lot) => !lot.prep);
   const stockByFood = new Map<string, number>();
   for (const lot of rawLots) {
@@ -211,7 +212,10 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         lotDetails: stockLots.map((lot) => {
           const lotDue = daysUntil(lot.use_by);
           const value = lotCost(lot, Number(lot.remaining_qty), products.get(lot.product ?? ''));
-          return { id: lot.id, quantity: formatUsStock(Number(lot.remaining_qty), displayUnit), location: lot.location ?? 'unassigned', dateLabel: lotDue.label, tone: lotDue.tone, remainingBase: Number(lot.remaining_qty), cost: value.cost, costIsEstimated: value.estimated, costSource: value.source };
+          const remainingBase = Number(lot.remaining_qty);
+          const remainingDisplay = displayUnit ? fromFoodBase(food, remainingBase, displayUnit) : remainingBase;
+          const displayPerBase = displayUnit ? fromFoodBase(food, 1, displayUnit) : 1;
+          return { id: lot.id, quantity: formatUsStock(remainingBase, displayUnit), location: lot.location ?? 'unassigned', dateLabel: lotDue.label, tone: lotDue.tone, remainingBase, remainingDisplay, displayUnit: displayUnit?.short_name ?? '', displayPerBase, cost: value.cost, costIsEstimated: value.estimated, costSource: value.source };
         }),
       };
     }),
