@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(35);
+select plan(36);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -28,6 +28,20 @@ select set_config(
 set local role authenticated;
 
 insert into transaction_test_results select ok(public.is_app_owner(), 'Test JWT resolves to the live owner and temporary session');
+
+insert into base_foods(id, name, measure_style, display_unit, always_available)
+values (
+  '91000000-0000-0000-0000-000000000004',
+  ' WATER ',
+  'volume',
+  (select id from measure_conversions where short_name = 'fl oz'),
+  false
+);
+
+insert into transaction_test_results select ok(
+  (select always_available from base_foods where id = '91000000-0000-0000-0000-000000000004'),
+  'Canonical household water is always available even when a writer omits the flag'
+);
 
 insert into base_foods(id, name, measure_style, display_unit, always_available)
 values
