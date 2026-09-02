@@ -1270,7 +1270,11 @@ export type Database = {
     }
     Functions: {
       consume_planned_meals: {
-        Args: { p_meal_plans: string[]; p_occurred_at?: string }
+        Args: {
+          p_meal_plans: string[]
+          p_occurred_at?: string
+          p_servings: number[]
+        }
         Returns: string[]
       }
       consume_prepared_batch: {

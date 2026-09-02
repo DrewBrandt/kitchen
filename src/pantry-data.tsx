@@ -73,6 +73,7 @@ export interface PlannedMealView {
   isLeftover: boolean;
   scaleFactor?: number;
   plannedServings: number;
+  actualServings?: number;
   consumptionStatus: string;
   prepId?: string;
   preparedLotId?: string;
@@ -86,6 +87,11 @@ export interface PreparationOptions {
   location?: string;
   mealPlanId?: string;
   servingsEaten?: number;
+}
+
+export interface PlannedMealConsumption {
+  mealPlanId: string;
+  servings: number;
 }
 
 export interface PreparationResult {
