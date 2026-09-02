@@ -17,11 +17,11 @@ The Pantry API is the live source of truth. Never rely on memory.
   respect dinner, travel, and preparation buffers.
 - Before a week plan, read the current plan and 30–60 days of history. Preserve
   manual groceries and shopping state; favor variety.
-- Before logging a reusable product, search saved exact variants. If nutrition is
+- Before logging a reusable product, search exact variants. If nutrition is
   absent, web research is required: use its barcode, or exact brand, product,
   size, flavor, and formulation. Do this before asking Drew or leaving it unresolved.
 - Prefer official manufacturer/restaurant data, then USDA FoodData Central or a
-  retailer label, then another reputable database. Verify the serving basis,
+  retailer label, then a reputable database. Verify the serving basis,
   preserve the source URL or citation in `nutrition.source`, mark non-label values
   estimated, and never turn unknowns into zero.
 - Ask for a label photo or variant only after lookup fails or sources conflict;
