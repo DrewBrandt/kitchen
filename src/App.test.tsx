@@ -20,6 +20,12 @@ afterEach(() => {
   scannerMocks.decodeFromStream.mockReset();
 });
 
+const currentDateKey = (timeZone = previewPantryData.settings.timeZone) => {
+  const parts = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+};
+
 describe('Pantry web UI', () => {
   it('renders the mockup-inspired dashboard and complete navigation', () => {
     render(<App />);
@@ -92,7 +98,7 @@ describe('Pantry web UI', () => {
 
   it('does not present one priced recipe as a complete grouped-meal total', async () => {
     const user = userEvent.setup();
-    const dateKey = new Date().toLocaleDateString('en-CA');
+    const dateKey = currentDateKey();
     const plannedMeals = [
       { id: 'plan-priced', groupId: 'group-1', dateKey, slot: 'DINNER', name: 'Priced main', emoji: '🍔', recipeId: 'recipe-main', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'planned', cost: 6.5, costIsEstimated: false },
       { id: 'plan-unpriced', groupId: 'group-1', dateKey, slot: 'DINNER', name: 'Unpriced side', emoji: '🥦', recipeId: 'recipe-side', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'planned', cost: null, costIsEstimated: true },
@@ -394,7 +400,7 @@ describe('Pantry web UI', () => {
   it('fills an over-budget cost bar and labels the overage', async () => {
     const user = userEvent.setup();
     const foodLog = [{ ...previewPantryData.foodLog[0], cost: 10.9, costIsEstimated: false }];
-    const todayKey = new Date().toLocaleDateString('en-CA');
+    const todayKey = currentDateKey();
     const data = { ...previewPantryData, foodLog, foodLogByDate: { ...previewPantryData.foodLogByDate, [todayKey]: { nutrients: previewPantryData.nutrients, foodLog, nutritionIncompleteEntries: 0 } }, settings: { ...previewPantryData.settings, weeklyFoodBudget: 70 } };
     const { container } = render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
 
@@ -412,7 +418,7 @@ describe('Pantry web UI', () => {
 
   it('shows every planned meal and every use-soon item on Today, with day arrows', async () => {
     const user = userEvent.setup();
-    const todayKey = new Date().toLocaleDateString('en-CA');
+    const todayKey = currentDateKey();
     const plannedMeals = [
       { id: 'plan-pancakes', groupId: 'plan-pancakes', dateKey: todayKey, slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true },
       { id: 'plan-eggs', groupId: 'plan-eggs', dateKey: todayKey, slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
@@ -429,7 +435,7 @@ describe('Pantry web UI', () => {
 
   it('opens recipe composition from a planned meal and details from a consumption event', async () => {
     const user = userEvent.setup();
-    const todayKey = new Date().toLocaleDateString('en-CA');
+    const todayKey = currentDateKey();
     const data = { ...previewPantryData, plannedMeals: [{ id: 'plan-pancakes', groupId: 'plan-pancakes', dateKey: todayKey, slot: 'DINNER', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned' as const, isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true }] };
     render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
 
