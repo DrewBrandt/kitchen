@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(36);
+select plan(44);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -161,6 +161,77 @@ insert into transaction_test_results select is(
   1::numeric,
   'Existing direct plan writes default to one eaten serving instead of the prepared batch size'
 );
+
+-- Recipes without an output_food are still meals. Preparing one must create a
+-- servings-based batch, mark the exact plan component made, and leave eating as
+-- a separate explicit action.
+insert into recipes(id, name, servings, instructions)
+values ('94000000-0000-0000-0000-000000000002', 'Transaction test ordinary meal', 3, '[]');
+
+insert into meal_plans(id, plan_date, daypart, recipe, scale_factor, status, group_id)
+values ('96000000-0000-0000-0000-000000000001', current_date, 'lunch', '94000000-0000-0000-0000-000000000002', 1, 'planned', 'transaction-meal-lifecycle');
+
+update planned_consumptions set servings = 1.5
+where meal_plan = '96000000-0000-0000-0000-000000000001';
+
+insert into transaction_test_results select lives_ok(
+  $$select prepare_recipe('94000000-0000-0000-0000-000000000002'::uuid, 1, 3, 'freezer', '96000000-0000-0000-0000-000000000001'::uuid, 0, now())$$,
+  'Finishing an ordinary planned recipe creates its linked batch atomically'
+);
+
+insert into transaction_test_results select is(
+  (select status from meal_plans where id = '96000000-0000-0000-0000-000000000001'),
+  'made'::plan_status,
+  'Preparing the recipe marks that exact plan component made'
+);
+
+insert into transaction_test_results select is(
+  (select meal_plan from preps where recipe = '94000000-0000-0000-0000-000000000002' and voided_at is null),
+  '96000000-0000-0000-0000-000000000001'::uuid,
+  'The preparation retains its meal-plan link'
+);
+
+insert into transaction_test_results select is(
+  (select concat(initial_qty, '/', remaining_qty, '/', location) from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000002'),
+  '3/3/freezer',
+  'An ordinary recipe produces the stated servings in the chosen location'
+);
+
+insert into transaction_test_results select is(
+  (select status from planned_consumptions where meal_plan = '96000000-0000-0000-0000-000000000001'),
+  'planned',
+  'Making a planned meal does not pretend it was eaten'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000001'::uuid], now())$$,
+  'The planned eaten portion can be logged from its linked prepared batch'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000002'),
+  1.5::numeric,
+  'Eating the planned portion deducts only that many prepared servings'
+);
+
+insert into transaction_test_results select ok(
+  (select status = 'fulfilled' and food_log is not null from planned_consumptions where meal_plan = '96000000-0000-0000-0000-000000000001'),
+  'The planned consumption points to the real food-log event'
+);
+
+-- Keep the rest of this transaction suite's existing single-batch assertions
+-- isolated from the lifecycle fixture.
+delete from inventory_events where lot in (
+  select lot.id from inventory_lots lot join preps prep on prep.id = lot.prep
+  where prep.recipe = '94000000-0000-0000-0000-000000000002'
+);
+delete from food_logs where recipe = '94000000-0000-0000-0000-000000000002';
+delete from inventory_lots where prep in (
+  select id from preps where recipe = '94000000-0000-0000-0000-000000000002'
+);
+delete from preps where recipe = '94000000-0000-0000-0000-000000000002';
+delete from meal_plans where id = '96000000-0000-0000-0000-000000000001';
+delete from recipes where id = '94000000-0000-0000-0000-000000000002';
 
 insert into shopping_items(food, qty_needed, unit, source, checked_at, quantity_label)
 values (

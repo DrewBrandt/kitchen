@@ -145,6 +145,8 @@ button.soon-row:hover { background: #121715; }
 .soon-row.urgent em { color: var(--urgent); }
 .prepared-row { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line-soft); }
 .prepared-row:last-child { border-bottom: 0; }
+.prepared-eat-quantity { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 10px 'JetBrains Mono', monospace; text-transform: uppercase; }
+.prepared-eat-quantity input { width: 62px; height: 32px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: #111513; color: var(--text); font: 12px 'JetBrains Mono', monospace; }
 .row-emoji { font-size: 22px; width: 26px; text-align: center; flex: 0 0 26px; }
 .servings { width: 132px; }
 .servings small { display: block; color: var(--faint); font: 10.5px 'JetBrains Mono', monospace; margin-top: 5px; }
@@ -332,6 +334,16 @@ button.soon-row:hover { background: #121715; }
 .heat-strip i { flex: 1; min-width: 0; height: 26px; border-radius: 3px; }
 .history-row { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
 .history-row:last-child { border-bottom: 0; }
+.prep-history-row { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
+.prep-history-row:last-child { border-bottom: 0; }
+.prep-history-row > .grow { flex: 1; min-width: 0; }
+.prep-history-row > .grow strong, .prep-history-row > .grow small { display: block; }
+.prep-history-row > .grow strong { font-size: 12.5px; }
+.prep-history-row > .grow small { margin-top: 3px; color: var(--faint); font: 10.5px 'JetBrains Mono', monospace; }
+.prep-history-row > div:not(.grow) { width: 112px; flex: 0 0 112px; }
+.prep-history-row > div:not(.grow) span, .prep-history-row > div:not(.grow) strong { display: block; }
+.prep-history-row > div:not(.grow) span { color: var(--faint); font: 9.5px 'JetBrains Mono', monospace; letter-spacing: .06em; text-transform: uppercase; }
+.prep-history-row > div:not(.grow) strong { margin-top: 4px; color: var(--text-2); font: 500 11.5px 'JetBrains Mono', monospace; text-transform: capitalize; }
 .history-when { width: 100px; flex: 0 0 100px; }
 .history-when strong { display: block; font-size: 12.5px; }
 .history-when small { display: block; margin-top: 3px; color: var(--faint); font: 10.5px 'JetBrains Mono', monospace; }
@@ -363,6 +375,7 @@ button.soon-row:hover { background: #121715; }
 .week-row-meals { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .week-meal-card { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--card-2); }
 .week-meal-card.made { border-color: #2f4a3c; }
+.week-meal-card.eaten { border-color: var(--mint-dim); background: #111a16; }
 .week-meal-card.leftover { border-style: dashed; }
 .week-meal-card strong { display: block; font-size: 13px; font-weight: 500; }
 .week-meal-card small { display: block; margin-top: 3px; color: var(--faint); font-size: 11px; text-transform: lowercase; }
@@ -487,6 +500,14 @@ button.soon-row:hover { background: #121715; }
 .deck-card-body h3 { margin: 19px 0 8px; color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; }
 .deck-card-body .cooking-progress { margin-top: 13px; }
 .deck-nutrition { display: block; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.deck-plan-link { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 11px; border: 1px solid #294537; border-radius: 9px; background: #111a16; }
+.deck-plan-link svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--mint); }
+.deck-plan-link span, .deck-plan-link strong, .deck-plan-link small { display: block; }
+.deck-plan-link strong { color: var(--text-2); font-size: 11px; }
+.deck-plan-link small { margin-top: 3px; color: var(--muted); font: 9.5px 'JetBrains Mono', monospace; }
+.deck-batch-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.deck-batch-fields .field { min-width: 0; }
+.deck-batch-fields .field input, .deck-batch-fields .field select { height: 36px; padding: 7px 8px; }
 .deck-card-footer { min-height: 55px; padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: #0b0e0d; }
 .deck-feedback { display: flex; flex-direction: column; gap: 14px; }
 .deck-feedback .rating-input { grid-template-columns: 58px 1fr; }
@@ -607,6 +628,7 @@ button.soon-row:hover { background: #121715; }
   .on-deck-card { height: min(680px, calc(100vh - 190px)); min-height: 520px; }
   .deck-card-actions .icon-button:nth-child(-n+2) { display: none; }
   .deck-card-body { padding: 15px 16px 24px; }
+  .deck-batch-fields { grid-template-columns: 1fr; }
   .today-grid { display: flex; flex-direction: column; gap: 12px; }
   .today-grid > .card { padding: 16px; border-radius: 16px; }
   .nutrition-card .card-kicker { display: none; }
@@ -626,6 +648,10 @@ button.soon-row:hover { background: #121715; }
   .prepared-row { padding: 11px 16px; min-height: 60px; }
   .prepared-row .servings, .prepared-row .due { display: none; }
   .prepared-row .button { min-height: 38px; border-radius: 10px; }
+  .prep-history-row { align-items: flex-start; flex-wrap: wrap; padding: 13px 16px; }
+  .prep-history-row > .grow { flex-basis: calc(100% - 52px); }
+  .prep-history-row > div:not(.grow) { width: auto; flex: 1 1 28%; padding-left: 36px; }
+  .prepared-eat-quantity span { display: none; }
   .cookable-grid { grid-template-columns: 1fr; }
   .cookable-row { border-right: 0; border-bottom: 1px solid var(--line-soft); padding: 13px 16px; }
   .toolbar { gap: 6px; }
@@ -823,6 +849,7 @@ button.soon-row:hover { background: #121715; }
 .planned-meal-head > small { flex: 1; }
 .plan-status { padding: 3px 5px; border-radius: 4px; color: var(--muted); background: #202725; font: 8px 'JetBrains Mono', monospace; text-transform: uppercase; }
 .plan-status.made { color: var(--info); }
+.plan-status.eaten { color: var(--mint); }
 .plan-status.missed { color: var(--faint); }
 .planned-components button { width: 100%; padding: 5px 9px; display: flex; align-items: flex-start; gap: 6px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 11.5px; cursor: pointer; }
 .planned-components button:hover { background: #202725; }

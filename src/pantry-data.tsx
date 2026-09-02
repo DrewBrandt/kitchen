@@ -60,13 +60,51 @@ export interface ProductView {
   lastUsedAt: string;
 }
 
+export interface PlannedMealView {
+  id: string;
+  groupId: string;
+  sourceGroupId?: string;
+  dateKey: string;
+  slot: string;
+  name: string;
+  emoji: string;
+  recipeId?: string;
+  status: 'planned' | 'made' | 'skipped' | 'moved';
+  isLeftover: boolean;
+  scaleFactor?: number;
+  plannedServings: number;
+  consumptionStatus: string;
+  prepId?: string;
+  preparedLotId?: string;
+  cost: number | null;
+  costIsEstimated: boolean;
+}
+
+export interface PreparationOptions {
+  scale?: number;
+  servingsMade?: number;
+  location?: string;
+  mealPlanId?: string;
+  servingsEaten?: number;
+}
+
+export interface PreparationResult {
+  prepId: string;
+  lotId: string;
+  mealPlanId: string | null;
+  servingsMade: number;
+  servingsRemaining: number;
+  location: string;
+  foodLogId: string | null;
+}
+
 export interface PantryData {
   inventorySections: Array<{ emoji: string; label: string; foods: InventoryFood[] }>;
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null }> }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
-  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<{ id?: string; groupId?: string; slot: string; name: string; emoji: string; recipeId?: string; status?: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover?: boolean; plannedServings?: number; consumptionStatus?: string; cost?: number | null; costIsEstimated?: boolean }> }>;
-  plannedMeals: Array<{ id: string; groupId: string; sourceGroupId?: string; dateKey: string; slot: string; name: string; emoji: string; recipeId?: string; status: 'planned' | 'made' | 'skipped' | 'moved'; isLeftover: boolean; plannedServings: number; consumptionStatus: string; cost: number | null; costIsEstimated: boolean }>;
+  weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<Partial<PlannedMealView> & Pick<PlannedMealView, 'slot' | 'name' | 'emoji'>> }>;
+  plannedMeals: PlannedMealView[];
   foodLog: FoodLogEntry[];
   nutritionIncompleteEntries: number;
   foodLogByDate: Record<string, {
@@ -107,7 +145,8 @@ export interface PantryData {
     planningNotes: string;
     weeklyFoodBudget: number;
   };
-  preparedLots: Array<{ id: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; batchCost: number | null; servingsTotal: number; servingsLeft: number; costPerServing: number | null; valueRemaining: number | null; costIsEstimated: boolean }>;
+  preparedLots: Array<{ id: string; prepId?: string; mealPlanId?: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; batchCost: number | null; servingsTotal: number; servingsLeft: number; costPerServing: number | null; valueRemaining: number | null; costIsEstimated: boolean }>;
+  preparationHistory: Array<{ id: string; recipeId: string; emoji: string; name: string; preparedAt: string; dateKey: string; servingsMade: number; servingsRemaining: number; location: string }>;
   spendHistory: Array<{ dateKey: string; spend: number; waste: number; away: number }>;
   wasteCauses: Array<{ label: string; note: string; amount: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
@@ -151,9 +190,9 @@ export const previewPantryData: PantryData = {
   nutrients: NUTRIENTS,
   weekDays: WEEK_DAYS,
   plannedMeals: [
-    { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 4.72, costIsEstimated: true },
-    { id: 'preview-plan-eggs', groupId: 'preview-plan-eggs', dateKey: previewDateKey(), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
-    { id: 'preview-plan-eggs-later', groupId: 'preview-plan-eggs-later', dateKey: previewDateKey(2), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, plannedServings: 1, consumptionStatus: 'unlogged', cost: 1.14, costIsEstimated: true },
+    { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 4.72, costIsEstimated: true },
+    { id: 'preview-plan-eggs', groupId: 'preview-plan-eggs', dateKey: previewDateKey(), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true },
+    { id: 'preview-plan-eggs-later', groupId: 'preview-plan-eggs-later', dateKey: previewDateKey(2), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true },
   ],
   foodLog: FOOD_LOG,
   nutritionIncompleteEntries: 0,
@@ -186,8 +225,12 @@ export const previewPantryData: PantryData = {
     weeklyFoodBudget: DEFAULT_WEEKLY_FOOD_BUDGET,
   },
   preparedLots: [
-    { id: 'preview-prep-1', emoji: '🥞', name: 'Simple Pancakes', location: 'fridge', remaining: '2 of 4 servings', due: '3 days left', progress: 50, batchCost: 4.72, servingsTotal: 4, servingsLeft: 2, costPerServing: perServingCost(4.72, 4), valueRemaining: remainingValue(4.72, 4, 2), costIsEstimated: true },
-    { id: 'preview-prep-2', emoji: '🍳', name: 'Soft Scrambled Eggs', location: 'fridge', remaining: '1 of 1 serving', due: '1 day left', progress: 100, batchCost: 1.14, servingsTotal: 1, servingsLeft: 1, costPerServing: perServingCost(1.14, 1), valueRemaining: remainingValue(1.14, 1, 1), costIsEstimated: true },
+    { id: 'preview-prep-1', prepId: 'preview-prep-event-1', mealPlanId: 'preview-plan-pancakes', emoji: '🥞', name: 'Simple Pancakes', location: 'fridge', remaining: '2 of 4 servings', due: '3 days left', progress: 50, batchCost: 4.72, servingsTotal: 4, servingsLeft: 2, costPerServing: perServingCost(4.72, 4), valueRemaining: remainingValue(4.72, 4, 2), costIsEstimated: true },
+    { id: 'preview-prep-2', prepId: 'preview-prep-event-2', mealPlanId: 'preview-plan-eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', location: 'fridge', remaining: '1 of 1 serving', due: '1 day left', progress: 100, batchCost: 1.14, servingsTotal: 1, servingsLeft: 1, costPerServing: perServingCost(1.14, 1), valueRemaining: remainingValue(1.14, 1, 1), costIsEstimated: true },
+  ],
+  preparationHistory: [
+    { id: 'preview-prep-event-1', recipeId: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', preparedAt: new Date().toISOString(), dateKey: previewDateKey(), servingsMade: 4, servingsRemaining: 2, location: 'fridge' },
+    { id: 'preview-prep-event-2', recipeId: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', preparedAt: new Date().toISOString(), dateKey: previewDateKey(), servingsMade: 1, servingsRemaining: 1, location: 'fridge' },
   ],
   spendHistory: [],
   wasteCauses: [

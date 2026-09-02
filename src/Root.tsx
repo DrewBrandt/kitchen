@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumeInventoryLot, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setPlannedMealsMade, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
+import { consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 
@@ -101,13 +101,13 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onToggleGrocery={async (id, checked) => { await setShoppingItemChecked(supabase, id, checked); await refresh(); }}
         onVoidFoodLog={async (id) => { await voidFoodLog(supabase, id); await refresh(); }}
         onSaveAction={async (kind, form) => { const message = await savePanelAction(supabase, kind, form); await refresh(); return message; }}
-        onCookRecipe={async (id) => { const prepId = await cookRecipe(supabase, id); await refresh(); return prepId; }}
+        onCookRecipe={async (id, options) => { const result = await cookRecipe(supabase, id, options); await refresh(); return result; }}
         onSavePrepFeedback={async (prepId, ease, taste, minutes) => { await savePrepFeedback(supabase, prepId, ease, taste, minutes); await refresh(); }}
         onCookRecipes={async (ids) => { await cookRecipes(supabase, ids); await refresh(); }}
-        onConsumePrepared={async (id) => { const logId = await consumePreparedLot(supabase, id); await refresh(); return logId; }}
+        onConsumePrepared={async (id, quantity) => { const logId = await consumePreparedLot(supabase, id, quantity); await refresh(); return logId; }}
+        onConsumePlannedMeals={async (ids) => { const logIds = await consumePlannedMeals(supabase, ids); await refresh(); return logIds; }}
         onRebuildShopping={async () => { const count = await rebuildShoppingFromPlan(supabase); await refresh(); return count; }}
         onRemovePlannedMeals={async (ids) => { await removePlannedMeals(supabase, ids); await refresh(); }}
-        onSetPlannedMealsMade={async (ids, made) => { await setPlannedMealsMade(supabase, ids, made); await refresh(); }}
         onSetPlannedConsumptionServings={async (id, servings) => { await setPlannedConsumptionServings(supabase, id, servings); await refresh(); }}
         onRemoveGrocery={async (id) => { await removeShoppingItem(supabase, id); await refresh(); }}
         onConsumeInventoryLot={async (id, quantity) => { const logId = await consumeInventoryLot(supabase, id, quantity); await refresh(); return logId; }}

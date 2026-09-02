@@ -793,6 +793,7 @@ export type Database = {
           ease_rating: number
           id: string
           legacy_firebase_id: string | null
+          meal_plan: string | null
           note: string | null
           parent_prep: string | null
           prepped_at: string
@@ -808,6 +809,7 @@ export type Database = {
           ease_rating?: number
           id?: string
           legacy_firebase_id?: string | null
+          meal_plan?: string | null
           note?: string | null
           parent_prep?: string | null
           prepped_at?: string
@@ -823,6 +825,7 @@ export type Database = {
           ease_rating?: number
           id?: string
           legacy_firebase_id?: string | null
+          meal_plan?: string | null
           note?: string | null
           parent_prep?: string | null
           prepped_at?: string
@@ -837,6 +840,13 @@ export type Database = {
             columns: ["cook_session"]
             isOneToOne: false
             referencedRelation: "cook_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "preps_meal_plan_fkey"
+            columns: ["meal_plan"]
+            isOneToOne: false
+            referencedRelation: "meal_plans"
             referencedColumns: ["id"]
           },
           {
@@ -1259,6 +1269,19 @@ export type Database = {
       }
     }
     Functions: {
+      consume_planned_meals: {
+        Args: { p_meal_plans: string[]; p_occurred_at?: string }
+        Returns: string[]
+      }
+      consume_prepared_batch: {
+        Args: {
+          p_lot: string
+          p_meal_plan?: string
+          p_occurred_at?: string
+          p_quantity: number
+        }
+        Returns: string
+      }
       consume_prepared_lot: {
         Args: { p_lot: string; p_occurred_at?: string; p_quantity?: number }
         Returns: string
@@ -1273,6 +1296,18 @@ export type Database = {
         Returns: string
       }
       cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
+      prepare_recipe: {
+        Args: {
+          p_eaten_servings?: number
+          p_location?: string
+          p_meal_plan?: string
+          p_occurred_at?: string
+          p_recipe: string
+          p_scale?: number
+          p_servings?: number
+        }
+        Returns: Json
+      }
       consume_inventory_lot: {
         Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
         Returns: string
