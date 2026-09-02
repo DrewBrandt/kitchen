@@ -183,6 +183,7 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 - Represent exactly identifiable, reusable restaurant items, takeout, drinks, and packaged snacks with the same canonical food and product definitions used for groceries.
 - Log one-off or undocumented meals directly with a label and optional portion, nutrition snapshot, source, estimate flag, and cost. Unknown nutrients remain null and make the day explicitly incomplete.
 - Search and reuse an exact product variant before creating another; retain its brand, package/serving conversion, nutrition source, estimate status, and optional barcode.
+- When an exact reusable product has no nutrition, research it by barcode or exact brand/variant before asking the user or leaving it unresolved. Prefer an official label, preserve the source and serving basis, mark supported non-label values estimated, and document failed searches rather than silently omitting nutrition.
 - Acquire reusable purchased items as inventory lots, consume the amount actually eaten through the ordinary lot ledger, and retain any remainder at its real storage location. One-off consumption with no retained inventory uses a manual event instead.
 - Create the lot and consumption event in one atomic operation. The consumed quantity may be smaller than the purchased quantity but cannot exceed it.
 - Classify away-from-home status on the acquisition lot, not the reusable product, because the same product may be obtained through different channels.

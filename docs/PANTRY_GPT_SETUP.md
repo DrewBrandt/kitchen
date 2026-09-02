@@ -26,7 +26,8 @@ In ChatGPT, open **Explore GPTs**, choose **Create**, and configure:
 - Name: `Drew's Pantry`
 - Visibility: **Only me**
 - Description: `Private pantry, nutrition, recipe, and weekly meal-planning assistant.`
-- Enable Web Search if you want recipe and current nutrition research.
+- Enable Web Search. It is required for missing product and current nutrition
+  research.
 
 Paste all of `docs/PANTRY_GPT_INSTRUCTIONS.md` into Instructions. Keep it under
 the editor's 8,000-character limit; the test suite enforces this.
@@ -59,20 +60,23 @@ Run these in Preview before relying on writes:
 
 1. `Read my pantry and tell me how many eggs I have.`
 2. `Search my saved foods and products for Chick-fil-A. Do not create anything.`
-3. `Show my current meal plan and grocery list.`
-4. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
-5. Inspect `consumePurchasedProduct` in the Action tester and confirm its request
+3. `Research the exact nutrition for a packaged product that is not saved. Cite
+   the source and do not write anything.`
+4. `Show my current meal plan and grocery list.`
+5. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
+6. Inspect `consumePurchasedProduct` in the Action tester and confirm its request
    body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `location`,
    timestamp, cost, label, and note fields.
-6. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
+7. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
    `costIsEstimated`, and `costSource` without requiring nutrition fields.
-7. Inspect `logManualConsumption` and confirm only `label` is required; verify it
+8. Inspect `logManualConsumption` and confirm only `label` is required; verify it
    has no `foodId`, `productId`, purchased quantity, or inventory location field.
-8. Inspect `replaceWeeklyMealPlan` and confirm it exposes required `weekStart`
+9. Inspect `replaceWeeklyMealPlan` and confirm it exposes required `weekStart`
    and `entries` fields. Spot-check every other write Action for a non-empty body.
 
-The first three should call read Actions. The fourth must stop before writing.
-The fifth through eighth catch imported empty `{}` tool contracts before they can
+The first two should call read Actions; the third should use Web Search and cite
+its source. The fifth must stop before writing. The sixth through ninth catch
+imported empty `{}` tool contracts before they can
 reach the database. Then explicitly confirm the test write, verify it in the web
 app, and remove it.
 

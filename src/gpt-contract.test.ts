@@ -123,6 +123,14 @@ describe('Pantry GPT operator pack', () => {
     expect(instructions).toContain('supported conversion allows `1/2 tsp`');
   });
 
+  it('requires source-backed research before reusable-product nutrition is omitted', () => {
+    expect(instructions).toContain('web research is required: use its barcode');
+    expect(instructions).toContain('Do this before asking Drew or leaving it unresolved');
+    expect(instructions).toContain('preserve the source URL or citation in `nutrition.source`');
+    expect(instructions).toContain('Omit reusable-product nutrition only after a');
+    expect(instructions).toContain('“do not guess” is not permission to leave it empty');
+  });
+
   it.each([
     ['/v1/foods/{id}', 'editFoodDefinition'],
     ['/v1/products/{id}', 'editProductDefinition'],
