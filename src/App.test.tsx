@@ -324,6 +324,9 @@ describe('Pantry web UI', () => {
     const dialog = screen.getByRole('dialog');
     await user.clear(within(dialog).getByLabelText('Quantity consumed now'));
     await user.type(within(dialog).getByLabelText('Quantity consumed now'), '0.5');
+    await user.type(within(dialog).getByLabelText('Full price (USD)'), '4.79');
+    await user.type(within(dialog).getByLabelText('You paid (USD)'), '4.79');
+    await user.type(within(dialog).getByLabelText('Cost source'), 'Receipt');
     await user.selectOptions(within(dialog).getByLabelText('Remaining item location'), 'fridge');
     await user.click(within(dialog).getByRole('button', { name: 'Acquire & consume' }));
 
@@ -332,6 +335,11 @@ describe('Pantry web UI', () => {
     expect(kind).toBe('log');
     expect(form.get('purchased_quantity')).toBe('1');
     expect(form.get('consumed_quantity')).toBe('0.5');
+    expect(form.get('quantity_unit')).toBe('ct');
+    expect(form.get('acquisition_type')).toBe('grocery');
+    expect(form.get('total_cost')).toBe('4.79');
+    expect(form.get('out_of_pocket_cost')).toBe('4.79');
+    expect(form.get('cost_source')).toBe('Receipt');
     expect(form.get('location')).toBe('fridge');
   });
 

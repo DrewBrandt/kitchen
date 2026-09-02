@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       app_settings: {
@@ -36,6 +61,7 @@ export type Database = {
         Row: {
           aliases: string[]
           always_available: boolean
+          archived_at: string | null
           carbs_g: number | null
           created_at: string
           display_unit: string | null
@@ -50,6 +76,7 @@ export type Database = {
           kcal: number | null
           legacy_firebase_id: string | null
           measure_style: Database["public"]["Enums"]["measure_style"]
+          merged_into: string | null
           name: string
           nutrition_basis_qty: number
           nutrition_is_estimated: boolean
@@ -64,6 +91,7 @@ export type Database = {
         Insert: {
           aliases?: string[]
           always_available?: boolean
+          archived_at?: string | null
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null
@@ -78,6 +106,7 @@ export type Database = {
           kcal?: number | null
           legacy_firebase_id?: string | null
           measure_style: Database["public"]["Enums"]["measure_style"]
+          merged_into?: string | null
           name: string
           nutrition_basis_qty?: number
           nutrition_is_estimated?: boolean
@@ -92,6 +121,7 @@ export type Database = {
         Update: {
           aliases?: string[]
           always_available?: boolean
+          archived_at?: string | null
           carbs_g?: number | null
           created_at?: string
           display_unit?: string | null
@@ -106,6 +136,7 @@ export type Database = {
           kcal?: number | null
           legacy_firebase_id?: string | null
           measure_style?: Database["public"]["Enums"]["measure_style"]
+          merged_into?: string | null
           name?: string
           nutrition_basis_qty?: number
           nutrition_is_estimated?: boolean
@@ -131,6 +162,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grocery_categories"
             referencedColumns: ["category"]
+          },
+          {
+            foreignKeyName: "base_foods_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "base_foods"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -162,105 +200,6 @@ export type Database = {
             columns: ["meal"]
             isOneToOne: false
             referencedRelation: "meals"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      food_logs: {
-        Row: {
-          carbs_g: number | null
-          cost: number | null
-          cost_is_estimated: boolean
-          cost_source: string | null
-          created_at: string
-          fat_g: number | null
-          fiber_g: number | null
-          id: string
-          kcal: number | null
-          kind: string
-          label: string
-          legacy_firebase_id: string | null
-          note: string | null
-          nutrition_is_estimated: boolean
-          nutrition_source: string | null
-          nutrition_status: string
-          occurred_at: string
-          portion_label: string | null
-          product: string | null
-          protein_g: number | null
-          recipe: string | null
-          servings: number | null
-          sodium_mg: number | null
-          sugar_g: number | null
-          voided_at: string | null
-        }
-        Insert: {
-          carbs_g?: number | null
-          cost?: number | null
-          cost_is_estimated?: boolean
-          cost_source?: string | null
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          kcal?: number | null
-          kind: string
-          label: string
-          legacy_firebase_id?: string | null
-          note?: string | null
-          nutrition_is_estimated?: boolean
-          nutrition_source?: string | null
-          nutrition_status?: never
-          occurred_at?: string
-          portion_label?: string | null
-          product?: string | null
-          protein_g?: number | null
-          recipe?: string | null
-          servings?: number | null
-          sodium_mg?: number | null
-          sugar_g?: number | null
-          voided_at?: string | null
-        }
-        Update: {
-          carbs_g?: number | null
-          cost?: number | null
-          cost_is_estimated?: boolean
-          cost_source?: string | null
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          kcal?: number | null
-          kind?: string
-          label?: string
-          legacy_firebase_id?: string | null
-          note?: string | null
-          nutrition_is_estimated?: boolean
-          nutrition_source?: string | null
-          nutrition_status?: never
-          occurred_at?: string
-          portion_label?: string | null
-          product?: string | null
-          protein_g?: number | null
-          recipe?: string | null
-          servings?: number | null
-          sodium_mg?: number | null
-          sugar_g?: number | null
-          voided_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "food_logs_product_fkey"
-            columns: ["product"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "food_logs_recipe_fkey"
-            columns: ["recipe"]
-            isOneToOne: false
-            referencedRelation: "recipes"
             referencedColumns: ["id"]
           },
         ]
@@ -297,6 +236,153 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      food_logs: {
+        Row: {
+          acquisition_type: string | null
+          carbs_g: number | null
+          components: Json
+          cost: number | null
+          cost_is_estimated: boolean
+          cost_source: string | null
+          created_at: string
+          fat_g: number | null
+          fiber_g: number | null
+          id: string
+          kcal: number | null
+          kind: string
+          label: string
+          legacy_firebase_id: string | null
+          note: string | null
+          nutrition_estimate: Json | null
+          nutrition_is_estimated: boolean
+          nutrition_source: string | null
+          nutrition_status: string | null
+          occurred_at: string
+          out_of_pocket_cost: number | null
+          paid_by: string | null
+          portion_label: string | null
+          price_as_of: string | null
+          product: string | null
+          protein_g: number | null
+          recipe: string | null
+          servings: number | null
+          sodium_mg: number | null
+          sugar_g: number | null
+          time_precision: string
+          total_price: number | null
+          voided_at: string | null
+        }
+        Insert: {
+          acquisition_type?: string | null
+          carbs_g?: number | null
+          components?: Json
+          cost?: number | null
+          cost_is_estimated?: boolean
+          cost_source?: string | null
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          kcal?: number | null
+          kind: string
+          label: string
+          legacy_firebase_id?: string | null
+          note?: string | null
+          nutrition_estimate?: Json | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
+          nutrition_status?: string | null
+          occurred_at?: string
+          out_of_pocket_cost?: number | null
+          paid_by?: string | null
+          portion_label?: string | null
+          price_as_of?: string | null
+          product?: string | null
+          protein_g?: number | null
+          recipe?: string | null
+          servings?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          time_precision?: string
+          total_price?: number | null
+          voided_at?: string | null
+        }
+        Update: {
+          acquisition_type?: string | null
+          carbs_g?: number | null
+          components?: Json
+          cost?: number | null
+          cost_is_estimated?: boolean
+          cost_source?: string | null
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          kcal?: number | null
+          kind?: string
+          label?: string
+          legacy_firebase_id?: string | null
+          note?: string | null
+          nutrition_estimate?: Json | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
+          nutrition_status?: string | null
+          occurred_at?: string
+          out_of_pocket_cost?: number | null
+          paid_by?: string | null
+          portion_label?: string | null
+          price_as_of?: string | null
+          product?: string | null
+          protein_g?: number | null
+          recipe?: string | null
+          servings?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          time_precision?: string
+          total_price?: number | null
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_logs_product_fkey"
+            columns: ["product"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_logs_recipe_fkey"
+            columns: ["recipe"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gpt_action_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          operation: string
+          request_id: string
+          result: Json | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          operation: string
+          request_id: string
+          result?: Json | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          operation?: string
+          request_id?: string
+          result?: Json | null
+        }
+        Relationships: []
       }
       grocery_categories: {
         Row: {
@@ -387,6 +473,10 @@ export type Database = {
       inventory_lots: {
         Row: {
           acquired_at: string
+          acquired_time_precision: string
+          acquisition_food_log: string | null
+          acquisition_type: string | null
+          acquisition_void_event: string | null
           cost_is_estimated: boolean
           cost_source: string | null
           created_at: string
@@ -396,7 +486,10 @@ export type Database = {
           legacy_firebase_id: string | null
           location: string | null
           note: string | null
+          out_of_pocket_cost: number | null
+          paid_by: string | null
           prep: string | null
+          price_as_of: string | null
           product: string | null
           remaining_qty: number
           total_cost: number | null
@@ -404,6 +497,10 @@ export type Database = {
         }
         Insert: {
           acquired_at?: string
+          acquired_time_precision?: string
+          acquisition_food_log?: string | null
+          acquisition_type?: string | null
+          acquisition_void_event?: string | null
           cost_is_estimated?: boolean
           cost_source?: string | null
           created_at?: string
@@ -413,7 +510,10 @@ export type Database = {
           legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
+          out_of_pocket_cost?: number | null
+          paid_by?: string | null
           prep?: string | null
+          price_as_of?: string | null
           product?: string | null
           remaining_qty: number
           total_cost?: number | null
@@ -421,6 +521,10 @@ export type Database = {
         }
         Update: {
           acquired_at?: string
+          acquired_time_precision?: string
+          acquisition_food_log?: string | null
+          acquisition_type?: string | null
+          acquisition_void_event?: string | null
           cost_is_estimated?: boolean
           cost_source?: string | null
           created_at?: string
@@ -430,13 +534,37 @@ export type Database = {
           legacy_firebase_id?: string | null
           location?: string | null
           note?: string | null
+          out_of_pocket_cost?: number | null
+          paid_by?: string | null
           prep?: string | null
+          price_as_of?: string | null
           product?: string | null
           remaining_qty?: number
           total_cost?: number | null
           use_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_lots_acquisition_food_log_fkey"
+            columns: ["acquisition_food_log"]
+            isOneToOne: false
+            referencedRelation: "food_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_lots_acquisition_void_event_fkey"
+            columns: ["acquisition_void_event"]
+            isOneToOne: false
+            referencedRelation: "inventory_event_costs"
+            referencedColumns: ["inventory_event_id"]
+          },
+          {
+            foreignKeyName: "inventory_lots_acquisition_void_event_fkey"
+            columns: ["acquisition_void_event"]
+            isOneToOne: false
+            referencedRelation: "inventory_events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_lots_location_fkey"
             columns: ["location"]
@@ -485,8 +613,8 @@ export type Database = {
           id: string
           intent: string
           leftover_of_group_id: string | null
-          made_at: string | null
           legacy_firebase_id: string | null
+          made_at: string | null
           meal: string | null
           name: string | null
           note: string | null
@@ -507,8 +635,8 @@ export type Database = {
           id?: string
           intent?: string
           leftover_of_group_id?: string | null
-          made_at?: string | null
           legacy_firebase_id?: string | null
+          made_at?: string | null
           meal?: string | null
           name?: string | null
           note?: string | null
@@ -529,8 +657,8 @@ export type Database = {
           id?: string
           intent?: string
           leftover_of_group_id?: string | null
-          made_at?: string | null
           legacy_firebase_id?: string | null
+          made_at?: string | null
           meal?: string | null
           name?: string | null
           note?: string | null
@@ -562,51 +690,6 @@ export type Database = {
             columns: ["recipe"]
             isOneToOne: false
             referencedRelation: "recipes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      planned_consumptions: {
-        Row: {
-          created_at: string
-          food_log: string | null
-          id: string
-          meal_plan: string
-          servings: number
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          food_log?: string | null
-          id?: string
-          meal_plan: string
-          servings: number
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          food_log?: string | null
-          id?: string
-          meal_plan?: string
-          servings?: number
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "planned_consumptions_food_log_fkey"
-            columns: ["food_log"]
-            isOneToOne: true
-            referencedRelation: "food_logs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "planned_consumptions_meal_plan_fkey"
-            columns: ["meal_plan"]
-            isOneToOne: true
-            referencedRelation: "meal_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -785,53 +868,140 @@ export type Database = {
         }
         Relationships: []
       }
+      planned_consumptions: {
+        Row: {
+          created_at: string
+          food_log: string | null
+          id: string
+          meal_plan: string
+          servings: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          food_log?: string | null
+          id?: string
+          meal_plan: string
+          servings: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          food_log?: string | null
+          id?: string
+          meal_plan?: string
+          servings?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_consumptions_food_log_fkey"
+            columns: ["food_log"]
+            isOneToOne: true
+            referencedRelation: "food_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_consumptions_meal_plan_fkey"
+            columns: ["meal_plan"]
+            isOneToOne: true
+            referencedRelation: "meal_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       preps: {
         Row: {
           actual_minutes: number
           actual_yield_qty: number | null
+          carbs_g: number | null
+          components: Json
           cook_session: string | null
           ease_rating: number
+          emoji: string | null
+          fat_g: number | null
+          fiber_g: number | null
           id: string
+          kcal: number | null
+          label: string | null
           legacy_firebase_id: string | null
           meal_plan: string | null
           note: string | null
+          nutrition_estimate: Json | null
+          nutrition_is_estimated: boolean
+          nutrition_source: string | null
           parent_prep: string | null
           prepped_at: string
-          recipe: string
+          protein_g: number | null
+          recipe: string | null
           scale_factor: number
+          sodium_mg: number | null
+          sugar_g: number | null
           taste_rating: number
+          time_precision: string
           voided_at: string | null
         }
         Insert: {
           actual_minutes?: number
           actual_yield_qty?: number | null
+          carbs_g?: number | null
+          components?: Json
           cook_session?: string | null
           ease_rating?: number
+          emoji?: string | null
+          fat_g?: number | null
+          fiber_g?: number | null
           id?: string
+          kcal?: number | null
+          label?: string | null
           legacy_firebase_id?: string | null
           meal_plan?: string | null
           note?: string | null
+          nutrition_estimate?: Json | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           parent_prep?: string | null
           prepped_at?: string
-          recipe: string
+          protein_g?: number | null
+          recipe?: string | null
           scale_factor?: number
+          sodium_mg?: number | null
+          sugar_g?: number | null
           taste_rating?: number
+          time_precision?: string
           voided_at?: string | null
         }
         Update: {
           actual_minutes?: number
           actual_yield_qty?: number | null
+          carbs_g?: number | null
+          components?: Json
           cook_session?: string | null
           ease_rating?: number
+          emoji?: string | null
+          fat_g?: number | null
+          fiber_g?: number | null
           id?: string
+          kcal?: number | null
+          label?: string | null
           legacy_firebase_id?: string | null
           meal_plan?: string | null
           note?: string | null
+          nutrition_estimate?: Json | null
+          nutrition_is_estimated?: boolean
+          nutrition_source?: string | null
           parent_prep?: string | null
           prepped_at?: string
-          recipe?: string
+          protein_g?: number | null
+          recipe?: string | null
           scale_factor?: number
+          sodium_mg?: number | null
+          sugar_g?: number | null
           taste_rating?: number
+          time_precision?: string
           voided_at?: string | null
         }
         Relationships: [
@@ -868,6 +1038,7 @@ export type Database = {
       products: {
         Row: {
           aliases: string[]
+          archived_at: string | null
           barcode: string | null
           brand: string | null
           carbs_g: number | null
@@ -883,6 +1054,7 @@ export type Database = {
           kcal: number | null
           last_used_at: string | null
           legacy_firebase_id: string | null
+          merged_into: string | null
           name: string
           nutrition_basis_qty: number | null
           nutrition_is_estimated: boolean
@@ -890,7 +1062,10 @@ export type Database = {
           package_qty_base: number
           package_unit: string
           protein_g: number | null
+          serving_label: string | null
           serving_qty_base: number | null
+          serving_unit: string | null
+          servings_per_package: number | null
           sodium_mg: number | null
           sugar_g: number | null
           updated_at: string
@@ -898,6 +1073,7 @@ export type Database = {
         }
         Insert: {
           aliases?: string[]
+          archived_at?: string | null
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
@@ -913,6 +1089,7 @@ export type Database = {
           kcal?: number | null
           last_used_at?: string | null
           legacy_firebase_id?: string | null
+          merged_into?: string | null
           name: string
           nutrition_basis_qty?: number | null
           nutrition_is_estimated?: boolean
@@ -920,7 +1097,10 @@ export type Database = {
           package_qty_base: number
           package_unit: string
           protein_g?: number | null
+          serving_label?: string | null
           serving_qty_base?: number | null
+          serving_unit?: string | null
+          servings_per_package?: number | null
           sodium_mg?: number | null
           sugar_g?: number | null
           updated_at?: string
@@ -928,6 +1108,7 @@ export type Database = {
         }
         Update: {
           aliases?: string[]
+          archived_at?: string | null
           barcode?: string | null
           brand?: string | null
           carbs_g?: number | null
@@ -943,6 +1124,7 @@ export type Database = {
           kcal?: number | null
           last_used_at?: string | null
           legacy_firebase_id?: string | null
+          merged_into?: string | null
           name?: string
           nutrition_basis_qty?: number | null
           nutrition_is_estimated?: boolean
@@ -950,7 +1132,10 @@ export type Database = {
           package_qty_base?: number
           package_unit?: string
           protein_g?: number | null
+          serving_label?: string | null
           serving_qty_base?: number | null
+          serving_unit?: string | null
+          servings_per_package?: number | null
           sodium_mg?: number | null
           sugar_g?: number | null
           updated_at?: string
@@ -965,40 +1150,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "products_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "products_package_unit_fkey"
             columns: ["package_unit"]
             isOneToOne: false
             referencedRelation: "measure_conversions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "products_serving_unit_fkey"
+            columns: ["serving_unit"]
+            isOneToOne: false
+            referencedRelation: "measure_conversions"
+            referencedColumns: ["id"]
+          },
         ]
-      }
-      record_edits: {
-        Row: {
-          after_state: Json
-          before_state: Json
-          edited_at: string
-          id: string
-          record_id: string
-          resource: string
-        }
-        Insert: {
-          after_state: Json
-          before_state: Json
-          edited_at?: string
-          id?: string
-          record_id: string
-          resource: string
-        }
-        Update: {
-          after_state?: Json
-          before_state?: Json
-          edited_at?: string
-          id?: string
-          record_id?: string
-          resource?: string
-        }
-        Relationships: []
       }
       recipe_ingredients: {
         Row: {
@@ -1148,6 +1320,33 @@ export type Database = {
           },
         ]
       }
+      record_edits: {
+        Row: {
+          after_state: Json
+          before_state: Json
+          edited_at: string
+          id: string
+          record_id: string
+          resource: string
+        }
+        Insert: {
+          after_state: Json
+          before_state: Json
+          edited_at?: string
+          id?: string
+          record_id: string
+          resource: string
+        }
+        Update: {
+          after_state?: Json
+          before_state?: Json
+          edited_at?: string
+          id?: string
+          record_id?: string
+          resource?: string
+        }
+        Relationships: []
+      }
       shopping_items: {
         Row: {
           checked_at: string | null
@@ -1248,6 +1447,14 @@ export type Database = {
         }
         Relationships: []
       }
+      history_quality_issues: {
+        Row: {
+          details: Json | null
+          issue_type: string | null
+          record_id: string | null
+        }
+        Relationships: []
+      }
       inventory_event_costs: {
         Row: {
           cost: number | null
@@ -1269,6 +1476,10 @@ export type Database = {
       }
     }
     Functions: {
+      consume_inventory_lot: {
+        Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
+        Returns: string
+      }
       consume_planned_meals: {
         Args: {
           p_meal_plans: string[]
@@ -1290,6 +1501,50 @@ export type Database = {
         Args: { p_lot: string; p_occurred_at?: string; p_quantity?: number }
         Returns: string
       }
+      consume_product_purchase:
+        | {
+            Args: {
+              p_acquisition_type: string
+              p_consumed_quantity: number
+              p_cost_is_estimated: boolean
+              p_cost_source: string
+              p_label?: string
+              p_location?: string
+              p_note?: string
+              p_occurred_at?: string
+              p_out_of_pocket_cost: number
+              p_paid_by: string
+              p_price_as_of: string
+              p_product: string
+              p_purchased_quantity: number
+              p_request_id: string
+              p_time_precision?: string
+              p_total_price: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_acquisition_type: string
+              p_consumed_quantity: number
+              p_cost_is_estimated: boolean
+              p_cost_source: string
+              p_label?: string
+              p_location?: string
+              p_note?: string
+              p_occurred_at?: string
+              p_out_of_pocket_cost: number
+              p_paid_by: string
+              p_price_as_of: string
+              p_product: string
+              p_purchased_quantity: number
+              p_quantity_unit: string
+              p_request_id: string
+              p_time_precision?: string
+              p_total_price: number
+            }
+            Returns: Json
+          }
       cook_recipe: {
         Args: {
           p_actual_yield?: number
@@ -1300,79 +1555,6 @@ export type Database = {
         Returns: string
       }
       cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
-      prepare_recipe: {
-        Args: {
-          p_eaten_servings?: number
-          p_location?: string
-          p_meal_plan?: string
-          p_occurred_at?: string
-          p_recipe: string
-          p_scale?: number
-          p_servings?: number
-        }
-        Returns: Json
-      }
-      consume_inventory_lot: {
-        Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
-        Returns: string
-      }
-      consume_product_purchase: {
-        Args: {
-          p_cost_is_estimated?: boolean
-          p_cost_source?: string
-          p_label?: string
-          p_location?: string
-          p_note?: string
-          p_occurred_at?: string
-          p_product: string
-          p_purchased_quantity: number
-          p_consumed_quantity: number
-          p_total_cost?: number
-        }
-        Returns: Json
-      }
-      log_manual_consumption: {
-        Args: {
-          p_cost?: number
-          p_cost_is_estimated?: boolean
-          p_cost_source?: string
-          p_label: string
-          p_note?: string
-          p_nutrition?: Json
-          p_occurred_at?: string
-          p_portion_label?: string
-        }
-        Returns: Json
-      }
-      gpt_update_consumption: { Args: { p_food_log: string; p_patch: Json }; Returns: Json }
-      gpt_update_food: { Args: { p_food: string; p_patch: Json }; Returns: Json }
-      gpt_update_inventory_lot: { Args: { p_lot: string; p_patch: Json }; Returns: Json }
-      gpt_update_product: { Args: { p_patch: Json; p_product: string }; Returns: Json }
-      gpt_update_recipe: { Args: { p_patch: Json; p_recipe: string }; Returns: Json }
-      save_prep_feedback: {
-        Args: { p_actual_minutes?: number; p_ease?: number; p_prep: string; p_taste?: number }
-        Returns: undefined
-      }
-      set_inventory_lot_quantity: {
-        Args: { p_discard?: boolean; p_lot: string; p_remaining: number }
-        Returns: string
-      }
-      void_food_log: {
-        Args: { p_food_log: string }
-        Returns: undefined
-      }
-      restore_food_log: {
-        Args: { p_food_log: string }
-        Returns: undefined
-      }
-      undo_inventory_adjustment: {
-        Args: { p_event: string }
-        Returns: undefined
-      }
-      undo_prep: {
-        Args: { p_prep: string }
-        Returns: undefined
-      }
       food_accepts_unit: {
         Args: { p_food: string; p_unit: string }
         Returns: boolean
@@ -1382,16 +1564,31 @@ export type Database = {
         Returns: number
       }
       gpt_add_grocery_lots: {
-        Args: { p_items: Json; p_source?: string }
+        Args: { p_items: Json; p_request_id: string; p_source: string }
         Returns: Json
+      }
+      gpt_archive_definition: {
+        Args: { p_id: string; p_reason: string; p_resource: string }
+        Returns: Json
+      }
+      gpt_claim_request: {
+        Args: { p_operation: string; p_request_id: string }
+        Returns: Json
+      }
+      gpt_complete_request: {
+        Args: { p_request_id: string; p_result: Json }
+        Returns: undefined
       }
       gpt_consume_inventory: {
         Args: {
           p_food: string
           p_label?: string
+          p_lot?: string
           p_note?: string
-          p_occurred_at?: string
+          p_occurred_at: string
           p_quantity: number
+          p_request_id: string
+          p_time_precision: string
           p_unit: string
         }
         Returns: Json
@@ -1401,23 +1598,60 @@ export type Database = {
           p_label?: string
           p_lot: string
           p_note?: string
-          p_occurred_at?: string
+          p_occurred_at: string
           p_quantity: number
+          p_request_id: string
+          p_time_precision: string
+        }
+        Returns: Json
+      }
+      gpt_create_manual_prepared_batch: {
+        Args: {
+          p_acquisition_type: string
+          p_components: Json
+          p_cost_is_estimated: boolean
+          p_cost_source: string
+          p_label: string
+          p_location: string
+          p_note?: string
+          p_nutrition: Json
+          p_nutrition_estimate: Json
+          p_out_of_pocket_cost: number
+          p_paid_by: string
+          p_prepared_at: string
+          p_price_as_of: string
+          p_request_id: string
+          p_servings: number
+          p_time_precision: string
+          p_total_price: number
+          p_use_by: string
+        }
+        Returns: Json
+      }
+      gpt_merge_products: {
+        Args: {
+          p_archive_source_food: boolean
+          p_reason: string
+          p_source: string
+          p_target: string
         }
         Returns: Json
       }
       gpt_prepare_recipe: {
         Args: {
-          p_location?: string
-          p_note?: string
+          p_location: string
+          p_note: string
+          p_prepared_at: string
           p_recipe: string
+          p_request_id: string
           p_servings: number
-          p_use_by?: string
+          p_time_precision: string
+          p_use_by: string
         }
         Returns: Json
       }
       gpt_reconcile_inventory: {
-        Args: { p_replacements: Json; p_source?: string }
+        Args: { p_replacements: Json; p_request_id: string; p_source: string }
         Returns: Json
       }
       gpt_replace_weekly_plan: {
@@ -1425,7 +1659,52 @@ export type Database = {
         Returns: Json
       }
       gpt_save_recipe: { Args: { p_recipe: Json }; Returns: Json }
+      gpt_update_consumption: {
+        Args: { p_food_log: string; p_patch: Json }
+        Returns: Json
+      }
+      gpt_update_food: {
+        Args: { p_food: string; p_patch: Json }
+        Returns: Json
+      }
+      gpt_update_inventory_lot: {
+        Args: { p_lot: string; p_patch: Json }
+        Returns: Json
+      }
+      gpt_update_product: {
+        Args: { p_patch: Json; p_product: string }
+        Returns: Json
+      }
+      gpt_update_recipe: {
+        Args: { p_patch: Json; p_recipe: string }
+        Returns: Json
+      }
+      gpt_void_consumption: {
+        Args: { p_food_log: string; p_reason: string }
+        Returns: Json
+      }
       is_app_owner: { Args: never; Returns: boolean }
+      log_manual_consumption: {
+        Args: {
+          p_acquisition_type: string
+          p_components: Json
+          p_cost_is_estimated: boolean
+          p_cost_source: string
+          p_label: string
+          p_note?: string
+          p_nutrition: Json
+          p_nutrition_estimate: Json
+          p_occurred_at: string
+          p_out_of_pocket_cost: number
+          p_paid_by: string
+          p_portion_label: string
+          p_price_as_of: string
+          p_request_id: string
+          p_time_precision: string
+          p_total_price: number
+        }
+        Returns: Json
+      }
       lot_nutrition_json: {
         Args: { p_lot: string; p_path?: string[] }
         Returns: Json
@@ -1442,16 +1721,60 @@ export type Database = {
         }[]
       }
       prep_total_cost: { Args: { p_prep: string }; Returns: number }
+      prepare_recipe: {
+        Args: {
+          p_eaten_servings?: number
+          p_location?: string
+          p_meal_plan?: string
+          p_occurred_at?: string
+          p_recipe: string
+          p_scale?: number
+          p_servings?: number
+        }
+        Returns: Json
+      }
+      product_nutrition_multiplier: {
+        Args: { p_product: string; p_quantity: number }
+        Returns: number
+      }
+      product_servings_for_quantity: {
+        Args: { p_product: string; p_quantity: number }
+        Returns: number
+      }
       rebuild_shopping_from_plan: {
         Args: { p_from?: string; p_through?: string }
         Returns: number
       }
       refresh_inventory_lot: { Args: { p_lot: string }; Returns: undefined }
+      refresh_prepared_lot_provenance: {
+        Args: { p_prep: string }
+        Returns: undefined
+      }
       resolve_measure_conversion: { Args: { p_unit: string }; Returns: string }
+      restore_food_log: { Args: { p_food_log: string }; Returns: undefined }
+      save_prep_feedback: {
+        Args: {
+          p_actual_minutes?: number
+          p_ease?: number
+          p_prep: string
+          p_taste?: number
+        }
+        Returns: undefined
+      }
+      set_inventory_lot_quantity: {
+        Args: { p_discard?: boolean; p_lot: string; p_remaining: number }
+        Returns: string
+      }
       to_base_quantity: {
         Args: { p_amount: number; p_food: string; p_unit: string }
         Returns: number
       }
+      undo_inventory_adjustment: {
+        Args: { p_event: string }
+        Returns: undefined
+      }
+      undo_prep: { Args: { p_prep: string }; Returns: undefined }
+      void_food_log: { Args: { p_food_log: string }; Returns: undefined }
     }
     Enums: {
       daypart: "breakfast" | "brunch" | "lunch" | "dinner" | "snack" | "dessert"
@@ -1479,12 +1802,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1508,11 +1831,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1533,11 +1856,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1558,11 +1881,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1575,11 +1898,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1589,6 +1912,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       daypart: ["breakfast", "brunch", "lunch", "dinner", "snack", "dessert"],

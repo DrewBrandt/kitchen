@@ -44,7 +44,13 @@ PostgreSQL functions:
 - weekly plans and generated groceries are rebuilt together;
 - preparation deducts ingredients and creates a prepared lot together;
 - consumption deducts FEFO lots and records nutrition together;
-- purchased-product logging creates a lot and consumes its reported portion together.
+- purchased-product logging creates a classified lot and consumes its portion together;
+- voiding consumption returns deducted stock and also reverses a same-action acquisition.
+
+Consequential create/consume requests carry a stable `requestId` UUID. The
+database stores that request and its response in the same transaction as the
+mutation. Retrying the same user intent with the same UUID returns the original
+response without repeating any deduction, lot, batch, or history insert.
 
 GPT-only functions are executable by `service_role`, not browser roles. Owner RLS
 continues to protect direct browser access.
@@ -54,13 +60,13 @@ continues to protect direct browser access.
 Reads:
 
 ```text
-GET /v1/inventory
+GET /v1/inventory?includeDepleted=false
 GET /v1/foods?q=<optional search>
 GET /v1/foods/{uuid}
 GET /v1/recipes?q=<optional search>
 GET /v1/recipes/{uuid}
-GET /v1/prepared-batches
-GET /v1/history?days=30
+GET /v1/prepared-batches?includeDepleted=false&includeVoided=false
+GET /v1/history?days=30&includeVoided=false
 GET /v1/plans
 GET /v1/targets
 GET /v1/preferences
@@ -80,6 +86,7 @@ POST /v1/consume/prepared
 POST /v1/consume/inventory
 POST /v1/consume/product
 POST /v1/consume/manual
+POST /v1/history/void
 POST /v1/plans
 POST /v1/grocery-items
 POST /v1/targets
@@ -92,8 +99,10 @@ PATCH /v1/lots/{uuid}
 PATCH /v1/history/{uuid}
 ```
 
-Food lookup returns supported measurement units and products. Inventory returns
-exact `foodId`, `productId`, and `lotId` values. The GPT must reuse these IDs.
+Food lookup searches canonical names/aliases plus product names, brands, aliases,
+and barcodes. Inventory returns exact `foodId`, `productId`, and `lotId` values
+and each lot's acquisition type, full price/value, out-of-pocket cost, payer,
+price provenance, and time precision. The GPT must reuse these IDs.
 
 ## Editing existing records
 
@@ -117,15 +126,26 @@ and any linked inventory events, lots, and derived cost. Correct a purchased-foo
 cost without relogging it:
 
 ```json
-{"purchaseTotalCost":4.05,"costIsEstimated":false,"costSource":"Receipt"}
+{"purchaseTotalPrice":4.05,"purchaseOutOfPocketCost":4.05,"purchasePaidBy":"self","purchasePriceAsOf":"2026-08-26","costIsEstimated":false,"costSource":"Receipt"}
 ```
 
-`purchaseTotalCost` updates the single away-from-home purchase lot linked to that
-history event. It is rejected when there is not exactly one such lot; use the
-specific lot edit in that case. Nutrition and history remain unduplicated.
+The `purchase*` fields update the originating purchase lot explicitly linked to
+that history event, whether grocery or away from home. Nutrition and history
+remain unduplicated.
 
-Manual events can be corrected in place with `portionLabel`, `nutrition`, and
-`directCost`. The nutrition object may contain only the values actually known;
+Void a duplicate or incorrect history event without deleting its audit trail:
+
+```json
+{"id":"<history uuid>","reason":"Duplicate entry"}
+```
+
+The operation restores ordinary inventory deductions. For an atomic purchase and
+consume action it also compensates the full acquired lot, so no phantom stock is
+left behind. It refuses the reversal when that lot has later active uses.
+
+Manual events can be corrected in place with `portionLabel`, `nutrition`,
+`nutritionEstimate`, `components`, acquisition fields, and payment fields. The
+nutrition object may contain only the values actually known;
 setting it to `null` returns the event to unknown nutrition.
 
 ## Definitions and groceries
@@ -157,13 +177,24 @@ Create a canonical food before its branded product:
 ```
 
 `POST /v1/products` accepts `foodId`, name, `packageQuantity`, and
-`packageUnit`. Package and serving quantities are converted to the food's base
-quantity on the server.
+`packageUnit`. Printed serving information is separate:
+`servingQuantity`/`servingUnit`, `servingLabel`, and `servingsPerPackage`.
+The explicit package serving count is authoritative for whole-package nutrition
+when a rounded net weight does not divide evenly. It also accepts
+`estimatedCost`, `costSource`, and `costAsOf`. Package and serving quantities are
+converted independently to the food's base unit.
+
+Exact barcode or normalized brand/name/package matches return the existing
+product. Merge an existing duplicate by PATCHing the duplicate product with
+`mergeIntoProductId`, `archiveSourceFood`, and `reason`. Archive an unused food
+or product by PATCHing it with `archive: true` and `reason`; records remain in
+the audit trail and are hidden from ordinary searches.
 
 Add reviewed lots atomically:
 
 ```json
 {
+  "requestId": "<stable request uuid>",
   "source": "Safeway receipt",
   "items": [{
     "productId": "<product uuid>",
@@ -171,33 +202,52 @@ Add reviewed lots atomically:
     "unit": "gal",
     "location": "fridge",
     "bestBy": "2026-09-12",
-    "totalCost": 4.99
+    "totalPrice": 4.99,
+    "outOfPocketCost": 4.99,
+    "paidBy": "self",
+    "costIsEstimated": false,
+    "priceAsOf": "2026-08-26",
+    "acquiredAt": "2026-08-26T17:00:00-04:00",
+    "acquiredTimePrecision": "estimated"
   }]
 }
 ```
 
-The unit may be a returned unit UUID, full name, or short name.
+The source and each lot's full price, out-of-pocket amount, payer, price date,
+acquired time/precision, and estimate status are required. If no
+receipt price is available, research a current exact-store listing or ask rather
+than omitting cost. The unit may be a returned UUID, full name, or short name.
 
 ## Cooking and eating
 
-Cooking and eating are separate. `POST /v1/prepare/recipe` deducts raw
-ingredients FEFO and creates a prepared batch:
+Cooking and eating are separate. `POST /v1/prepare/recipe` is the single prepare
+endpoint. `sourceType: recipe` deducts raw ingredients FEFO; `sourceType: manual`
+creates ready-made or historical leftovers without a fake recipe/product or
+retroactive ingredient deductions:
 
 ```json
-{"recipeId":"<recipe uuid>","servings":4,"location":"fridge","bestBy":"2026-09-04"}
+{"requestId":"<stable request uuid>","sourceType":"recipe","recipeId":"<recipe uuid>","servings":4,"location":"fridge","bestBy":"2026-09-04","preparedAt":"2026-08-31T18:30:00-04:00","timePrecision":"estimated"}
 ```
+
+`preparedAt` timestamps the preparation, output lot, and ingredient deductions;
+it and `timePrecision` are required, including historical backfills.
 
 Eat from its returned lot ID using `POST /v1/consume/prepared`:
 
 ```json
-{"batchId":"<prepared lot uuid>","servings":1,"timestamp":"2026-08-31T19:00:00-04:00"}
+{"requestId":"<stable request uuid>","batchId":"<prepared lot uuid>","servings":1,"timestamp":"2026-08-31T19:00:00-04:00","timePrecision":"estimated"}
 ```
 
 Quick use of one food goes through `POST /v1/consume/inventory`:
 
 ```json
-{"foodId":"<food uuid>","quantity":1,"unit":"ct","label":"Apple"}
+{"requestId":"<stable request uuid>","foodId":"<food uuid>","lotId":"<exact lot uuid>","quantity":1,"unit":"ct","timestamp":"2026-08-31T12:00:00-04:00","timePrecision":"dateOnly","label":"Apple"}
 ```
+
+Pass `lotId` when the user identifies the package being eaten. The lot must
+belong to `foodId` and contain the whole requested quantity; the transaction
+will not spill into another lot. Omit `lotId` to deduct the food FEFO. In both
+cases, history `servings` is derived from the deducted product serving sizes.
 
 All three operations roll back completely on insufficient inventory.
 
@@ -208,22 +258,32 @@ food, product, or inventory lot. Log the consumed event directly:
 
 ```json
 {
+  "requestId": "<stable request uuid>",
   "label": "Spaghetti at Mom's",
   "portionLabel": "1 large plate",
   "timestamp": "2026-09-01T19:15:00-04:00",
+  "timePrecision": "estimated",
   "nutrition": {
     "calories": 750,
     "proteinG": 28,
     "source": "Rough portion estimate",
     "estimated": true
   },
-  "cost": 0,
-  "costSource": "Shared family meal"
+  "nutritionEstimate": {"confidence":"low","rationale":"Portion recalled after the meal"},
+  "components": [{"label":"Spaghetti","portionLabel":"1 large plate"}],
+  "acquisitionType": "home",
+  "totalPrice": null,
+  "outOfPocketCost": 0,
+  "paidBy": "parents",
+  "costIsEstimated": false,
+  "costSource": "Shared family meal",
+  "priceAsOf": null
 }
 ```
 
-`label` is the only required field. Omit `nutrition` when it is wholly unknown,
-or omit individual nutrient properties when only a partial snapshot is known.
+Time/precision, structured components, acquisition, and payment provenance are
+required. Omit `nutrition` when wholly unknown, or omit individual nutrient
+properties when only a partial snapshot is known.
 Unknown nutrients remain `NULL`; totals expose incomplete entry counts and must
 not present known subtotals as complete daily nutrition.
 
@@ -234,20 +294,33 @@ consume it through `POST /v1/consume/product`:
 
 ```json
 {
+  "requestId": "<stable request uuid>",
   "productId": "<product uuid>",
   "purchasedQuantity": 1,
   "consumedQuantity": 0.5,
+  "quantityUnit": "ct",
+  "acquisitionType": "takeout",
   "location": "fridge",
   "timestamp": "2026-09-01T08:30:00-04:00",
-  "totalCost": 7.49,
-  "costSource": "Receipt"
+  "timePrecision": "exact",
+  "totalPrice": 7.49,
+  "outOfPocketCost": 7.49,
+  "paidBy": "self",
+  "costIsEstimated": false,
+  "costSource": "Receipt",
+  "priceAsOf": "2026-09-01"
 }
 ```
 
-This atomically creates a lot classified as an away-from-home purchase, consumes
-half through the ordinary inventory ledger, and leaves half in the fridge. When
-the full purchase was eaten, set both quantities to the same value. Distinct
-products use distinct calls; repeated units of one exact product can use quantity.
+Use `grocery`, `restaurant`, `takeout`, `office`, `gift`, `home`, or `other`.
+Full value, Drew's out-of-pocket amount, payer, estimate status, source, and
+price date are distinct and required (full value may be null only when genuinely
+unknown). The operation
+creates the classified lot, consumes half through the ordinary ledger, and leaves
+half in the fridge. For a fully eaten purchase, set both quantities equal.
+Both quantities must use the explicit `quantityUnit`; the API converts that unit
+to the food's canonical storage unit transactionally. Never pre-convert to an
+undocumented base amount.
 
 ## Planning and settings
 
