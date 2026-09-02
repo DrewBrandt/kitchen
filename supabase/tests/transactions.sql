@@ -133,12 +133,12 @@ insert into transaction_test_results select is(
 );
 
 insert into transaction_test_results select lives_ok(
-  $$select consume_prepared_lot((select id from inventory_lots where prep is not null and id <> '93000000-0000-0000-0000-000000000001'), 1)$$,
+  $$select consume_prepared_lot((select lot.id from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000001' order by prep.prepped_at desc limit 1), 1)$$,
   'Consuming a prepared unit logs food and deducts the prepared lot atomically'
 );
 
 insert into transaction_test_results select is(
-  (select remaining_qty from inventory_lots where prep is not null),
+  (select lot.remaining_qty from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000001' order by prep.prepped_at desc limit 1),
   1::numeric,
   'Prepared inventory decreases by the consumed quantity'
 );
@@ -225,12 +225,12 @@ delete from inventory_events where lot in (
   select lot.id from inventory_lots lot join preps prep on prep.id = lot.prep
   where prep.recipe = '94000000-0000-0000-0000-000000000002'
 );
+delete from meal_plans where id = '96000000-0000-0000-0000-000000000001';
 delete from food_logs where recipe = '94000000-0000-0000-0000-000000000002';
 delete from inventory_lots where prep in (
   select id from preps where recipe = '94000000-0000-0000-0000-000000000002'
 );
 delete from preps where recipe = '94000000-0000-0000-0000-000000000002';
-delete from meal_plans where id = '96000000-0000-0000-0000-000000000001';
 delete from recipes where id = '94000000-0000-0000-0000-000000000002';
 
 insert into shopping_items(food, qty_needed, unit, source, checked_at, quantity_label)
@@ -358,7 +358,7 @@ insert into transaction_test_results select throws_ok(
 
 -- Undoing a cook: refused once the batch has been eaten from, allowed otherwise.
 insert into transaction_test_results select throws_ok(
-  $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty < initial_qty limit 1))$$,
+  $$select undo_prep((select lot.prep from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000001' and lot.remaining_qty < lot.initial_qty limit 1))$$,
   'P0001',
   'This batch has already been eaten from and can no longer be undone',
   'A batch that has been eaten from can no longer be uncooked'
@@ -378,12 +378,12 @@ insert into transaction_test_results select lives_ok(
 );
 
 insert into transaction_test_results select lives_ok(
-  $$select undo_prep((select prep from inventory_lots where prep is not null and remaining_qty = initial_qty limit 1))$$,
+  $$select undo_prep((select lot.prep from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000001' and lot.remaining_qty = lot.initial_qty order by prep.prepped_at desc limit 1))$$,
   'An untouched batch can be uncooked'
 );
 
 insert into transaction_test_results select is(
-  (select count(*) from inventory_lots lot join preps prep on prep.id = lot.prep where prep.voided_at is null and lot.remaining_qty > 0),
+  (select count(*) from inventory_lots lot join preps prep on prep.id = lot.prep where prep.recipe = '94000000-0000-0000-0000-000000000001' and prep.voided_at is null and lot.remaining_qty > 0),
   1::bigint,
   'Uncooking zeroes the batch it produced and leaves the earlier one alone'
 );
