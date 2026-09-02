@@ -465,8 +465,9 @@ button.soon-row:hover { background: #121715; }
 .layout-switcher span { font-size: 10.5px; }
 .on-deck-board { height: calc(100vh - 205px); min-height: 520px; display: grid; gap: 12px; min-width: 0; }
 .on-deck-board.layout-stack { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(520px, calc(100vh - 205px)); overflow-y: auto; padding-right: 3px; }
-.on-deck-board.layout-split { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
-.on-deck-board.layout-three { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.on-deck-board.layout-split { grid-template-rows: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: minmax(360px, calc((100% - 12px) / 2)); overflow-x: auto; overflow-y: hidden; padding-bottom: 3px; }
+.on-deck-board.layout-three { grid-template-rows: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: minmax(300px, calc((100% - 24px) / 3)); overflow-x: auto; overflow-y: hidden; padding-bottom: 3px; }
+.on-deck-board.layout-split, .on-deck-board.layout-three { scrollbar-width: thin; scrollbar-color: #3b4842 transparent; }
 .on-deck-board.layout-quad { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
 .on-deck-card { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #2a322f; border-radius: 14px; background: #0f1311; box-shadow: 0 12px 36px rgba(0,0,0,.18); transition: opacity .15s, border-color .15s; }
 .on-deck-card.dragging { opacity: .45; border-color: var(--mint); }
