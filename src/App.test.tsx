@@ -141,6 +141,10 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Four corners' }));
     expect(screen.getByRole('button', { name: 'Four corners' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.on-deck-board')).toHaveClass('layout-quad');
+
+    await user.click(screen.getByRole('button', { name: 'Side by side' }));
+    expect(document.querySelector('.on-deck-board')).toHaveClass('layout-split');
 
     await user.type(within(pancakes).getByRole('button', { name: /Drag Simple Pancakes panel/ }), '{ArrowRight}');
     const panelNames = [...document.querySelectorAll('.on-deck-card')].map((panel) => panel.getAttribute('aria-label'));
