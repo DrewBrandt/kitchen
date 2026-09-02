@@ -128,15 +128,25 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'lot') {
-    const { error } = await client.from('inventory_lots').insert({
-      product: text(form, 'product'),
-      initial_qty: number(form, 'initial_qty'),
-      remaining_qty: number(form, 'initial_qty'),
-      total_cost: number(form, 'total_cost', 0),
-      cost_is_estimated: form.get('cost_is_estimated') === 'on',
-      location: optionalText(form, 'location'),
-      use_by: optionalText(form, 'use_by'),
-      note: optionalText(form, 'note'),
+    const acquiredAt = optionalText(form, 'acquired_at') ? new Date(text(form, 'acquired_at')).toISOString() : new Date().toISOString();
+    const { error } = await client.rpc('gpt_add_grocery_lots', {
+      p_items: [{
+        productId: text(form, 'product'),
+        quantity: number(form, 'initial_qty'),
+        unit: text(form, 'quantity_unit'),
+        totalPrice: number(form, 'total_cost'),
+        outOfPocketCost: number(form, 'out_of_pocket_cost'),
+        paidBy: text(form, 'paid_by'),
+        costIsEstimated: form.get('cost_is_estimated') === 'on',
+        priceAsOf: text(form, 'price_as_of'),
+        acquiredAt,
+        acquiredTimePrecision: text(form, 'time_precision'),
+        ...(optionalText(form, 'location') ? { location: optionalText(form, 'location') } : {}),
+        ...(optionalText(form, 'use_by') ? { bestBy: optionalText(form, 'use_by') } : {}),
+        ...(optionalText(form, 'note') ? { note: optionalText(form, 'note') } : {}),
+      }],
+      p_source: text(form, 'cost_source'),
+      p_request_id: crypto.randomUUID(),
     });
     if (error) throw error;
     return 'Lot added.';
@@ -172,17 +182,24 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'log') {
-    const totalCost = optionalNumber(form, 'total_cost');
     const occurredAt = optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString();
+    const totalPrice = number(form, 'total_cost');
     const { error } = await client.rpc('consume_product_purchase', {
       p_product: text(form, 'product'),
       p_purchased_quantity: number(form, 'purchased_quantity', 1),
       p_consumed_quantity: number(form, 'consumed_quantity', 1),
+      p_quantity_unit: text(form, 'quantity_unit'),
+      p_acquisition_type: text(form, 'acquisition_type'),
+      p_total_price: totalPrice as number,
+      p_out_of_pocket_cost: number(form, 'out_of_pocket_cost'),
+      p_paid_by: text(form, 'paid_by'),
+      p_price_as_of: text(form, 'price_as_of'),
+      p_request_id: crypto.randomUUID(),
       ...(optionalText(form, 'location') ? { p_location: optionalText(form, 'location')! } : {}),
       p_occurred_at: occurredAt,
+      p_time_precision: text(form, 'time_precision'),
       p_cost_is_estimated: form.get('cost_is_estimated') === 'on',
-      ...(totalCost === null ? {} : { p_total_cost: totalCost }),
-      ...(optionalText(form, 'cost_source') ? { p_cost_source: optionalText(form, 'cost_source')! } : {}),
+      p_cost_source: text(form, 'cost_source'),
       ...(optionalText(form, 'label') ? { p_label: optionalText(form, 'label')! } : {}),
       ...(optionalText(form, 'note') ? { p_note: optionalText(form, 'note')! } : {}),
     });
@@ -207,15 +224,31 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       nutrition.estimated = form.get('nutrition_is_estimated') === 'on';
       if (nutritionSource) nutrition.source = nutritionSource;
     }
-    const cost = optionalNumber(form, 'cost');
+    const totalPrice = optionalNumber(form, 'total_price');
+    const portionLabel = optionalText(form, 'portion_label');
+    const components = text(form, 'components').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+      .map((label) => ({ label }));
+    const nutritionEstimated = form.get('nutrition_is_estimated') === 'on';
+    const nutritionEstimate = nutritionEstimated ? {
+      confidence: text(form, 'nutrition_confidence') || 'medium',
+      rationale: optionalText(form, 'nutrition_rationale') ?? nutritionSource ?? optionalText(form, 'note') ?? 'User marked this nutrition as estimated.',
+    } : null;
     const { error } = await client.rpc('log_manual_consumption', {
       p_label: text(form, 'label'),
-      ...(optionalText(form, 'portion_label') ? { p_portion_label: optionalText(form, 'portion_label')! } : {}),
+      p_portion_label: portionLabel ?? '',
       p_occurred_at: occurredAt,
-      ...(Object.keys(nutrition).length ? { p_nutrition: nutrition } : {}),
-      ...(cost === null ? {} : { p_cost: cost }),
+      p_time_precision: text(form, 'time_precision'),
+      p_nutrition: Object.keys(nutrition).length ? nutrition : null,
+      p_nutrition_estimate: nutritionEstimate,
+      p_components: components.length ? components : [{ label: text(form, 'label'), ...(portionLabel ? { portionLabel } : {}) }],
+      p_acquisition_type: text(form, 'acquisition_type'),
+      p_total_price: totalPrice as number,
+      p_out_of_pocket_cost: number(form, 'out_of_pocket_cost'),
+      p_paid_by: text(form, 'paid_by'),
       p_cost_is_estimated: form.get('cost_is_estimated') === 'on',
-      ...(optionalText(form, 'cost_source') ? { p_cost_source: optionalText(form, 'cost_source')! } : {}),
+      p_cost_source: text(form, 'cost_source'),
+      p_price_as_of: (totalPrice === null ? null : text(form, 'price_as_of')) as string,
+      p_request_id: crypto.randomUUID(),
       ...(optionalText(form, 'note') ? { p_note: optionalText(form, 'note')! } : {}),
     });
     if (error) throw error;

@@ -336,7 +336,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     // One unambiguous number per batch: what the whole batch cost. Per-serving and
     // value-remaining are derived from it in src/lib/cost.ts and nowhere else.
     const directBatch = lotCost(lot, servingsTotal);
-    const recipeEstimate = prep ? recipeCosts.get(prep.recipe) : undefined;
+    const recipeEstimate = prep?.recipe ? recipeCosts.get(prep.recipe) : undefined;
     const batch: CostValue = directBatch.cost !== null
       ? directBatch
       : recipeEstimate?.costPerServing !== null && recipeEstimate?.costPerServing !== undefined
@@ -347,7 +347,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       prepId: prep?.id,
       mealPlanId: prep?.meal_plan ?? undefined,
       emoji: recipe?.emoji ?? '🥘',
-      name: recipe?.name ?? 'Prepared batch',
+      name: recipe?.name ?? prep?.label ?? 'Prepared batch',
       location: lot.location ?? 'unassigned',
       remaining: `${formatQuantity(servingsLeft)} of ${formatQuantity(servingsTotal)} servings`,
       due: daysUntil(lot.use_by).label,

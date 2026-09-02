@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Drew's Pantry API
-  version: 3.0.0
+  version: 4.0.0
   description: Private Supabase-backed pantry operations. Read current state before mutations.
 servers:
   - url: https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/pantry-api
@@ -11,7 +11,9 @@ paths:
   /v1/inventory:
     get:
       operationId: getPantryInventory
-      summary: Read positive inventory lots with canonical food and product IDs
+      summary: Read inventory lots with exact IDs and acquisition/payment provenance
+      parameters:
+        - {in: query, name: includeDepleted, required: false, schema: {type: boolean, default: false}, description: Include zero-remaining lots for audit and correction.}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: reconcilePantryInventory
@@ -24,8 +26,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [replacements]
+              required: [requestId, replacements]
               properties:
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
                 source: {type: string}
                 replacements:
                   type: array
@@ -40,15 +43,20 @@ paths:
                         items:
                           type: object
                           additionalProperties: false
-                          required: [productId, quantity, unit]
+                          required: [productId, quantity, unit, totalPrice, outOfPocketCost, paidBy, costIsEstimated, priceAsOf, acquiredAt, acquiredTimePrecision]
                           properties:
                             productId: {type: string, format: uuid}
                             quantity: {type: number, exclusiveMinimum: 0}
                             unit: {type: string}
                             location: {type: string, enum: [pantry, fridge, freezer]}
                             bestBy: {type: string, format: date}
-                            totalCost: {type: number, minimum: 0}
+                            totalPrice: {type: number, minimum: 0}
+                            outOfPocketCost: {type: number, minimum: 0}
+                            paidBy: {type: string}
                             costIsEstimated: {type: boolean}
+                            priceAsOf: {type: string, format: date}
+                            acquiredAt: {type: string, format: date-time}
+                            acquiredTimePrecision: {type: string, enum: [exact, estimated, dateOnly]}
                             note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/foods:
@@ -60,7 +68,7 @@ paths:
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveFoodDefinition
-      summary: Create or update a canonical food
+      summary: Create a canonical food or return the existing exact match
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -128,6 +136,8 @@ paths:
                 gPerFlOz: {type: [number, 'null'], exclusiveMinimum: 0}
                 gPerCount: {type: [number, 'null'], exclusiveMinimum: 0}
                 aliases: {type: array, items: {type: string}}
+                archive: {type: boolean, description: Set true only to archive an unused definition after checking references.}
+                reason: {type: string, description: Required when archiving.}
                 nutrition:
                   type: object
                   additionalProperties: false
@@ -147,7 +157,7 @@ paths:
   /v1/products:
     post:
       operationId: saveProductDefinition
-      summary: Create or update a purchasable product mapped to a canonical food
+      summary: Create a product or return the existing exact normalized or barcode match
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -166,7 +176,13 @@ paths:
                 aliases: {type: array, items: {type: string}}
                 packageQuantity: {type: number, exclusiveMinimum: 0}
                 packageUnit: {type: string}
-                servingQuantity: {type: number, exclusiveMinimum: 0}
+                servingQuantity: {type: number, exclusiveMinimum: 0, description: Printed serving quantity; supply servingUnit with it.}
+                servingUnit: {type: string, description: Printed serving unit, independent of packageUnit.}
+                servingLabel: {type: string, description: Printed portion such as 1/3 cup or 16 crackers.}
+                servingsPerPackage: {type: number, exclusiveMinimum: 0, description: Printed servings per container; authoritative for proportional whole-package totals.}
+                estimatedCost: {type: number, minimum: 0, description: Current estimated price for one complete product package. Supply costSource and costAsOf with it.}
+                costSource: {type: string}
+                costAsOf: {type: string, format: date}
                 nutrition:
                   type: object
                   additionalProperties: false
@@ -206,7 +222,10 @@ paths:
                 aliases: {type: array, items: {type: string}}
                 packageQuantity: {type: number, exclusiveMinimum: 0, description: Supply together with packageUnit.}
                 packageUnit: {type: string, description: Supply together with packageQuantity.}
-                servingQuantity: {type: [number, 'null'], exclusiveMinimum: 0}
+                servingQuantity: {type: [number, 'null'], exclusiveMinimum: 0, description: Supply together with servingUnit.}
+                servingUnit: {type: [string, 'null'], description: Supply together with servingQuantity.}
+                servingLabel: {type: [string, 'null']}
+                servingsPerPackage: {type: [number, 'null'], exclusiveMinimum: 0}
                 nutrition:
                   type: object
                   additionalProperties: false
@@ -225,6 +244,10 @@ paths:
                 estimatedCost: {type: [number, 'null'], minimum: 0}
                 costSource: {type: [string, 'null']}
                 costAsOf: {type: [string, 'null'], format: date}
+                mergeIntoProductId: {type: string, format: uuid, description: Retained product ID when this product is a duplicate.}
+                archiveSourceFood: {type: boolean, description: When merging, also archive this product's source food if it becomes unused.}
+                archive: {type: boolean, description: Set true only to archive an unused product after checking references.}
+                reason: {type: string, description: Required when merging or archiving.}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/groceries:
     post:
@@ -238,24 +261,30 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [items]
+              required: [requestId, source, items]
               properties:
-                source: {type: string}
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
+                source: {type: string, description: Receipt, retailer listing, or other provenance shared by these prices.}
                 items:
                   type: array
                   minItems: 1
                   items:
                     type: object
                     additionalProperties: false
-                    required: [productId, quantity, unit]
+                    required: [productId, quantity, unit, totalPrice, outOfPocketCost, paidBy, costIsEstimated, priceAsOf, acquiredAt, acquiredTimePrecision]
                     properties:
                       productId: {type: string, format: uuid}
                       quantity: {type: number, exclusiveMinimum: 0}
                       unit: {type: string}
                       location: {type: string, enum: [pantry, fridge, freezer]}
                       bestBy: {type: string, format: date}
-                      totalCost: {type: number, minimum: 0}
+                      totalPrice: {type: number, minimum: 0}
+                      outOfPocketCost: {type: number, minimum: 0}
+                      paidBy: {type: string}
                       costIsEstimated: {type: boolean}
+                      priceAsOf: {type: string, format: date}
+                      acquiredAt: {type: string, format: date-time}
+                      acquiredTimePrecision: {type: string, enum: [exact, estimated, dateOnly]}
                       note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes:
@@ -318,12 +347,6 @@ paths:
                       note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes/{id}:
-    get:
-      operationId: getRecipe
-      summary: Read one recipe
-      parameters:
-        - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '404': {$ref: '#/components/responses/NotFound'}}
     patch:
       operationId: editRecipe
       summary: Correct selected recipe fields and optionally replace all ingredients
@@ -397,16 +420,20 @@ paths:
                 location: {type: [string, 'null'], enum: [pantry, fridge, freezer, null]}
                 bestBy: {type: [string, 'null'], format: date}
                 acquiredAt: {type: string, format: date-time}
-                totalCost: {type: [number, 'null'], minimum: 0, description: Cost of the complete acquired lot.}
+                acquiredTimePrecision: {type: string, enum: [exact, estimated, dateOnly]}
+                totalPrice: {type: [number, 'null'], minimum: 0, description: Full price or value of the complete acquired lot, regardless of payer.}
+                outOfPocketCost: {type: [number, 'null'], minimum: 0, description: Amount the owner personally paid.}
+                paidBy: {type: [string, 'null']}
                 costIsEstimated: {type: boolean}
                 costSource: {type: [string, 'null']}
-                awayFromHome: {type: boolean}
+                priceAsOf: {type: [string, 'null'], format: date}
+                acquisitionType: {type: string, enum: [grocery, restaurant, takeout, office, gift, home, other]}
                 note: {type: [string, 'null']}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/prepare/recipe:
     post:
-      operationId: prepareSavedRecipe
-      summary: Atomically deduct ingredients and create a prepared recipe batch
+      operationId: prepareFoodBatch
+      summary: Create a prepared batch from a saved recipe or from directly described leftovers
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -415,18 +442,58 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [recipeId, servings]
+              required: [requestId, sourceType, servings, location, preparedAt, timePrecision]
               properties:
-                recipeId: {type: string, format: uuid}
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
+                sourceType: {type: string, enum: [recipe, manual]}
+                recipeId: {type: [string, 'null'], format: uuid, description: Required for sourceType recipe; null for manual.}
+                label: {type: [string, 'null'], description: Required for sourceType manual.}
                 servings: {type: number, exclusiveMinimum: 0}
                 location: {type: string, enum: [fridge, freezer]}
                 bestBy: {type: string, format: date}
+                preparedAt: {type: string, format: date-time, description: When the batch was actually prepared; required for historical backfills.}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly]}
+                nutrition:
+                  type: [object, 'null']
+                  additionalProperties: false
+                  properties:
+                    calories: {type: number, minimum: 0}
+                    proteinG: {type: number, minimum: 0}
+                    carbsG: {type: number, minimum: 0}
+                    fatG: {type: number, minimum: 0}
+                    fiberG: {type: number, minimum: 0}
+                    sugarG: {type: number, minimum: 0}
+                    sodiumMg: {type: number, minimum: 0}
+                    source: {type: string}
+                    estimated: {type: boolean}
+                nutritionEstimate: {type: [object, 'null'], additionalProperties: true, description: Required when nutrition.estimated is true; include confidence, rationale, and optional nutrient min/max ranges.}
+                components:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [label]
+                    properties:
+                      label: {type: string}
+                      portionLabel: {type: string}
+                      note: {type: string}
+                acquisitionType: {type: string, enum: [grocery, restaurant, takeout, office, gift, home, other]}
+                totalPrice: {type: [number, 'null'], minimum: 0}
+                outOfPocketCost: {type: number, minimum: 0}
+                paidBy: {type: string}
+                costIsEstimated: {type: boolean}
+                costSource: {type: string}
+                priceAsOf: {type: [string, 'null'], format: date}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/prepared-batches:
     get:
       operationId: getPreparedFoods
-      summary: Read prepared recipe batches with servings remaining
+      summary: Read recipe and manual prepared batches, optionally including depleted or voided batches
+      parameters:
+        - {in: query, name: includeDepleted, required: false, schema: {type: boolean, default: false}}
+        - {in: query, name: includeVoided, required: false, schema: {type: boolean, default: false}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
   /v1/consume/prepared:
     post:
@@ -440,18 +507,20 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [batchId, servings]
+              required: [requestId, batchId, servings, timestamp, timePrecision]
               properties:
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
                 batchId: {type: string, format: uuid}
                 servings: {type: number, exclusiveMinimum: 0}
                 timestamp: {type: string, format: date-time}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly]}
                 label: {type: string}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/consume/inventory:
     post:
       operationId: consumePantryItem
-      summary: Atomically deduct one food FEFO and log nutrition
+      summary: Atomically deduct one food from a known lot or FEFO and log nutrition
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -460,12 +529,15 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [foodId, quantity, unit]
+              required: [requestId, foodId, quantity, unit, timestamp, timePrecision]
               properties:
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
                 foodId: {type: string, format: uuid}
+                lotId: {type: string, format: uuid, description: Exact inventory lot to deduct when the user identifies a package; omit only when FEFO selection is intended.}
                 quantity: {type: number, exclusiveMinimum: 0}
                 unit: {type: string, description: Unit UUID, full name, or short name from food lookup.}
                 timestamp: {type: string, format: date-time}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly]}
                 label: {type: string}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
@@ -481,16 +553,23 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [productId, purchasedQuantity, consumedQuantity]
+              required: [requestId, productId, purchasedQuantity, consumedQuantity, quantityUnit, acquisitionType, totalPrice, outOfPocketCost, paidBy, costIsEstimated, costSource, priceAsOf, timestamp, timePrecision]
               properties:
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
                 productId: {type: string, format: uuid}
-                purchasedQuantity: {type: number, exclusiveMinimum: 0, description: Total quantity acquired in the product's base unit.}
-                consumedQuantity: {type: number, minimum: 0, description: Quantity eaten now; must not exceed purchasedQuantity.}
+                purchasedQuantity: {type: number, exclusiveMinimum: 0, description: Total quantity acquired, expressed in quantityUnit. Use 1 ct for one package only when the product's base food is discrete.}
+                consumedQuantity: {type: number, minimum: 0, description: Quantity eaten in the same quantityUnit; must not exceed purchasedQuantity.}
+                quantityUnit: {type: string, description: Explicit unit shared by purchasedQuantity and consumedQuantity, such as ct, oz, g, fl oz, or mL. Never pass an undocumented canonical/base amount.}
+                acquisitionType: {type: string, enum: [grocery, restaurant, takeout, office, gift, home, other]}
                 location: {type: string, enum: [pantry, fridge, freezer], description: Where the remainder was stored; required when consumedQuantity is less than purchasedQuantity.}
                 timestamp: {type: string, format: date-time}
-                totalCost: {type: number, minimum: 0}
-                costIsEstimated: {type: boolean}
-                costSource: {type: string}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly]}
+                totalPrice: {type: [number, 'null'], minimum: 0, description: Full retail/menu price or estimated value; null only when genuinely unavailable for a free, office, or gifted item.}
+                outOfPocketCost: {type: number, minimum: 0, description: Amount the owner personally paid; explicitly use zero when someone else covered it.}
+                paidBy: {type: string, description: Who covered the item, such as self, parents, or employer.}
+                costIsEstimated: {type: boolean, description: True for researched current-price estimates; false for receipts or user-provided exact prices.}
+                costSource: {type: string, description: Receipt, user statement, or retailer listing supporting the price and payer fields.}
+                priceAsOf: {type: [string, 'null'], format: date, description: Observation date for totalPrice; null only when totalPrice is null.}
                 label: {type: string}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
@@ -506,11 +585,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [label]
+              required: [requestId, label, timestamp, timePrecision, components, acquisitionType, totalPrice, outOfPocketCost, paidBy, costIsEstimated, costSource, priceAsOf]
               properties:
+                requestId: {type: string, format: uuid, description: Stable UUID for this user-approved write; reuse the same value on every retry.}
                 label: {type: string, description: Human-readable description of what was eaten.}
                 portionLabel: {type: string, description: Free-form consumed portion such as one large plate.}
                 timestamp: {type: string, format: date-time}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly], description: Use dateOnly when the clock time is unknown; timestamp then uses local noon only as a sorting anchor.}
                 nutrition:
                   description: Total nutrition for the consumed portion. Omit unknown nutrients; omit the object when all nutrition is unknown.
                   oneOf:
@@ -528,18 +609,53 @@ paths:
                         source: {type: string}
                         estimated: {type: boolean}
                     - {type: 'null'}
-                cost: {type: [number, 'null'], minimum: 0, description: Direct out-of-pocket cost; zero is valid for a free meal.}
+                nutritionEstimate: {type: [object, 'null'], additionalProperties: true, description: Required when nutrition.estimated is true; include confidence, rationale, and optional per-nutrient min/max ranges.}
+                components:
+                  type: array
+                  minItems: 1
+                  description: Structured parts of a combined meal; nutrition remains the whole-event total.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [label]
+                    properties:
+                      label: {type: string}
+                      portionLabel: {type: string}
+                      note: {type: string}
+                acquisitionType: {type: string, enum: [grocery, restaurant, takeout, office, gift, home, other]}
+                totalPrice: {type: [number, 'null'], minimum: 0, description: Full price/value regardless of payer; null when genuinely unknown.}
+                outOfPocketCost: {type: number, minimum: 0, description: Amount the owner personally paid; zero is valid when covered or free.}
+                paidBy: {type: string}
                 costIsEstimated: {type: boolean}
                 costSource: {type: string}
+                priceAsOf: {type: [string, 'null'], format: date}
                 note: {type: string}
       responses: {'201': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/history:
     get:
       operationId: getMealHistory
-      summary: Read recent non-voided nutrition history
+      summary: Read nutrition history with provenance, optionally including voided events
       parameters:
         - {in: query, name: days, required: false, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}
+        - {in: query, name: includeVoided, required: false, schema: {type: boolean, default: false}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /v1/history/void:
+    post:
+      operationId: voidConsumptionEvent
+      summary: Auditably void one duplicate or incorrect consumption and reverse its inventory effects
+      x-openai-isConsequential: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, reason]
+              properties:
+                id: {type: string, format: uuid, description: Existing history event ID returned by getMealHistory.}
+                reason: {type: string, description: Why the event is being voided, such as duplicate entry.}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/history/{id}:
     patch:
       operationId: editConsumptionEvent
@@ -559,6 +675,7 @@ paths:
                 label: {type: string}
                 portionLabel: {type: [string, 'null']}
                 timestamp: {type: string, format: date-time}
+                timePrecision: {type: string, enum: [exact, estimated, dateOnly]}
                 note: {type: [string, 'null']}
                 nutrition:
                   oneOf:
@@ -576,8 +693,26 @@ paths:
                         source: {type: string}
                         estimated: {type: boolean}
                     - {type: 'null'}
-                directCost: {type: [number, 'null'], minimum: 0, description: Corrected direct cost on a manual consumption event.}
-                purchaseTotalCost: {type: [number, 'null'], minimum: 0, description: Corrected total cost of the single away-from-home lot linked to this consumption.}
+                nutritionEstimate: {type: [object, 'null'], additionalProperties: true}
+                components:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [label]
+                    properties:
+                      label: {type: string}
+                      portionLabel: {type: string}
+                      note: {type: string}
+                acquisitionType: {type: string, enum: [grocery, restaurant, takeout, office, gift, home, other]}
+                totalPrice: {type: [number, 'null'], minimum: 0, description: Corrected full price on a manual event.}
+                outOfPocketCost: {type: [number, 'null'], minimum: 0, description: Corrected amount personally paid on a manual event.}
+                paidBy: {type: [string, 'null']}
+                priceAsOf: {type: [string, 'null'], format: date}
+                purchaseTotalPrice: {type: [number, 'null'], minimum: 0, description: Corrected full price of the linked originating purchase lot.}
+                purchaseOutOfPocketCost: {type: [number, 'null'], minimum: 0}
+                purchasePaidBy: {type: [string, 'null']}
+                purchasePriceAsOf: {type: [string, 'null'], format: date}
                 costIsEstimated: {type: boolean}
                 costSource: {type: [string, 'null']}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
@@ -756,15 +891,20 @@ components:
     GroceryLot:
       type: object
       additionalProperties: false
-      required: [productId, quantity, unit]
+      required: [productId, quantity, unit, totalPrice, outOfPocketCost, paidBy, costIsEstimated, priceAsOf, acquiredAt, acquiredTimePrecision]
       properties:
         productId: {type: string, format: uuid}
         quantity: {type: number, exclusiveMinimum: 0}
         unit: {type: string}
         location: {type: string, enum: [pantry, fridge, freezer]}
         bestBy: {type: string, format: date}
-        totalCost: {type: number, minimum: 0}
+        totalPrice: {type: number, minimum: 0}
+        outOfPocketCost: {type: number, minimum: 0}
+        paidBy: {type: string}
         costIsEstimated: {type: boolean}
+        priceAsOf: {type: string, format: date}
+        acquiredAt: {type: string, format: date-time}
+        acquiredTimePrecision: {type: string, enum: [exact, estimated, dateOnly]}
         note: {type: string}
     GroceryHaul:
       type: object

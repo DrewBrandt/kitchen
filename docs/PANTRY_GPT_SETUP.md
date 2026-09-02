@@ -64,13 +64,14 @@ Run these in Preview before relying on writes:
    the source and do not write anything.`
 4. `Show my current meal plan and grocery list.`
 5. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
-6. Inspect `consumePurchasedProduct` in the Action tester and confirm its request
-   body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `location`,
+6. Inspect the imported schema for `consumePurchasedProduct` and confirm its request
+   body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `quantityUnit`, `location`,
    timestamp, cost, label, and note fields.
 7. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
    `costIsEstimated`, and `costSource` without requiring nutrition fields.
-8. Inspect `logManualConsumption` and confirm only `label` is required; verify it
-   has no `foodId`, `productId`, purchased quantity, or inventory location field.
+8. Inspect `logManualConsumption` and confirm timestamp/precision, components,
+   acquisition, price/payer provenance, and a stable request ID are required;
+   verify it has no `foodId`, `productId`, or inventory-location field.
 9. Inspect `replaceWeeklyMealPlan` and confirm it exposes required `weekStart`
    and `entries` fields. Spot-check every other write Action for a non-empty body.
 
@@ -79,6 +80,12 @@ its source. The fifth must stop before writing. The sixth through ninth catch
 imported empty `{}` tool contracts before they can
 reach the database. Then explicitly confirm the test write, verify it in the web
 app, and remove it.
+
+Current-editor caveat (observed 2026-09-02): an Action row's **Test** button
+immediately sends a generic “Call the API” prompt to Preview instead of opening
+an inspectable request-body form. Do not click **Test** on a consequential
+operation merely to inspect its fields. Verify the parsed operation list and
+schema here, run `npm test`, and use an explicitly read-only Preview prompt.
 
 `401` means the Action bearer value does not match the Supabase secret. `422`
 means validation rejected the request without a partial compound write.

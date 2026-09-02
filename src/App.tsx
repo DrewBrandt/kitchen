@@ -1411,8 +1411,12 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
 
   if (kind === 'lot') return <div className="form-grid">
     <SelectField name="product" label="Product" defaultValue={values.product} options={products.map((product) => ({ value: product.id, label: product.label }))} required />
-    <div className="form-grid two"><Field name="initial_qty" label="Stock quantity in product base units" type="number" min="0.001" step="any" required /><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" defaultValue="0" /></div>
+    <div className="form-grid two"><Field name="initial_qty" label="Stock quantity" type="number" min="0.001" step="any" required /><Field name="quantity_unit" label="Quantity unit" defaultValue="ct" placeholder="ct, oz, g, fl oz…" required /></div>
+    <div className="form-grid two"><Field name="acquired_at" label="Acquired at" type="datetime-local" /><SelectField name="time_precision" label="Time precision" defaultValue="exact" options={[{ value: 'exact', label: 'Exact' }, { value: 'estimated', label: 'Estimated' }, { value: 'dateOnly', label: 'Date only' }]} required /></div>
     <div className="form-grid two"><SelectField name="location" label="Location" options={locations.map((location) => ({ value: location, label: location }))} /><Field name="use_by" label="Best by" type="date" /></div>
+    <div className="form-grid two"><Field name="total_cost" label="Full price (USD)" type="number" min="0" step="0.01" required /><Field name="out_of_pocket_cost" label="You paid (USD)" type="number" min="0" step="0.01" required /></div>
+    <div className="form-grid two"><Field name="paid_by" label="Paid by" defaultValue="self" required /><Field name="price_as_of" label="Price as of" type="date" defaultValue={today} required /></div>
+    <Field name="cost_source" label="Price source" placeholder="Receipt, store listing, estimate…" required />
     <Field name="note" label="Note" placeholder="Optional lot note" />
     <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong></span></label>
   </div>;
@@ -1422,8 +1426,12 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
   if (kind === 'log') return <div className="form-grid">
     <SelectField name="product" label="Product" defaultValue={values.product} options={products.map((product) => ({ value: product.id, label: product.label }))} required />
     <div className="form-grid two"><Field name="purchased_quantity" label="Quantity purchased" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="consumed_quantity" label="Quantity consumed now" type="number" defaultValue="1" min="0" step="any" required /></div>
-    <div className="form-grid two"><SelectField name="location" label="Remaining item location" options={locations.map((location) => ({ value: location, label: location }))} /><Field name="occurred_at" label="Time" type="datetime-local" /></div>
-    <div className="form-grid two"><Field name="total_cost" label="Total cost (USD)" type="number" min="0" step="0.01" /><Field name="cost_source" label="Cost source" placeholder="Receipt, menu, estimate…" /></div>
+    <Field name="quantity_unit" label="Shared quantity unit" defaultValue="ct" placeholder="ct, oz, g, fl oz…" required />
+    <div className="form-grid two"><SelectField name="acquisition_type" label="Acquisition type" defaultValue="grocery" options={['grocery', 'restaurant', 'takeout', 'office', 'gift', 'home', 'other'].map((value) => ({ value, label: value }))} required /><SelectField name="location" label="Remaining item location" options={locations.map((location) => ({ value: location, label: location }))} /></div>
+    <div className="form-grid two"><Field name="occurred_at" label="Time" type="datetime-local" /><SelectField name="time_precision" label="Time precision" defaultValue="exact" options={[{ value: 'exact', label: 'Exact' }, { value: 'estimated', label: 'Estimated' }, { value: 'dateOnly', label: 'Date only' }]} required /></div>
+    <div className="form-grid two"><Field name="total_cost" label="Full price (USD)" type="number" min="0" step="0.01" required /><Field name="out_of_pocket_cost" label="You paid (USD)" type="number" min="0" step="0.01" required /></div>
+    <div className="form-grid two"><Field name="paid_by" label="Paid by" defaultValue="self" required /><Field name="price_as_of" label="Price as of" type="date" defaultValue={today} required /></div>
+    <Field name="cost_source" label="Cost source" placeholder="Receipt, menu, estimate…" required />
     <Field name="label" label="Log label override" placeholder="Optional; defaults to brand and product" />
     <Field name="note" label="Note" placeholder="Optional" />
     <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong><small>Nutrition confidence stays on the product definition.</small></span></label>
@@ -1433,6 +1441,8 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
     <PanelSection title="What you ate"><div className="form-grid">
       <Field name="label" label="Meal or food" placeholder="Spaghetti at Mom's" required />
       <div className="form-grid two"><Field name="portion_label" label="Portion" placeholder="1 large plate" /><Field name="occurred_at" label="Time" type="datetime-local" /></div>
+      <SelectField name="time_precision" label="Time precision" defaultValue="exact" options={[{ value: 'exact', label: 'Exact' }, { value: 'estimated', label: 'Estimated' }, { value: 'dateOnly', label: 'Date only' }]} required />
+      <label className="field"><span>Components (one per line)</span><textarea name="components" rows={4} placeholder={'Spaghetti\n3 beef meatballs\nTomato sauce'} /></label>
     </div></PanelSection>
     <PanelSection title="Nutrition (optional)"><div className="form-grid">
       <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" step="any" /><Field name="protein_g" label="Protein (g)" type="number" min="0" step="any" /></div>
@@ -1440,10 +1450,14 @@ function PanelFields({ kind, values = {}, recipe }: { kind: Exclude<PanelKind, '
       <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" step="any" /><Field name="sugar_g" label="Sugar (g)" type="number" min="0" step="any" /></div>
       <Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" step="any" />
       <Field name="nutrition_source" label="Nutrition source" placeholder="Rough portion estimate, recipe from Mom…" />
+      <div className="form-grid two"><SelectField name="nutrition_confidence" label="Estimate confidence" defaultValue="medium" options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }]} /><Field name="nutrition_rationale" label="Estimate rationale" placeholder="Label math, visual estimate…" /></div>
       <label className="toggle-row"><input name="nutrition_is_estimated" type="checkbox" /><span><strong>Nutrition is estimated</strong><small>Leave every nutrition field blank when it is unknown.</small></span></label>
     </div></PanelSection>
-    <PanelSection title="Cost (optional)"><div className="form-grid">
-      <div className="form-grid two"><Field name="cost" label="Out-of-pocket cost (USD)" type="number" min="0" step="0.01" /><Field name="cost_source" label="Cost source" placeholder="Receipt, menu, free meal…" /></div>
+    <PanelSection title="Acquisition and cost"><div className="form-grid">
+      <SelectField name="acquisition_type" label="Acquisition type" defaultValue="home" options={['grocery', 'restaurant', 'takeout', 'office', 'gift', 'home', 'other'].map((value) => ({ value, label: value }))} required />
+      <div className="form-grid two"><Field name="total_price" label="Full price/value (USD)" type="number" min="0" step="0.01" /><Field name="out_of_pocket_cost" label="You paid (USD)" type="number" min="0" step="0.01" defaultValue="0" required /></div>
+      <div className="form-grid two"><Field name="paid_by" label="Paid by" defaultValue="self" required /><Field name="price_as_of" label="Price as of" type="date" defaultValue={today} /></div>
+      <Field name="cost_source" label="Cost source" defaultValue="User-entered in app; full value may be unknown" placeholder="Receipt, menu, retailer estimate, free meal…" required />
       <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong></span></label>
     </div></PanelSection>
     <Field name="note" label="Note" placeholder="Optional context" />

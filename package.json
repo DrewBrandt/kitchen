@@ -12,7 +12,8 @@
     "db:lint": "supabase db lint --linked --schema public --level warning --fail-on error",
     "db:test": "supabase db query --linked --file supabase/tests/database.sql",
     "db:test:transactions": "supabase db query --linked --file supabase/tests/transactions.sql",
-    "db:test:gpt": "supabase db query --linked --file supabase/tests/gpt_api.sql"
+    "db:test:gpt": "supabase db query --linked --file supabase/tests/gpt_api.sql",
+    "db:test:quality": "supabase db query --linked --file supabase/tests/history_quality.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.4",
