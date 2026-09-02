@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
-import type { NutritionValues, NutrientName, PantryData } from '../pantry-data';
+import type { NutritionValues, NutrientName, PantryData, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 import { nutritionForServings } from './nutrition';
 
@@ -325,6 +325,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   });
   const recipeCosts = new Map(recipes.map((recipe) => [recipe.id, recipe]));
   const plannedConsumptions = new Map((plannedConsumptionsResult.data ?? []).map((consumption) => [consumption.meal_plan, consumption]));
+  const prepByMealPlan = new Map((prepsResult.data ?? []).filter((prep) => prep.meal_plan).map((prep) => [prep.meal_plan!, prep]));
+  const preparedLotByPrep = new Map((lotsResult.data ?? []).filter((lot) => lot.prep).map((lot) => [lot.prep!, lot]));
 
   const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
@@ -342,6 +344,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         : { cost: null, estimated: true, source: 'Price unavailable' };
     return {
       id: lot.id,
+      prepId: prep?.id,
+      mealPlanId: prep?.meal_plan ?? undefined,
       emoji: recipe?.emoji ?? '🥘',
       name: recipe?.name ?? 'Prepared batch',
       location: lot.location ?? 'unassigned',
@@ -385,6 +389,21 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   if (!settings) throw new Error('Personal settings are missing.');
   const logs = logsResult.data ?? [];
   const todayKey = dateKeyInZone(new Date(), settings.time_zone);
+  const preparationHistory = (prepsResult.data ?? []).map((prep) => {
+    const recipe = recipeRows.find((candidate) => candidate.id === prep.recipe);
+    const lot = preparedLotByPrep.get(prep.id);
+    return {
+      id: prep.id,
+      recipeId: prep.recipe,
+      emoji: recipe?.emoji ?? '🥘',
+      name: recipe?.name ?? 'Prepared batch',
+      preparedAt: prep.prepped_at,
+      dateKey: dateKeyInZone(new Date(prep.prepped_at), settings.time_zone),
+      servingsMade: Number(prep.actual_yield_qty ?? lot?.initial_qty ?? 0),
+      servingsRemaining: Number(lot?.remaining_qty ?? 0),
+      location: lot?.location ?? 'unassigned',
+    };
+  }).sort((left, right) => right.preparedAt.localeCompare(left.preparedAt));
   const todayLogs = logs.filter((log) => dateKeyInZone(new Date(log.occurred_at), settings.time_zone) === todayKey);
   const nutrientSpec = [
     ['Calories', 'kcal', settings.nutrition_calories, 'cal', '#5fe0a0'],
@@ -556,7 +575,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
       const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
       const consumption = plannedConsumptions.get(plan.id);
-      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
+      const prep = prepByMealPlan.get(plan.id);
+      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', scaleFactor: Number(plan.scale_factor), plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', prepId: prep?.id, preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined, cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
     });
     return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
   });
@@ -565,7 +585,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
     const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
     const consumption = plannedConsumptions.get(plan.id);
-    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
+    const prep = prepByMealPlan.get(plan.id);
+    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', scaleFactor: Number(plan.scale_factor), plannedServings: Number(consumption?.servings ?? 1), consumptionStatus: consumption?.status ?? 'planned', prepId: prep?.id, preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined, cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
   });
   const nutritionHistory = [...byDay.entries()].map(([dateKey, dayLogs]) => ({
     dateKey,
@@ -630,6 +651,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       weeklyFoodBudget: Number(settings.weekly_food_budget ?? DEFAULT_WEEKLY_FOOD_BUDGET),
     },
     preparedLots,
+    preparationHistory,
     spendHistory,
     wasteCauses,
     proteinTrend,
@@ -664,10 +686,26 @@ export async function undoPrep(client: Client, prepId: string) {
   if (error) throw error;
 }
 
-export async function cookRecipe(client: Client, recipeId: string) {
-  const { data, error } = await client.rpc('cook_recipe', { p_recipe: recipeId });
+export async function cookRecipe(client: Client, recipeId: string, options: PreparationOptions = {}): Promise<PreparationResult> {
+  const { data, error } = await client.rpc('prepare_recipe', {
+    p_recipe: recipeId,
+    p_scale: options.scale ?? 1,
+    ...(options.servingsMade === undefined ? {} : { p_servings: options.servingsMade }),
+    p_location: options.location ?? 'fridge',
+    ...(options.mealPlanId ? { p_meal_plan: options.mealPlanId } : {}),
+    p_eaten_servings: options.servingsEaten ?? 0,
+  });
   if (error) throw error;
-  return data;
+  const result = data as Record<string, unknown>;
+  return {
+    prepId: String(result.prepId),
+    lotId: String(result.lotId),
+    mealPlanId: result.mealPlanId ? String(result.mealPlanId) : null,
+    servingsMade: Number(result.servingsMade),
+    servingsRemaining: Number(result.servingsRemaining),
+    location: String(result.location),
+    foodLogId: result.foodLogId ? String(result.foodLogId) : null,
+  };
 }
 
 export async function savePrepFeedback(client: Client, prepId: string, ease: number, taste: number, actualMinutes: number) {
@@ -685,9 +723,10 @@ export async function removePlannedMeals(client: Client, planIds: string[]) {
   if (error) throw error;
 }
 
-export async function setPlannedMealsMade(client: Client, planIds: string[], made: boolean) {
-  const { error } = await client.from('meal_plans').update({ status: made ? 'made' : 'planned', made_at: made ? new Date().toISOString() : null }).in('id', planIds);
+export async function consumePlannedMeals(client: Client, planIds: string[]) {
+  const { data, error } = await client.rpc('consume_planned_meals', { p_meal_plans: planIds });
   if (error) throw error;
+  return data;
 }
 
 export async function setPlannedConsumptionServings(client: Client, planId: string, servings: number) {

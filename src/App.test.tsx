@@ -173,6 +173,55 @@ describe('Pantry web UI', () => {
     expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
   });
 
+  it('finishes a planned recipe as one linked batch and removes it from on deck', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const todayKey = currentDateKey();
+    const plannedMeals = [{ ...previewPantryData.plannedMeals[0], id: 'plan-linked', groupId: 'group-linked', dateKey: todayKey, recipeId: 'pancakes', name: 'Simple Pancakes', status: 'planned' as const, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned' }];
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep-linked', lotId: 'lot-linked', mealPlanId: 'plan-linked', servingsMade: 4, servingsRemaining: 3, location: 'fridge', foodLogId: 'log-linked' });
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'On deck' }));
+    const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
+    expect(within(workspace).getByText(/1 serving planned to eat/)).toBeInTheDocument();
+    await user.clear(within(workspace).getByLabelText('Servings of Simple Pancakes eaten now'));
+    await user.type(within(workspace).getByLabelText('Servings of Simple Pancakes eaten now'), '1');
+    await user.click(within(workspace).getByRole('button', { name: 'Finish cooking' }));
+
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith('pancakes', { scale: 1, servingsMade: 4, location: 'fridge', mealPlanId: 'plan-linked', servingsEaten: 1 }));
+    expect(screen.queryByRole('article', { name: 'Simple Pancakes' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Made 4 servings of Simple Pancakes; 3 stored in fridge and 1 logged as eaten/)).toBeInTheDocument();
+  });
+
+  it('logs an explicit quantity from a prepared batch', async () => {
+    const user = userEvent.setup();
+    const consume = vi.fn().mockResolvedValue('prepared-log');
+    render(<App onConsumePrepared={consume} />);
+
+    const quantity = screen.getByLabelText('Servings of Simple Pancakes eaten');
+    await user.clear(quantity);
+    await user.type(quantity, '1.5');
+    await user.click(within(quantity.closest('.prepared-row')!).getByRole('button', { name: 'Log eaten' }));
+
+    await waitFor(() => expect(consume).toHaveBeenCalledWith('preview-prep-1', 1.5));
+    expect(screen.getByText('1.5 servings of Simple Pancakes logged as eaten.')).toBeInTheDocument();
+  });
+
+  it('separates making a planned meal from eating its planned servings', async () => {
+    const user = userEvent.setup();
+    const todayKey = currentDateKey();
+    const plannedMeals = [{ ...previewPantryData.plannedMeals[0], id: 'made-plan', groupId: 'made-group', dateKey: todayKey, status: 'made' as const, consumptionStatus: 'planned', prepId: 'made-prep', preparedLotId: 'made-lot' }];
+    const consume = vi.fn().mockResolvedValue(['made-log']);
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App onConsumePlannedMeals={consume} /></PantryDataProvider>);
+
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    expect(screen.getByText('Made · not eaten')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log it' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Eat planned servings/ }));
+
+    await waitFor(() => expect(consume).toHaveBeenCalledWith(['made-plan']));
+  });
+
   it('checks grocery rows and updates the shopping summary', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -379,6 +428,18 @@ describe('Pantry web UI', () => {
     expect(within(strip as HTMLElement).getByText('6 of 30')).toBeInTheDocument();
     // 6 logged days averaging (1180+1640+1420+1830+1290+1710)/6 = 1,512
     expect(within(strip as HTMLElement).getByText('1,512')).toBeInTheDocument();
+  });
+
+  it('keeps a separate record of what was made, stored, and left', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'History' }));
+
+    const card = screen.getByRole('heading', { name: 'What I made' }).closest('.card') as HTMLElement;
+    expect(within(card).getByText('4 servings')).toBeInTheDocument();
+    expect(within(card).getAllByText('fridge')).toHaveLength(2);
+    expect(within(card).getByText('2', { selector: 'strong' })).toBeInTheDocument();
   });
 
   it('switches Trends between nutrition and spend without making spend a macro', async () => {

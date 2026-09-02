@@ -27,6 +27,8 @@ A personal kitchen inventory that tracks pantry, fridge, and freezer stock; stor
 7. Reject an entire cooking action if any ingredient is insufficient.
 8. Record exact lot deductions and allow one-click undo.
 9. Highlight lots expiring within seven days.
+10. Every successful recipe preparation creates a prepared inventory lot measured in servings, even when the recipe has no reusable `output_food`.
+11. A planned meal becomes `made` only through a linked preparation. Eating is a separate explicit action that deducts prepared servings, writes the food log, and fulfills the planned consumption.
 10. Create and edit food definitions, conversions, and recipes in the app.
 11. Review structured grocery rows before applying any of them.
 
