@@ -3,7 +3,7 @@ import { BookOpen, CalendarDays, Check, ChevronDown, FlaskConical, PackageOpen, 
 import type { Recipe } from './data';
 import { usePantryData, type NutrientName, type NutritionValues, type PlannedMealView, type ProductView } from './pantry-data';
 import { usd } from './lib/cost';
-import { formatAmount, formatServings } from './lib/format';
+import { formatAmount, formatNutritionAmount, formatServings } from './lib/format';
 import { nutritionForServings } from './lib/nutrition';
 
 type SourceType = 'recipe' | 'pantry' | 'leftover';
@@ -66,8 +66,8 @@ function LotChoice({ product, value, onChange }: { product: ProductView; value: 
 function ImpactStrip({ nutrition, cost, estimated }: { nutrition: NutritionValues; cost: number | null; estimated?: boolean }) {
   const stats: Array<[string, string]> = [
     ['Calories', `${Math.round(nutrition.Calories).toLocaleString()} cal`],
-    ['Protein', `${formatAmount(nutrition.Protein)} g`],
-    ['Carbs', `${formatAmount(nutrition.Carbs)} g`],
+    ['Protein', `${formatNutritionAmount(nutrition.Protein, 'Protein')} g`],
+    ['Carbs', `${formatNutritionAmount(nutrition.Carbs, 'Carbs')} g`],
     ['Cost', cost === null ? 'Unavailable' : `${estimated ? '~' : ''}${usd(cost)}`],
   ];
   return <div className="impact-strip" aria-label="Nutrition and cost preview">{stats.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>;
@@ -93,9 +93,10 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
     : selectedProduct ? multiplyNutrition(selectedProduct.nutritionPerServing, amount)
       : selectedLeftoverRecipe ? multiplyNutrition(recipePerServing(selectedLeftoverRecipe), amount)
         : EMPTY_NUTRITION;
-  const costPerServing = selectedRecipe?.costPerServing ?? selectedProduct?.costPerServing ?? (selectedLeftover ? 0 : null);
   const selectedLot = selectedProduct?.availableLots.find((lot) => lot.id === stockChoice);
-  const cost = costPerServing === null || costPerServing === undefined ? null : (selectedLot?.costPerServing ?? costPerServing) * amount;
+  const projectedLot = selectedLot ?? (stockChoice === 'any' ? selectedProduct?.availableLots[0] : undefined);
+  const costPerServing = selectedRecipe?.costPerServing ?? projectedLot?.costPerServing ?? selectedProduct?.costPerServing ?? (selectedLeftover ? 0 : null);
+  const cost = costPerServing === null || costPerServing === undefined ? null : costPerServing * amount;
   const exactLot = selectedProduct && stockChoice !== 'any' ? stockChoice : '';
   const chooseType = (next: SourceType) => { setType(next); setSelectedId(''); setStockChoice('any'); setQuery(''); setSourceExpanded(true); };
   const chooseSource = (id: string) => {
@@ -131,7 +132,7 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
         <label className="field"><span>Date</span><input name="plan_date" type="date" required defaultValue={values.plan_date || today} /></label>
         <label className="field"><span>Time of day</span><select name="daypart" required defaultValue={values.daypart || 'dinner'}>{['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
       </div>
-      <ImpactStrip nutrition={nutrition} cost={cost} estimated={selectedLot?.costIsEstimated ?? selectedRecipe?.costIsEstimated ?? Boolean(selectedProduct)} />
+      <ImpactStrip nutrition={nutrition} cost={cost} estimated={projectedLot?.costIsEstimated ?? selectedRecipe?.costIsEstimated ?? Boolean(selectedProduct)} />
       {selectedProduct && amount > selectedProduct.stockServings && <div className="composer-warning">You have {formatServings(selectedProduct.stockServings)} on hand, less than this plan. Lower the portion or add inventory first.</div>}
       <details className="optional-note"><summary>Optional note <ChevronDown /></summary><label className="field"><span>Note</span><input name="note" placeholder="Anything useful for future you" /></label></details>
     </section>}
@@ -155,7 +156,9 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
   const baseline = Object.fromEntries((Object.keys(current) as NutrientName[]).map((label) => [label, current[label] + todayProjection[label]])) as NutritionValues;
   const targets: NutritionValues = { Calories: settings.calories, Protein: settings.proteinG, Carbs: settings.carbsG, Fat: settings.fatG, Fiber: settings.fiberG, Sodium: settings.sodiumMg };
   const exactLot = selectedProduct?.availableLots.find((lot) => lot.id === stockChoice);
-  const costPerServing = exactLot?.costPerServing ?? selectedProduct?.costPerServing ?? selectedRecipe?.costPerServing ?? null;
+  const projectedLot = exactLot ?? (stockChoice === 'any' ? selectedProduct?.availableLots[0] : undefined);
+  const costPerServing = projectedLot?.costPerServing ?? selectedProduct?.costPerServing ?? selectedRecipe?.costPerServing ?? null;
+  const costIsEstimated = projectedLot?.costIsEstimated ?? selectedRecipe?.costIsEstimated ?? Boolean(selectedProduct);
   const chooseType = (next: SourceType) => { setType(next); setSelectedId(''); setQuery(''); setStockChoice('any'); };
   async function plan() {
     if ((!selectedProduct && !selectedRecipe) || !onPlan || amount <= 0) return;
@@ -193,12 +196,12 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
       </div>
       <div className="sandbox-impact">
         {!selectedProduct && !selectedRecipe ? <div className="sandbox-placeholder"><FlaskConical /><strong>Pick something to see the tradeoff</strong><small>We’ll compare today as logged + planned with the new amount.</small></div> : <>
-          <div className="impact-head"><span>{selectedProduct?.emoji ?? selectedRecipe?.emoji}</span><div><strong>{selectedProduct?.label ?? selectedRecipe?.name}</strong><small>{formatServings(amount)} adds {Math.round(candidate.Calories)} calories{costPerServing === null ? '' : ` · ${usd(costPerServing * amount)}`}</small></div></div>
+          <div className="impact-head"><span>{selectedProduct?.emoji ?? selectedRecipe?.emoji}</span><div><strong>{selectedProduct?.label ?? selectedRecipe?.name}</strong><small>{formatServings(amount)} adds {Math.round(candidate.Calories)} calories{costPerServing === null ? '' : ` · ${costIsEstimated ? '~' : ''}${usd(costPerServing * amount)}`}</small></div></div>
           <div className="impact-table"><div className="impact-table-head"><span>Nutrient</span><span>Before</span><span>Change</span><span>After</span></div>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Sodium'] as NutrientName[]).map((label) => {
             const after = baseline[label] + candidate[label];
             const unit = label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g';
             const over = (label === 'Calories' || label === 'Sodium') && after > targets[label];
-            return <div className={over ? 'over' : ''} key={label}><strong>{label}</strong><span>{formatAmount(baseline[label])}</span><span>+{formatAmount(candidate[label])}</span><span><b>{formatAmount(after)}</b> / {formatAmount(targets[label])} {unit}</span><i style={{ width: `${Math.min(100, after / Math.max(1, targets[label]) * 100)}%` }} /></div>;
+            return <div className={over ? 'over' : ''} key={label}><strong>{label}</strong><span>{formatNutritionAmount(baseline[label], label)}</span><span>+{formatNutritionAmount(candidate[label], label)}</span><span><b>{formatNutritionAmount(after, label)}</b> / {formatNutritionAmount(targets[label], label)} {unit}</span><i style={{ width: `${Math.min(100, after / Math.max(1, targets[label]) * 100)}%` }} /></div>;
           })}</div>
           <div className="sandbox-actions"><button className="button secondary" disabled={!exactLot || !onConsumeLot || saving !== '' || exactLot.remainingServings + 0.0001 < amount} onClick={() => void logNow()} title={!exactLot ? 'Choose one exact lot to log now' : undefined}>{saving === 'log' ? 'Logging…' : 'Log eaten now'}</button><button className="button primary" disabled={!onPlan || saving !== ''} onClick={() => void plan()}><CalendarDays />{saving === 'plan' ? 'Adding…' : 'Add to today'}</button></div>
           {selectedProduct && !exactLot && <small className="sandbox-action-hint">Choose an exact lot above to log immediately, or leave it automatic and add it to today’s plan.</small>}

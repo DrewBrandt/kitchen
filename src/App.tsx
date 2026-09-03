@@ -43,7 +43,7 @@ import {
 } from './data';
 import { usePantryData, type FoodLogEntry, type InventoryFood, type PantryData, type PlannedMealConsumption, type PlannedMealView, type PreparationOptions, type PreparationResult, type ProductView } from './pantry-data';
 import { completeCost, dailyFoodBudget, perServingCost, usd } from './lib/cost';
-import { formatAmount, formatServings } from './lib/format';
+import { formatAmount, formatNutritionAmount, formatServings } from './lib/format';
 import { DayPlanFields, NutritionSandbox } from './PlanComposer';
 
 const PAGE_ICONS: Record<PageId, LucideIcon> = {
@@ -1229,7 +1229,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
                 <div><span>Servings consumed</span><strong>{formatAmount(viewing.servingsConsumed)}</strong>{viewing.lastUsedAt && <small>last {new Date(viewing.lastUsedAt).toLocaleDateString()}</small>}</div>
                 <div><span>Cost per 100 cal</span><strong className="spend">{costPer100Cal(viewing.costPerServing, viewing.nutritionPerServing.Calories)}</strong><small>{viewing.servingLabel}</small></div>
               </div>
-              <PanelSection title={`Per serving · ${viewing.servingLabel}`}><div className="nutrition-detail">{Object.entries(viewing.nutritionPerServing).map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatAmount(value)} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></PanelSection>
+              <PanelSection title={`Per serving · ${viewing.servingLabel}`}><div className="nutrition-detail">{Object.entries(viewing.nutritionPerServing).map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatNutritionAmount(value, label)} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div></PanelSection>
             </div>
           </aside>
         </div>

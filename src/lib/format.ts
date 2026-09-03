@@ -20,3 +20,8 @@ export function formatServings(value: number) {
   return `${formatAmount(value)} serving${Math.abs(value - 1) < 0.001 ? '' : 's'}`;
 }
 
+export function formatNutritionAmount(value: number, nutrient: string) {
+  if (!Number.isFinite(value)) return '—';
+  const maximumFractionDigits = nutrient === 'Calories' || nutrient === 'Sodium' ? 0 : 1;
+  return value.toLocaleString('en-US', { maximumFractionDigits });
+}
