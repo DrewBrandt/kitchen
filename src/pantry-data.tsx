@@ -88,6 +88,7 @@ export interface PlannedMealView {
   productId?: string;
   inventoryLotId?: string;
   sourceKind?: 'recipe' | 'product' | 'lot';
+  consumeFromInventory?: boolean;
   status: 'planned' | 'made' | 'skipped' | 'moved';
   isLeftover: boolean;
   scaleFactor?: number;

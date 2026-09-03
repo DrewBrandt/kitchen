@@ -21,9 +21,9 @@ stores a DPAPI-encrypted copy outside the repository.
 
 ## 2. Configure the GPT
 
-In ChatGPT, open **Explore GPTs**, choose **Create**, and configure:
+In ChatGPT, open or create the private **My Pantry** GPT and configure:
 
-- Name: `Drew's Pantry`
+- Name: `My Pantry`
 - Visibility: **Only me**
 - Description: `Private pantry, nutrition, recipe, and weekly meal-planning assistant.`
 - Enable Web Search. It is required for missing product and current nutrition
@@ -38,6 +38,7 @@ Suggested starters:
 - `I just got groceries. Help me reconcile the list and upload it.`
 - `Find three dinners I can make with one small store run.`
 - `I ate this today; log it and compare it with my targets.`
+- `What if I had a Chipotle burrito tomorrow? Do not save it.`
 
 ## 3. Add the Action
 
@@ -62,21 +63,25 @@ Run these in Preview before relying on writes:
 2. `Search my saved foods and products for Chick-fil-A. Do not create anything.`
 3. `Research the exact nutrition for a packaged product that is not saved. Cite
    the source and do not write anything.`
-4. `Show my current meal plan and grocery list.`
-5. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
-6. Inspect the imported schema for `consumePurchasedProduct` and confirm its request
+4. `What if I had one researched Chipotle burrito tomorrow? Compare it with
+   everything logged and planned for that date, but do not save anything.`
+5. `Show my current meal plan and grocery list.`
+6. `Propose adding Coffee filters as a manual grocery item, but do not add it.`
+7. Inspect the imported schema for `consumePurchasedProduct` and confirm its request
    body lists `productId`, `purchasedQuantity`, `consumedQuantity`, `quantityUnit`, `location`,
    timestamp, cost, label, and note fields.
-7. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalCost`,
+8. Inspect `editConsumptionEvent` and confirm it exposes `purchaseTotalPrice`,
    `costIsEstimated`, and `costSource` without requiring nutrition fields.
-8. Inspect `logManualConsumption` and confirm timestamp/precision, components,
+9. Inspect `logManualConsumption` and confirm timestamp/precision, components,
    acquisition, price/payer provenance, and a stable request ID are required;
    verify it has no `foodId`, `productId`, or inventory-location field.
-9. Inspect `replaceWeeklyMealPlan` and confirm it exposes required `weekStart`
-   and `entries` fields. Spot-check every other write Action for a non-empty body.
+10. Inspect `saveMealPlan`: it must require `mode` and `entries`, support
+    `append`/`replaceWeek`, and expose product, inventory-lot, and
+    `consumeFromInventory` fields. Confirm `previewDailyNutrition` is not marked
+    consequential. Spot-check every write Action for a non-empty body.
 
-The first two should call read Actions; the third should use Web Search and cite
-its source. The fifth must stop before writing. The sixth through ninth catch
+The first two should call read Actions; the third and fourth should use Web
+Search and cite sources. The sixth must stop before writing. The seventh through tenth catch
 imported empty `{}` tool contracts before they can
 reach the database. Then explicitly confirm the test write, verify it in the web
 app, and remove it.
@@ -90,8 +95,8 @@ schema here, run `npm test`, and use an explicitly read-only Preview prompt.
 `401` means the Action bearer value does not match the Supabase secret. `422`
 means validation rejected the request without a partial compound write.
 
-Ordinary ChatGPT conversations do not inherit this private Action; open a chat
-with **Drew's Pantry** whenever live access is needed.
+Ordinary ChatGPT conversations do not inherit this private Action; use **My Pantry**
+whenever live access is needed.
 
 ## Updating the integration
 

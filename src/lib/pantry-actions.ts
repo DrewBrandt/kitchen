@@ -301,6 +301,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       const { data: insertedPlan, error } = await client.from('meal_plans').insert({
         product,
         inventory_lot: inventoryLot,
+        consume_from_inventory: true,
         plan_date: text(form, 'plan_date'),
         daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
         scale_factor: 1,

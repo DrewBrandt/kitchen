@@ -722,8 +722,8 @@ paths:
       summary: Read meal plans and the current grocery list
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
-      operationId: replaceWeeklyMealPlan
-      summary: Atomically replace seven days and rebuild generated groceries
+      operationId: saveMealPlan
+      summary: Append plan entries or atomically replace seven days, then rebuild generated groceries
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -732,8 +732,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [weekStart, entries]
+              required: [mode, entries]
               properties:
+                mode: {type: string, enum: [append, replaceWeek], description: Append preserves every existing plan entry. replaceWeek replaces the seven days beginning at weekStart.}
                 weekStart: {type: string, format: date}
                 entries:
                   type: array
@@ -744,18 +745,60 @@ paths:
                     properties:
                       date: {type: string, format: date}
                       slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
-                      source: {type: string, enum: [recipe, meal]}
+                      source: {type: string, enum: [recipe, meal, product, inventoryLot]}
                       sourceId: {type: string, format: uuid}
                       scaleFactor: {type: number, exclusiveMinimum: 0}
                       plannedServings: {type: number, exclusiveMinimum: 0, description: Expected servings eaten at this meal; independent of preparation scale.}
+                      consumeFromInventory: {type: boolean, description: Required for product; true deducts pantry stock and false logs the reusable outside-pantry product without a lot. Exact inventoryLot sources are always true.}
                       scheduledTime: {type: string}
                       groupId: {type: string}
                       leftoverOfGroupId: {type: string}
-                      intent: {type: string, enum: [prepare, leftover]}
+                      intent: {type: string, enum: [prepare, leftover, consume]}
                       name: {type: string}
                       emoji: {type: string}
                       preparationTasks: {type: array, items: {type: object, additionalProperties: true}}
                       note: {type: string}
+      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
+  /v1/plans/preview:
+    post:
+      operationId: previewDailyNutrition
+      summary: Preview one candidate against logged and planned nutrition for any date without saving anything
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [date, candidate]
+              properties:
+                date: {type: string, format: date}
+                candidate:
+                  type: object
+                  additionalProperties: false
+                  required: [label, sourceType, servings]
+                  properties:
+                    label: {type: string, description: Human-readable candidate name.}
+                    sourceType: {type: string, enum: [product, recipe, custom], description: Use custom for researched food that has not been saved.}
+                    sourceId: {type: string, format: uuid, description: Required for product or recipe; omit for custom.}
+                    servings: {type: number, exclusiveMinimum: 0}
+                    nutritionPerServing:
+                      type: object
+                      additionalProperties: false
+                      required: [estimated, source]
+                      properties:
+                        calories: {type: number, minimum: 0}
+                        proteinG: {type: number, minimum: 0}
+                        carbsG: {type: number, minimum: 0}
+                        fatG: {type: number, minimum: 0}
+                        fiberG: {type: number, minimum: 0}
+                        sugarG: {type: number, minimum: 0}
+                        sodiumMg: {type: number, minimum: 0}
+                        estimated: {type: boolean}
+                        source: {type: string, description: Manufacturer, restaurant, USDA, label, or other citation.}
+                    estimatedCostPerServing: {type: number, minimum: 0}
+                    costSource: {type: string}
+                    priceAsOf: {type: string, format: date}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/grocery-items:
     post:
@@ -827,31 +870,6 @@ paths:
       operationId: getPersonalRoutine
       summary: Read routine and meal-planning availability
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
-    post:
-      operationId: savePersonalRoutine
-      summary: Replace routine and meal-planning availability
-      x-openai-isConsequential: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [timeZone, days, dinnerWindow, commuteMinutes, preparationBufferMinutes]
-              properties:
-                timeZone: {type: string}
-                days: {type: object, additionalProperties: true}
-                dinnerWindow:
-                  type: object
-                  additionalProperties: false
-                  required: [start, end]
-                  properties: {start: {type: string}, end: {type: string}}
-                commuteMinutes: {type: integer, minimum: 0, maximum: 1440}
-                preparationBufferMinutes: {type: integer, minimum: 0, maximum: 1440}
-                defaultThawHours: {type: number, minimum: 0, maximum: 168}
-                notes: {type: string}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -975,14 +993,15 @@ components:
             properties:
               date: {type: string, format: date}
               slot: {type: string, enum: [breakfast, brunch, lunch, dinner, snack, dessert]}
-              source: {type: string, enum: [recipe, meal]}
+              source: {type: string, enum: [recipe, meal, product, inventoryLot]}
               sourceId: {type: string, format: uuid}
               scaleFactor: {type: number, exclusiveMinimum: 0}
               plannedServings: {type: number, exclusiveMinimum: 0, description: Expected servings eaten at this meal; independent of preparation scale.}
+              consumeFromInventory: {type: boolean}
               scheduledTime: {type: string}
               groupId: {type: string}
               leftoverOfGroupId: {type: string}
-              intent: {type: string, enum: [prepare, leftover]}
+              intent: {type: string, enum: [prepare, leftover, consume]}
               name: {type: string}
               emoji: {type: string}
               preparationTasks: {type: array, items: {type: object, additionalProperties: true}}

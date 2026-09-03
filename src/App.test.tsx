@@ -141,6 +141,24 @@ describe('Pantry web UI', () => {
     expect(container.querySelectorAll('.contribution-card .projection-segment').length).toBeGreaterThan(0);
   });
 
+  it('labels outside-pantry product plans without implying stock or prep', async () => {
+    const user = userEvent.setup();
+    const dateKey = currentDateKey();
+    const plannedMeals = [{
+      id: 'restaurant-plan', groupId: 'restaurant-plan', dateKey, slot: 'DINNER',
+      name: 'Chipotle burrito', emoji: '🌯', productId: 'chipotle-burrito',
+      sourceKind: 'product' as const, consumeFromInventory: false,
+      status: 'planned' as const, isLeftover: false, plannedServings: 1,
+      consumptionStatus: 'planned', cost: 11.25, costIsEstimated: true,
+    }];
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals }}><App /></PantryDataProvider>);
+
+    expect(screen.getByText(/dinner · outside pantry · ~\$11\.25/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'This week' }));
+    expect(screen.getByText(/dinner · outside pantry/i)).toBeInTheDocument();
+    expect(screen.getByText('No prep')).toBeInTheDocument();
+  });
+
   it('does not present one priced recipe as a complete grouped-meal total', async () => {
     const user = userEvent.setup();
     const dateKey = currentDateKey();

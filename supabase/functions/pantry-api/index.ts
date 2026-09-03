@@ -214,19 +214,32 @@ async function prepared(db: Supabase, includeDepleted = false, includeVoided = f
 }
 
 async function planning(db: Supabase) {
-  const [planResult, consumptionResult, groceryResult, recipeResult, mealResult] = await Promise.all([
+  const [planResult, consumptionResult, groceryResult, recipeResult, mealResult, productResult, lotResult] = await Promise.all([
     db.from("meal_plans").select("*").order("plan_date").order("scheduled_time"),
     db.from("planned_consumptions").select("*"),
     db.from("shopping_items").select("*").is("lot", null).order("created_at"),
     db.from("recipes").select("id,name,emoji"), db.from("meals").select("id,name,emoji"),
+    db.from("products").select("id,name,brand,emoji").is("archived_at", null),
+    db.from("inventory_lots").select("id,product"),
   ]);
   const recipeRows = unwrap(recipeResult) as Json[]; const meals = unwrap(mealResult) as Json[];
+  const products = unwrap(productResult) as Json[]; const lots = unwrap(lotResult) as Json[];
   const consumptions = unwrap(consumptionResult) as Json[];
-  return { entries: (unwrap(planResult) as Json[]).map((entry) => ({ ...entry,
-    source: entry.recipe ? "recipe" : "meal", sourceId: entry.recipe ?? entry.meal,
-    sourceName: entry.recipe ? recipeRows.find((row) => row.id === entry.recipe)?.name : meals.find((row) => row.id === entry.meal)?.name,
-    plannedConsumption: consumptions.find((consumption) => consumption.meal_plan === entry.id) ?? null,
-  })), groceries: unwrap(groceryResult) };
+  return { entries: (unwrap(planResult) as Json[]).map((entry) => {
+    const lot = entry.inventory_lot ? lots.find((row) => row.id === entry.inventory_lot) : undefined;
+    const productId = entry.product ?? lot?.product;
+    const product = productId ? products.find((row) => row.id === productId) : undefined;
+    const source = entry.inventory_lot ? "inventoryLot" : entry.product ? "product" : entry.recipe ? "recipe" : "meal";
+    const sourceId = entry.inventory_lot ?? entry.product ?? entry.recipe ?? entry.meal;
+    const sourceName = product
+      ? [product.brand, product.name].filter(Boolean).join(" · ")
+      : entry.recipe
+        ? recipeRows.find((row) => row.id === entry.recipe)?.name
+        : meals.find((row) => row.id === entry.meal)?.name;
+    return { ...entry, source, sourceId, sourceName,
+      consumeFromInventory: entry.consume_from_inventory,
+      plannedConsumption: consumptions.find((consumption) => consumption.meal_plan === entry.id) ?? null };
+  }), groceries: unwrap(groceryResult) };
 }
 
 async function history(db: Supabase, days: number, includeVoided = false) {
@@ -546,8 +559,15 @@ async function route(request: Request, db: Supabase) {
   })));
   if (method === "GET" && path === "/v1/plans") return reply(await planning(db));
   if (method === "POST" && path === "/v1/plans") { const input = await bodyObject(request);
-    return reply(unwrap(await db.rpc("gpt_replace_weekly_plan", {
-      p_week_start: requiredString(input.weekStart, "weekStart"), p_entries: requiredArray(input.entries, "entries"),
+    const mode = requiredString(input.mode, "mode");
+    if (!["append", "replaceWeek"].includes(mode)) throw new ApiError("mode must be append or replaceWeek");
+    return reply(unwrap(await db.rpc("gpt_save_plan", {
+      p_mode: mode, p_week_start: mode === "replaceWeek" ? requiredString(input.weekStart, "weekStart") : null,
+      p_entries: requiredArray(input.entries, "entries"),
+    }))); }
+  if (method === "POST" && path === "/v1/plans/preview") { const input = await bodyObject(request);
+    return reply(unwrap(await db.rpc("gpt_preview_daily_nutrition", {
+      p_date: requiredString(input.date, "date"), p_candidate: requiredObject(input.candidate, "candidate"),
     }))); }
   if (method === "POST" && path === "/v1/grocery-items") { const input = await bodyObject(request);
     const result = await db.from("shopping_items").insert({ free_text: requiredString(input.name, "name"),

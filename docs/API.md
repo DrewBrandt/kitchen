@@ -71,6 +71,7 @@ GET /v1/plans
 GET /v1/targets
 GET /v1/preferences
 GET /v1/routine
+POST /v1/plans/preview  (read-only projection; no data is saved)
 ```
 
 Writes:
@@ -324,14 +325,22 @@ undocumented base amount.
 
 ## Planning and settings
 
-`POST /v1/plans` replaces exactly the seven dates beginning at `weekStart`, then
-rebuilds unchecked generated grocery shortages while preserving manual items.
-Recipe and meal entries use `sourceId`, preparation `scaleFactor`, and
-`plannedServings`. Preparation scale drives ingredient demand; planned servings
-drive projected nutrition and must describe only the expected eaten portion.
+`POST /v1/plans` accepts `mode: append` to preserve the current plan or
+`mode: replaceWeek` with `weekStart` to replace exactly seven dates. Both modes
+rebuild generated shortages while preserving manual groceries. Entries may use
+a recipe, combined meal, product, or exact inventory lot. Product entries must
+set `consumeFromInventory`: `true` deducts stock when fulfilled; `false` records
+the reusable outside-pantry product without inventing a lot. `scaleFactor`
+controls preparation demand; `plannedServings` is only the expected eaten portion.
 
-`POST /v1/grocery-items` adds a manual item. The target, preference, and routine
-POST routes replace their respective singleton settings.
+`POST /v1/plans/preview` is read-only despite using POST for a structured
+candidate. It returns logged, planned, baseline, candidate, after, target, and
+nutrition-completeness data for any local date. A custom source-backed candidate
+can be evaluated before a reusable product or plan is created.
+
+`POST /v1/grocery-items` adds a manual item. Target, preference, and routine POST
+routes replace their respective singleton settings; routine writes remain a
+backend/web capability and are omitted from the 30-operation GPT schema.
 
 Calendar is not exposed yet. Planning uses the saved routine and any conflicts
 provided in conversation; the GPT must say external calendar conflicts were not

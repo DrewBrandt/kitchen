@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(77);
+select plan(82);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -363,6 +363,52 @@ select is(
   (select consumption.servings from planned_consumptions consumption join meal_plans plan on plan.id = consumption.meal_plan where plan.recipe = 'a3000000-0000-4000-8000-000000000001'),
   0.5::numeric,
   'GPT weekly planning stores expected eaten servings independently'
+);
+
+select lives_ok(
+  $$select gpt_save_plan('append', null, jsonb_build_array(jsonb_build_object(
+    'date', current_date + 1, 'slot', 'dinner', 'source', 'product',
+    'sourceId', 'a2000000-0000-4000-8000-000000000001',
+    'scaleFactor', 1, 'plannedServings', 1, 'consumeFromInventory', false,
+    'name', 'Restaurant apple test'
+  )))$$,
+  'GPT can append an outside-pantry product without replacing the week'
+);
+
+select is(
+  (select consume_from_inventory from meal_plans where name = 'Restaurant apple test'),
+  false,
+  'An outside-pantry GPT plan stores the explicit no-deduction choice'
+);
+
+select lives_ok(
+  $$select gpt_preview_daily_nutrition(current_date + 1, '{
+    "label":"Custom burrito test","sourceType":"custom","servings":1,
+    "nutritionPerServing":{"calories":500,"proteinG":25,"carbsG":60,"fatG":18,"fiberG":8,"sugarG":5,"sodiumMg":1200,"estimated":false,"source":"Restaurant nutrition test"}
+  }')$$,
+  'A source-backed custom food can be previewed without saving it'
+);
+
+select is(
+  (select round(
+    (preview #>> '{after,calories}')::numeric -
+    (preview #>> '{baseline,calories}')::numeric, 2
+  ) from (select gpt_preview_daily_nutrition(current_date + 1, '{
+    "label":"Custom burrito test","sourceType":"custom","servings":1,
+    "nutritionPerServing":{"calories":500,"proteinG":25,"carbsG":60,"fatG":18,"fiberG":8,"sugarG":5,"sodiumMg":1200,"estimated":false,"source":"Restaurant nutrition test"}
+  }') preview) value),
+  500::numeric,
+  'Preview after totals add the custom candidate to the logged and planned baseline'
+);
+
+select is(
+  (select round((preview #>> '{candidate,nutrition,calories}')::numeric, 2)
+   from (select gpt_preview_daily_nutrition(current_date + 1, jsonb_build_object(
+     'label', 'Existing product test', 'sourceType', 'product',
+     'sourceId', 'a2000000-0000-4000-8000-000000000001', 'servings', 1
+   )) preview) value),
+  23.75::numeric,
+  'A saved-product preview derives nutrition from its stored serving definition'
 );
 
 select lives_ok(

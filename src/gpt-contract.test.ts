@@ -22,7 +22,7 @@ describe('Pantry GPT operator pack', () => {
       expect(edgeFunction.includes(`"${route}"`) || route.endsWith('/{id}')).toBe(true);
       for (const [method, operation] of Object.entries(methods)) {
         operationIds.push(String(operation.operationId));
-        if (method !== 'get') expect(operation['x-openai-isConsequential']).toBe(true);
+        if (method !== 'get' && route !== '/v1/plans/preview') expect(operation['x-openai-isConsequential']).toBe(true);
       }
     }
     expect(new Set(operationIds).size).toBe(operationIds.length);
@@ -56,21 +56,42 @@ describe('Pantry GPT operator pack', () => {
     ['/v1/inventory', 'reconcilePantryInventory', ['requestId', 'replacements']],
     ['/v1/groceries', 'addGroceryHaul', ['requestId', 'source', 'items']],
     ['/v1/recipes', 'saveRecipe', ['name', 'servings', 'ingredients']],
-    ['/v1/plans', 'replaceWeeklyMealPlan', ['weekStart', 'entries']],
+    ['/v1/plans', 'saveMealPlan', ['mode', 'entries']],
     ['/v1/targets', 'saveNutritionTargets', ['calories', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'sodiumMg']],
     ['/v1/preferences', 'saveFoodPreferences', ['allergies', 'dislikes', 'favorites', 'dietaryRules', 'planningNotes']],
-    ['/v1/routine', 'savePersonalRoutine', ['timeZone', 'days', 'dinnerWindow', 'commuteMinutes', 'preparationBufferMinutes']],
   ])('exposes all required arguments for %s', (route, operationId, required) => {
     const operation = schema.paths[route].post;
     expect(operation.operationId).toBe(operationId);
     expect(operation.requestBody.content['application/json'].schema.required).toEqual(required);
   });
 
-  it('maps weekly-plan body fields to the parameterized database function', () => {
-    expect(edgeFunction).toContain('p_week_start: requiredString(input.weekStart, "weekStart")');
+  it('maps additive and replacement plan writes to one parameterized database function', () => {
+    expect(edgeFunction).toContain('db.rpc("gpt_save_plan"');
+    expect(edgeFunction).toContain('p_mode: mode');
+    expect(edgeFunction).toContain('mode === "replaceWeek" ? requiredString(input.weekStart, "weekStart") : null');
     expect(edgeFunction).toContain('p_entries: requiredArray(input.entries, "entries")');
-    expect(schema.paths['/v1/plans'].post.requestBody.content['application/json'].schema.properties.entries.items.required)
-      .toContain('plannedServings');
+    const planSchema = schema.paths['/v1/plans'].post.requestBody.content['application/json'].schema;
+    expect(planSchema.properties.mode.enum).toEqual(['append', 'replaceWeek']);
+    expect(planSchema.properties.entries.items.required).toContain('plannedServings');
+    expect(planSchema.properties.entries.items.properties.source.enum)
+      .toEqual(['recipe', 'meal', 'product', 'inventoryLot']);
+    expect(planSchema.properties.entries.items.properties).toHaveProperty('consumeFromInventory');
+  });
+
+  it('previews any date without marking the read-only POST consequential', () => {
+    const operation = schema.paths['/v1/plans/preview'].post;
+    const candidate = operation.requestBody.content['application/json'].schema.properties.candidate;
+    expect(operation.operationId).toBe('previewDailyNutrition');
+    expect(operation['x-openai-isConsequential']).toBeUndefined();
+    expect(candidate.required).toEqual(['label', 'sourceType', 'servings']);
+    expect(candidate.properties.sourceType.enum).toEqual(['product', 'recipe', 'custom']);
+    expect(candidate.properties.nutritionPerServing.properties).toHaveProperty('source');
+    expect(edgeFunction).toContain('db.rpc("gpt_preview_daily_nutrition"');
+  });
+
+  it('keeps routine read-only in the GPT to stay within the 30-operation importer limit', () => {
+    expect(schema.paths['/v1/routine'].get.operationId).toBe('getPersonalRoutine');
+    expect(schema.paths['/v1/routine'].post).toBeUndefined();
   });
 
   it('exposes purchased-product consumption inputs directly to the Action importer', () => {

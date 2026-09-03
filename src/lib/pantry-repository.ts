@@ -767,6 +767,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       productId,
       inventoryLotId: plan.inventory_lot ?? undefined,
       sourceKind,
+      consumeFromInventory: plan.consume_from_inventory ?? undefined,
       status: plan.status,
       isLeftover: plan.intent === 'leftover',
       scaleFactor: Number(plan.scale_factor),

@@ -499,7 +499,8 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
           <div className="today-plan-list">
             {dayPlans.map((meal) => {
               const recipe = recipes.find((candidate) => candidate.id === meal.recipeId || candidate.name === meal.name);
-              return <button className="today-plan-row" key={meal.id} onClick={() => recipe ? onOpen('recipe-detail', recipe) : onNavigate('week')}><span>{meal.emoji}</span><div><strong>{meal.name}</strong><small>{meal.slot.toLowerCase()} · {meal.sourceKind === 'lot' ? 'exact lot · ' : ''}{costLabel(meal.cost, meal.costIsEstimated)}</small></div><ChevronRight /></button>;
+              const sourceLabel = meal.consumeFromInventory === false ? 'outside pantry' : meal.sourceKind === 'lot' ? 'exact lot' : '';
+              return <button className="today-plan-row" key={meal.id} onClick={() => recipe ? onOpen('recipe-detail', recipe) : onNavigate('week')}><span>{meal.emoji}</span><div><strong>{meal.name}</strong><small>{meal.slot.toLowerCase()} · {sourceLabel ? `${sourceLabel} · ` : ''}{costLabel(meal.cost, meal.costIsEstimated)}</small></div><ChevronRight /></button>;
             })}
             {!dayPlans.length && <div className="featured-meal"><span>📅</span><div><strong>Nothing planned</strong><small>Add a recipe or pantry item for this day</small></div></div>}
           </div>
@@ -776,10 +777,10 @@ function WeekPage({ onOpen, notify, onRemove, onConsume, onSetServings }: { onOp
                       {recipe ? <button className="week-meal-detail" onClick={() => onOpen('recipe-detail', recipe)} aria-label={`View ${meals.map((meal) => meal.name).join(', ')} details`}>
                         <strong>{meals.map((meal) => meal.name).join(' + ')}</strong>
                         <small>{meals[0].slot.split(' · ')[0]}{meals[0].isLeftover ? ' · leftovers' : ''}</small>
-                      </button> : <div className="week-meal-detail"><strong>{meals.map((meal) => meal.name).join(' + ')}</strong><small>{meals[0].slot.split(' · ')[0]} · {meals[0].sourceKind === 'lot' ? 'exact lot' : 'pantry item'}</small></div>}
+                      </button> : <div className="week-meal-detail"><strong>{meals.map((meal) => meal.name).join(' + ')}</strong><small>{meals[0].slot.split(' · ')[0]} · {meals[0].consumeFromInventory === false ? 'outside pantry' : meals[0].sourceKind === 'lot' ? 'exact lot' : 'pantry item'}</small></div>}
                       <div className="planned-portions">{meals.map((meal) => <PlannedServingEditor key={meal.id ?? meal.name} meal={meal} notify={notify} onSave={onSetServings} />)}</div>
                     </div>
-                    <span className={cx('plan-status', eaten ? 'eaten' : made ? 'made' : directFromPantry ? 'ready' : day.dateKey < todayKey ? 'missed' : 'planned')}>{eaten ? 'Eaten' : directFromPantry ? 'Ready' : made ? 'Made · not eaten' : madeCount ? `${madeCount}/${meals.length} made` : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span>
+                    <span className={cx('plan-status', eaten ? 'eaten' : made ? 'made' : directFromPantry ? 'ready' : day.dateKey < todayKey ? 'missed' : 'planned')}>{eaten ? 'Eaten' : directFromPantry ? (meals.every((meal) => meal.consumeFromInventory === false) ? 'No prep' : 'Ready') : made ? 'Made · not eaten' : madeCount ? `${madeCount}/${meals.length} made` : day.dateKey < todayKey ? 'Not made' : 'Planned'}</span>
                     <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}</strong>
                     <div className="week-meal-actions">
                       {recipe && nextMeal ? <button className="button compact" onClick={() => onOpen('cook', recipe, { meal_plan_id: nextMeal.id ?? '' })}><CookingPot />Cook {recipe.name}</button> : null}

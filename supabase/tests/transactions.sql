@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(54);
+select plan(58);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -296,13 +296,13 @@ values
   ('93000000-0000-0000-0000-000000000002', '92000000-0000-0000-0000-000000000001', 40, 40, 0.80, 'fridge', now() - interval '2 days', current_date + 1),
   ('93000000-0000-0000-0000-000000000003', '92000000-0000-0000-0000-000000000001', 40, 40, 0.80, 'pantry', now() - interval '1 day', current_date + 10);
 
-insert into meal_plans(id, plan_date, daypart, product, intent, group_id)
-values ('96000000-0000-0000-0000-000000000002', current_date, 'snack', '92000000-0000-0000-0000-000000000001', 'consume', 'transaction-product-plan');
+insert into meal_plans(id, plan_date, daypart, product, consume_from_inventory, intent, group_id)
+values ('96000000-0000-0000-0000-000000000002', current_date, 'snack', '92000000-0000-0000-0000-000000000001', true, 'consume', 'transaction-product-plan');
 update planned_consumptions set servings = 2
 where meal_plan = '96000000-0000-0000-0000-000000000002';
 
-insert into meal_plans(id, plan_date, daypart, inventory_lot, intent, group_id)
-values ('96000000-0000-0000-0000-000000000003', current_date, 'snack', '93000000-0000-0000-0000-000000000003', 'consume', 'transaction-lot-plan');
+insert into meal_plans(id, plan_date, daypart, inventory_lot, consume_from_inventory, intent, group_id)
+values ('96000000-0000-0000-0000-000000000003', current_date, 'snack', '93000000-0000-0000-0000-000000000003', true, 'consume', 'transaction-lot-plan');
 
 insert into transaction_test_results select is(
   (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
@@ -347,6 +347,41 @@ insert into transaction_test_results select is(
   (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
   25::numeric,
   'Exact-lot fulfillment does not switch to an earlier-expiring lot'
+);
+
+update products
+set estimated_cost = 4, cost_source = 'Transaction test estimate', cost_as_of = current_date
+where id = '92000000-0000-0000-0000-000000000001';
+
+insert into meal_plans(id, plan_date, daypart, product, consume_from_inventory, intent, group_id)
+values ('96000000-0000-0000-0000-000000000004', current_date, 'dinner', '92000000-0000-0000-0000-000000000001', false, 'consume', 'transaction-external-product-plan');
+
+insert into transaction_test_results select lives_ok(
+  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000004'::uuid], array[1::numeric], now())$$,
+  'An outside-pantry product plan logs directly without requiring a fictional lot'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
+  25::numeric,
+  'Outside-pantry product fulfillment does not deduct stocked lots'
+);
+
+insert into transaction_test_results select is(
+  (select jsonb_build_object('kind', log.kind, 'calories', round(log.kcal, 2), 'cost', log.cost)
+   from planned_consumptions consumption
+   join food_logs log on log.id = consumption.food_log
+   where consumption.meal_plan = '96000000-0000-0000-0000-000000000004'),
+  '{"kind":"product","calories":30,"cost":0.20}'::jsonb,
+  'Outside-pantry fulfillment preserves the product nutrition and estimated portion cost'
+);
+
+insert into transaction_test_results select is(
+  (select count(*) from inventory_events event
+   join planned_consumptions consumption on consumption.food_log = event.food_log
+   where consumption.meal_plan = '96000000-0000-0000-0000-000000000004'),
+  0::bigint,
+  'Outside-pantry fulfillment creates no inventory event'
 );
 
 insert into transaction_test_results select lives_ok(

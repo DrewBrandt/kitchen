@@ -606,6 +606,7 @@ export type Database = {
       meal_plans: {
         Row: {
           cook_session: string | null
+          consume_from_inventory: boolean | null
           created_at: string
           daypart: Database["public"]["Enums"]["daypart"]
           emoji: string | null
@@ -630,6 +631,7 @@ export type Database = {
         }
         Insert: {
           cook_session?: string | null
+          consume_from_inventory?: boolean | null
           created_at?: string
           daypart: Database["public"]["Enums"]["daypart"]
           emoji?: string | null
@@ -654,6 +656,7 @@ export type Database = {
         }
         Update: {
           cook_session?: string | null
+          consume_from_inventory?: boolean | null
           created_at?: string
           daypart?: Database["public"]["Enums"]["daypart"]
           emoji?: string | null
@@ -1670,12 +1673,20 @@ export type Database = {
         }
         Returns: Json
       }
+      gpt_preview_daily_nutrition: {
+        Args: { p_candidate: Json; p_date: string }
+        Returns: Json
+      }
       gpt_reconcile_inventory: {
         Args: { p_replacements: Json; p_request_id: string; p_source: string }
         Returns: Json
       }
       gpt_replace_weekly_plan: {
         Args: { p_entries: Json; p_week_start: string }
+        Returns: Json
+      }
+      gpt_save_plan: {
+        Args: { p_entries: Json; p_mode: string; p_week_start: string | null }
         Returns: Json
       }
       gpt_save_recipe: { Args: { p_recipe: Json }; Returns: Json }
@@ -1753,6 +1764,10 @@ export type Database = {
         }
         Returns: Json
       }
+      product_portion_snapshot: {
+        Args: { p_product: string; p_servings: number }
+        Returns: Json
+      }
       product_nutrition_multiplier: {
         Args: { p_product: string; p_quantity: number }
         Returns: number
@@ -1760,6 +1775,10 @@ export type Database = {
       product_servings_for_quantity: {
         Args: { p_product: string; p_quantity: number }
         Returns: number
+      }
+      recipe_portion_snapshot: {
+        Args: { p_recipe: string; p_servings: number }
+        Returns: Json
       }
       rebuild_shopping_from_plan: {
         Args: { p_from?: string; p_through?: string }

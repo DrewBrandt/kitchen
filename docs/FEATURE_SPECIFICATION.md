@@ -77,7 +77,7 @@ actual consumption event.
 
 ### Plan and grocery shortage
 
-A planned meal represents an intention on a date and meal slot. It can refer to a recipe, a combined meal, or a custom description. The grocery list contains durable manual requests plus shortages calculated from the plan after considering inventory and prepared servings.
+A planned item represents an intention on a date and meal slot. It can refer to a recipe, a combined meal, a reusable product, or an exact inventory lot. A product plan explicitly says whether fulfillment should deduct pantry stock. The grocery list contains durable manual requests plus shortages calculated from the plan after considering inventory and prepared servings.
 
 ## Functional feature set
 
@@ -223,13 +223,18 @@ A planned meal represents an intention on a date and meal slot. It can refer to 
 ### 14. Meal planning
 
 - Maintain meal plans by local calendar date and breakfast, lunch, dinner, or snack slot.
-- Plan a saved recipe, reusable combined meal, or custom meal.
+- Plan a saved recipe, reusable combined meal, reusable product, or exact lot.
+- Let a product plan explicitly choose pantry deduction or outside-pantry
+  consumption; never create a fictional lot for a restaurant plan.
 - Store servings, notes, optional exact local time, completion state, and preparation tasks.
 - Store expected consumed servings separately from recipe preparation scale so
   daily projections never assume that an entire prepared batch will be eaten.
 - Group independent recipes as components of one planned meal without merging their identities.
 - Represent a later leftover meal by referencing the earlier preparation group rather than duplicating recipe demand.
 - Replace exactly one requested seven-day plan while preserving data outside that range.
+- Append one or more items without replacing any existing plan entries.
+- Preview a source-backed candidate against logged and still-planned nutrition
+  for any date without saving a definition, plan, lot, or consumption event.
 - Mark planned meals complete or incomplete.
 - Use available prepared servings before assuming that a recipe must be cooked again.
 - Prefer soon-to-expire inventory, available main ingredients, existing prepared food, nutrition-target fit, preferences, and meal variety when generating a plan.
