@@ -87,6 +87,7 @@ describe('Pantry GPT operator pack', () => {
     expect(candidate.properties.sourceType.enum).toEqual(['product', 'recipe', 'custom']);
     expect(candidate.properties.nutritionPerServing.properties).toHaveProperty('source');
     expect(edgeFunction).toContain('db.rpc("gpt_preview_daily_nutrition"');
+    expect(edgeFunction).toContain('readableNumbers(unwrap(await db.rpc("gpt_preview_daily_nutrition"');
   });
 
   it('keeps routine read-only in the GPT to stay within the 30-operation importer limit', () => {

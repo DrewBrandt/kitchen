@@ -336,7 +336,9 @@ controls preparation demand; `plannedServings` is only the expected eaten portio
 `POST /v1/plans/preview` is read-only despite using POST for a structured
 candidate. It returns logged, planned, baseline, candidate, after, target, and
 nutrition-completeness data for any local date. A custom source-backed candidate
-can be evaluated before a reusable product or plan is created.
+can be evaluated before a reusable product or plan is created. Response numbers
+are rounded to two decimals for conversational display; stored calculations retain
+their database precision.
 
 `POST /v1/grocery-items` adds a manual item. Target, preference, and routine POST
 routes replace their respective singleton settings; routine writes remain a

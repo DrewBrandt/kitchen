@@ -85,6 +85,14 @@ const unwrap = <T>(result: { data: T; error: { message: string } | null }): T =>
   if (result.error) throw new ApiError(result.error.message);
   return result.data;
 };
+const readableNumbers = (value: unknown): unknown => {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.round(value * 100) / 100 : value;
+  if (Array.isArray(value)) return value.map(readableNumbers);
+  if (value && typeof value === "object") return Object.fromEntries(
+    Object.entries(value as Json).map(([key, entry]) => [key, readableNumbers(entry)]),
+  );
+  return value;
+};
 
 async function tokenMatches(header: string | null, expected: string) {
   const supplied = header?.startsWith("Bearer ") ? header.slice(7) : "";
@@ -566,9 +574,9 @@ async function route(request: Request, db: Supabase) {
       p_entries: requiredArray(input.entries, "entries"),
     }))); }
   if (method === "POST" && path === "/v1/plans/preview") { const input = await bodyObject(request);
-    return reply(unwrap(await db.rpc("gpt_preview_daily_nutrition", {
+    return reply(readableNumbers(unwrap(await db.rpc("gpt_preview_daily_nutrition", {
       p_date: requiredString(input.date, "date"), p_candidate: requiredObject(input.candidate, "candidate"),
-    }))); }
+    })))); }
   if (method === "POST" && path === "/v1/grocery-items") { const input = await bodyObject(request);
     const result = await db.from("shopping_items").insert({ free_text: requiredString(input.name, "name"),
       quantity_label: input.quantityLabel ?? null, source: "manual", note: input.note ?? null }).select("id").single();
