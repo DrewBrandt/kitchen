@@ -180,11 +180,19 @@ export interface PantryData {
   todayProjection: NutritionValues;
 }
 
+const PREVIEW_TIME_ZONE = 'America/New_York';
+
 const previewDateKey = (daysFromToday = 0) => {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + daysFromToday);
-  return date.toLocaleDateString('en-CA');
+  const parts = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: PREVIEW_TIME_ZONE,
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  const date = new Date(`${part('year')}-${part('month')}-${part('day')}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + daysFromToday);
+  return date.toISOString().slice(0, 10);
 };
 
 export const previewPantryData: PantryData = {
@@ -225,7 +233,7 @@ export const previewPantryData: PantryData = {
   foodLog: FOOD_LOG,
   nutritionIncompleteEntries: 0,
   foodLogByDate: {
-    [new Date().toLocaleDateString('en-CA')]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG, nutritionIncompleteEntries: 0 },
+    [previewDateKey()]: { nutrients: NUTRIENTS, foodLog: FOOD_LOG, nutritionIncompleteEntries: 0 },
   },
   history: HISTORY,
   foods: [],
@@ -249,7 +257,7 @@ export const previewPantryData: PantryData = {
     dietaryRules: [],
     dislikes: [],
     favorites: [],
-    timeZone: 'America/New_York',
+    timeZone: PREVIEW_TIME_ZONE,
     planningNotes: '',
     weeklyFoodBudget: DEFAULT_WEEKLY_FOOD_BUDGET,
   },
