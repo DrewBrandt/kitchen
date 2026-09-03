@@ -149,12 +149,9 @@ const nutritionForProductServings = (product: ProductRow, food: FoodRow | undefi
   return values;
 };
 
-const pluralize = (name: string, plural: string | null | undefined, quantity: number) => {
+export const pluralizeFoodName = (name: string, plural: string | null | undefined, quantity: number) => {
   if (Math.abs(quantity - 1) < 0.001) return name;
-  if (plural) return plural;
-  if (/(s|x|z|ch|sh)$/i.test(name)) return `${name}es`;
-  if (/[^aeiou]y$/i.test(name)) return `${name.slice(0, -1)}ies`;
-  return `${name}s`;
+  return plural || name;
 };
 
 type UnitRow = Database['public']['Tables']['measure_conversions']['Row'];
@@ -374,7 +371,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         const unit = units.get(ingredient.unit);
         const requestedQuantity = Number(ingredient.qty);
         if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
-        const ingredientName = pluralize(food.name, food.plural, requestedQuantity);
+        const ingredientName = pluralizeFoodName(food.name, food.plural, requestedQuantity);
         if (food.always_available) return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;

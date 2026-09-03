@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { formatRecipeQuantity, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { formatRecipeQuantity, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+
+describe('base food names', () => {
+  it('keeps the singular name when no explicit plural is stored', () => {
+    expect(pluralizeFoodName('Salt', null, 2)).toBe('Salt');
+    expect(pluralizeFoodName('Vegetable oil', null, 2)).toBe('Vegetable oil');
+  });
+
+  it('uses an explicit plural for countable foods', () => {
+    expect(pluralizeFoodName('Egg', 'Eggs', 2)).toBe('Eggs');
+    expect(pluralizeFoodName('Egg', 'Eggs', 1)).toBe('Egg');
+  });
+});
 
 describe('recipe quantity display', () => {
   it('keeps small recipe amounts readable in their requested unit', () => {
