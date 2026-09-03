@@ -388,6 +388,18 @@ describe('Pantry web UI', () => {
     expect(form.get('location')).toBe('fridge');
   });
 
+  it('labels product history as consumed servings rather than use occasions', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Products' }));
+
+    expect(screen.getByRole('combobox', { name: 'Sort products' })).toHaveValue('used');
+    expect(screen.getByText('Consumed')).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Open' })[0]);
+    expect(within(screen.getByRole('dialog')).getByText('Servings consumed')).toBeInTheDocument();
+  });
+
   it('logs a one-off meal without requiring a product or complete nutrition', async () => {
     const user = userEvent.setup();
     const save = vi.fn().mockResolvedValue('Food logged without changing inventory.');
