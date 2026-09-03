@@ -57,10 +57,10 @@ export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitl
   'on-deck': { eyebrow: 'COOKING WORKSPACE', title: 'On deck', subtitle: 'Keep every active recipe visible and arrange the workspace around how you cook.', primary: 'Add recipe' },
   recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: 'What is ready to cook, and exactly what a run to the store would unlock.', primary: 'New recipe' },
   products: { eyebrow: 'KNOWN PRODUCTS', title: 'Products', subtitle: 'Search every known product, inspect nutrition, and compare alternatives for the same food.', primary: 'Add product' },
-  'food-log': { eyebrow: 'TODAY · THU, AUG 27', title: 'Food log', subtitle: 'Calories and nutrients from recipes, pantry items, and food away from home.', primary: 'Log food', secondary: 'Look up barcode' },
+  'food-log': { eyebrow: 'TODAY', title: 'Food log', subtitle: 'See what you ate, what you planned, and what another choice would change.', primary: 'Log food', secondary: 'Look up barcode' },
   history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '9 meals · 6 distinct foods · 1 repeated three times or more.', primary: 'Export range' },
   trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: 'Daily nutrition against targets, and the foods driving each nutrient.', primary: 'Edit targets' },
-  week: { eyebrow: 'AUG 24 – AUG 30', title: 'This week', subtitle: '2 meals planned · 4 groceries needed to cook them.', primary: 'Add a meal', secondary: 'Rebuild grocery list' },
+  week: { eyebrow: 'YOUR PLAN', title: 'This week', subtitle: 'Plan recipes, leftovers, or anything already in the pantry.', primary: 'Add to day', secondary: 'Rebuild grocery list' },
   grocery: { eyebrow: 'THIS WEEK', title: 'Grocery list', subtitle: 'Manual items and plan shortages, grouped by grocery department.', primary: 'Add item', secondary: 'Rebuild from plan' },
 };
 
@@ -115,6 +115,7 @@ export const RECIPES: Recipe[] = [
   {
     id: 'pancakes', emoji: '🥞', name: 'Simple Pancakes', servings: 4, minutes: 24,
     nutrition: '310 cal · 9 g protein per serving · ~$4.72 batch', ease: 0, taste: 0, cookable: true,
+    nutritionValues: { Calories: 1240, Protein: 36, Carbs: 192, Fat: 36, Fiber: 8, Sodium: 2080 },
     estimatedCost: 4.72, costPerServing: 1.18, costIsEstimated: true,
     ingredientText: '1.5 cup All-purpose flour\n1.25 cup Milk\n1 ct Egg\n2 tbsp Butter\n0.5 tsp Salt',
     instructionText: 'Whisk the dry ingredients.\nWhisk in milk and egg until just combined.\nCook portions in butter on a hot skillet.',
@@ -130,6 +131,7 @@ export const RECIPES: Recipe[] = [
   {
     id: 'eggs', emoji: '🍳', name: 'Soft Scrambled Eggs', servings: 1, minutes: 9,
     nutrition: '220 cal · 13 g protein per serving · ~$1.14 batch', ease: 0, taste: 0, cookable: true,
+    nutritionValues: { Calories: 220, Protein: 13, Carbs: 2, Fat: 17, Fiber: 0, Sodium: 340 },
     estimatedCost: 1.14, costPerServing: 1.14, costIsEstimated: true,
     ingredientText: '2 ct Egg\n0.5 tbsp Butter\n0.125 tsp Salt',
     instructionText: 'Beat the eggs with a pinch of salt.\nMelt butter over medium-low heat.\nStir gently until softly set.',

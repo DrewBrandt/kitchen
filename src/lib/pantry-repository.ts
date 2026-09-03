@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
+import { formatServings } from './format';
 import { nutritionForServings } from './nutrition';
 
 type Client = SupabaseClient<Database>;
@@ -121,6 +122,32 @@ const nutritionValues = (row: Partial<Record<(typeof nutrientFields)[NutrientNam
   Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, Number(row[field] ?? 0)])) as NutritionValues;
 
 const emptyNutrition = (): NutritionValues => ({ Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 });
+
+const productQuantityForServings = (product: ProductRow, servings: number) => {
+  const labelAligned = product.servings_per_package !== null
+    && Number(product.servings_per_package) > 0
+    && Number(product.package_qty_base) > 0
+    && product.serving_qty_base !== null
+    && product.nutrition_basis_qty !== null
+    && Math.abs(Number(product.nutrition_basis_qty) - Number(product.serving_qty_base)) < INVENTORY_QUANTITY_EPSILON;
+  return labelAligned
+    ? servings * Number(product.package_qty_base) / Number(product.servings_per_package)
+    : servings * Number(product.serving_qty_base ?? 1);
+};
+
+const nutritionForProductServings = (product: ProductRow, food: FoodRow | undefined, servings: number): NutritionValues => {
+  const quantity = productQuantityForServings(product, servings);
+  const values = emptyNutrition();
+  for (const [label, field] of Object.entries(nutrientFields) as Array<[NutrientName, (typeof nutrientFields)[NutrientName]]>) {
+    const productValue = product[field];
+    const sourceValue = productValue ?? food?.[field];
+    const basis = productValue !== null && productValue !== undefined ? product.nutrition_basis_qty : food?.nutrition_basis_qty;
+    values[label] = sourceValue === null || sourceValue === undefined || !basis || Number(basis) <= 0
+      ? 0
+      : Number(sourceValue) * quantity / Number(basis);
+  }
+  return values;
+};
 
 const pluralize = (name: string, plural: string | null | undefined, quantity: number) => {
   if (Math.abs(quantity - 1) < 0.001) return name;
@@ -375,6 +402,50 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     };
   });
   const recipeCosts = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const productViews: PantryData['products'] = [...products.values()].map((product) => {
+    const food = foods.get(product.food);
+    const usage = productConsumption.get(product.id);
+    const price = resolveProductPrice(product, lotsByProduct.get(product.id) ?? []);
+    const servingQtyBase = productQuantityForServings(product, 1);
+    const productLots = rawLots.filter((lot) => lot.product === product.id)
+      .sort((left, right) => (left.use_by ?? '9999-12-31').localeCompare(right.use_by ?? '9999-12-31') || left.acquired_at.localeCompare(right.acquired_at));
+    const costPerServing = price.estimatedCost === null || Number(product.package_qty_base) <= 0
+      ? null
+      : price.estimatedCost * servingQtyBase / Number(product.package_qty_base);
+    return {
+      id: product.id,
+      foodId: product.food,
+      foodName: food?.name ?? 'Food',
+      name: product.name,
+      label: [product.brand, product.name].filter(Boolean).join(' · '),
+      brand: product.brand ?? '',
+      barcode: product.barcode ?? '',
+      ...price,
+      emoji: product.emoji ?? food?.emoji ?? '🍽️',
+      nutrition: nutritionValues(product),
+      nutritionPerServing: nutritionForProductServings(product, food, 1),
+      packageQtyBase: Number(product.package_qty_base),
+      servingQtyBase,
+      servingLabel: product.serving_label ?? '1 serving',
+      stockServings: productLots.reduce((total, lot) => total + Number(lot.remaining_qty), 0) / servingQtyBase,
+      costPerServing,
+      availableLots: productLots.map((lot) => {
+        const value = lotCost(lot, servingQtyBase, product);
+        return {
+          id: lot.id,
+          location: lot.location ?? 'unassigned',
+          remainingBase: Number(lot.remaining_qty),
+          remainingServings: Number(lot.remaining_qty) / servingQtyBase,
+          dateLabel: daysUntil(lot.use_by).label,
+          costPerServing: value.cost,
+          costIsEstimated: value.estimated,
+        };
+      }),
+      servingsConsumed: usage?.servingsConsumed ?? 0,
+      lastUsedAt: usage?.lastUsedAt ?? '',
+    };
+  });
+  const productViewsById = new Map(productViews.map((product) => [product.id, product]));
   const plannedConsumptions = new Map((plannedConsumptionsResult.data ?? []).map((consumption) => [consumption.meal_plan, consumption]));
   const prepByMealPlan = new Map((prepsResult.data ?? []).filter((prep) => prep.meal_plan).map((prep) => [prep.meal_plan!, prep]));
   const preparedLotByPrep = new Map((lotsResult.data ?? []).filter((lot) => lot.prep).map((lot) => [lot.prep!, lot]));
@@ -501,7 +572,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     id: log.id,
     emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
     label: log.label,
-    serving: `${log.portion_label ?? (log.servings === null ? 'Portion not specified' : `${Number(log.servings)} serving${Number(log.servings) === 1 ? '' : 's'}`)}${log.nutrition_status === 'unknown' ? ' · nutrition unknown' : log.nutrition_status === 'partial' ? ' · partial nutrition' : log.nutrition_is_estimated ? ' · estimated' : ''}`,
+    serving: `${log.portion_label ?? (log.servings === null ? 'Portion not specified' : formatServings(Number(log.servings)))}${log.nutrition_status === 'unknown' ? ' · nutrition unknown' : log.nutrition_status === 'partial' ? ' · partial nutrition' : log.nutrition_is_estimated ? ' · estimated' : ''}`,
     calories: log.kcal === null ? 'Calories unknown' : `${Math.round(Number(log.kcal))} cal`,
     protein: log.protein_g === null ? 'Protein unknown' : `${Math.round(Number(log.protein_g))} g protein`,
     time: new Date(log.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
@@ -616,6 +687,55 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return [label, rows];
   })) as PantryData['nutrientDrivers'];
 
+  const plannedMeals: PantryData['plannedMeals'] = (plansResult.data ?? []).map((plan) => {
+    const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
+    const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
+    const exactLot = plan.inventory_lot ? rawLots.find((lot) => lot.id === plan.inventory_lot) : undefined;
+    const productId = plan.product ?? exactLot?.product ?? undefined;
+    const product = productId ? productViewsById.get(productId) : undefined;
+    const lot = exactLot ? product?.availableLots.find((candidate) => candidate.id === exactLot.id) : undefined;
+    const consumption = plannedConsumptions.get(plan.id);
+    const prep = prepByMealPlan.get(plan.id);
+    const servings = Number(consumption?.servings ?? 1);
+    const sourceKind = plan.inventory_lot ? 'lot' : plan.product ? 'product' : 'recipe';
+    const nutrition = product
+      ? Object.fromEntries(Object.entries(product.nutritionPerServing).map(([label, value]) => [label, value * servings])) as NutritionValues
+      : costedRecipe
+        ? nutritionForServings(costedRecipe.nutritionValues, costedRecipe.servings, servings)
+        : emptyNutrition();
+    const portionCost = product
+      ? (lot?.costPerServing ?? product.costPerServing) === null ? null : Number(lot?.costPerServing ?? product.costPerServing) * servings
+      : plan.intent === 'leftover'
+        ? 0
+        : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined
+          ? null
+          : costedRecipe.estimatedCost * Number(plan.scale_factor);
+    return {
+      id: plan.id,
+      groupId: plan.group_id ?? plan.id,
+      sourceGroupId: plan.leftover_of_group_id ?? undefined,
+      dateKey: plan.plan_date,
+      slot: plan.daypart.toUpperCase(),
+      name: plan.name ?? recipe?.name ?? product?.label ?? 'Planned item',
+      emoji: plan.emoji ?? recipe?.emoji ?? product?.emoji ?? '🍽️',
+      recipeId: recipe?.id,
+      productId,
+      inventoryLotId: plan.inventory_lot ?? undefined,
+      sourceKind,
+      status: plan.status,
+      isLeftover: plan.intent === 'leftover',
+      scaleFactor: Number(plan.scale_factor),
+      plannedServings: servings,
+      actualServings: consumption?.food_log ? Number(foodLogsById.get(consumption.food_log)?.servings ?? 0) : undefined,
+      consumptionStatus: consumption?.status ?? 'planned',
+      prepId: prep?.id,
+      preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined,
+      cost: portionCost,
+      costIsEstimated: product ? (lot?.costIsEstimated ?? true) : plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated),
+      nutrition,
+    };
+  });
+
   const start = new Date(`${todayKey}T12:00:00`);
   start.setHours(12, 0, 0, 0);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
@@ -623,22 +743,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const date = new Date(start);
     date.setDate(start.getDate() + offset);
     const key = dateKeyInZone(date, settings.time_zone);
-    const meals = (plansResult.data ?? []).filter((plan) => plan.plan_date === key).map((plan) => {
-      const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-      const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
-      const consumption = plannedConsumptions.get(plan.id);
-      const prep = prepByMealPlan.get(plan.id);
-      return { id: plan.id, groupId: plan.group_id ?? plan.id, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', scaleFactor: Number(plan.scale_factor), plannedServings: Number(consumption?.servings ?? 1), actualServings: consumption?.food_log ? Number(foodLogsById.get(consumption.food_log)?.servings ?? 0) : undefined, consumptionStatus: consumption?.status ?? 'planned', prepId: prep?.id, preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined, cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
-    });
+    const meals = plannedMeals.filter((plan) => plan.dateKey === key);
     return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey: key, today: key === todayKey, meals };
-  });
-
-  const plannedMeals = (plansResult.data ?? []).map((plan) => {
-    const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
-    const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
-    const consumption = plannedConsumptions.get(plan.id);
-    const prep = prepByMealPlan.get(plan.id);
-    return { id: plan.id, groupId: plan.group_id ?? plan.id, sourceGroupId: plan.leftover_of_group_id ?? undefined, dateKey: plan.plan_date, slot: plan.daypart.toUpperCase(), name: plan.name ?? recipe?.name ?? 'Planned meal', emoji: plan.emoji ?? recipe?.emoji ?? '🍽️', recipeId: recipe?.id, status: plan.status, isLeftover: plan.intent === 'leftover', scaleFactor: Number(plan.scale_factor), plannedServings: Number(consumption?.servings ?? 1), actualServings: consumption?.food_log ? Number(foodLogsById.get(consumption.food_log)?.servings ?? 0) : undefined, consumptionStatus: consumption?.status ?? 'planned', prepId: prep?.id, preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined, cost: plan.intent === 'leftover' ? 0 : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined ? null : costedRecipe.estimatedCost * Number(plan.scale_factor), costIsEstimated: plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated) };
   });
   const nutritionHistory = [...byDay.entries()].map(([dateKey, dayLogs]) => ({
     dateKey,
@@ -647,12 +753,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
     foods: dayLogs.map((log) => ({ label: log.label, values: nutritionValues(log) })),
   }));
-  const todayProjection = (plansResult.data ?? []).filter((plan) => plan.plan_date === todayKey && plan.status === 'planned' && plannedConsumptions.get(plan.id)?.status === 'planned').reduce((totals, plan) => {
-    const recipe = plan.recipe ? recipeCosts.get(plan.recipe) : undefined;
-    if (!recipe) return totals;
-    const servings = Number(plannedConsumptions.get(plan.id)?.servings ?? 1);
-    const values = nutritionForServings(recipe.nutritionValues, recipe.servings, servings);
-    for (const label of Object.keys(totals) as NutrientName[]) totals[label] += values[label];
+  const todayProjection = plannedMeals.filter((plan) => plan.dateKey === todayKey && plan.status === 'planned' && plan.consumptionStatus === 'planned').reduce((totals, plan) => {
+    for (const label of Object.keys(totals) as NutrientName[]) totals[label] += plan.nutrition?.[label] ?? 0;
     return totals;
   }, emptyNutrition());
 
@@ -668,24 +770,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     foodLogByDate,
     history,
     foods: [...foods.values()].map((food) => ({ id: food.id, name: food.name, emoji: food.emoji ?? '🍽️', measureStyle: food.measure_style })),
-    products: [...products.values()].map((product) => {
-      const usage = productConsumption.get(product.id);
-      const price = resolveProductPrice(product, lotsByProduct.get(product.id) ?? []);
-      return {
-        id: product.id,
-        foodId: product.food,
-        foodName: foods.get(product.food)?.name ?? 'Food',
-        name: product.name,
-        label: [product.brand, product.name].filter(Boolean).join(' · '),
-        brand: product.brand ?? '',
-        barcode: product.barcode ?? '',
-        ...price,
-        emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
-        nutrition: nutritionValues(product),
-        servingsConsumed: usage?.servingsConsumed ?? 0,
-        lastUsedAt: usage?.lastUsedAt ?? '',
-      };
-    }),
+    products: productViews,
     units: [...units.values()].map((unit) => ({ id: unit.id, label: `${unit.full_name} (${unit.short_name})`, shortName: unit.short_name, measureStyle: unit.measure_style })),
     categories: (categoriesResult.data ?? []).map((category) => category.category),
     locations: (locationsResult.data ?? []).map((location) => location.location),

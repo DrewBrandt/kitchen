@@ -133,11 +133,11 @@ describe('Pantry web UI', () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
-    expect(screen.getByText('Includes today’s planned meals')).toBeInTheDocument();
-    expect(container.querySelectorAll('.nutrition-card .projection-segment')).toHaveLength(6);
+    expect(screen.getByText(/Includes items planned for today/)).toBeInTheDocument();
+    expect(container.querySelectorAll('.nutrition-card .projection-segment')).toHaveLength(7);
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
-    expect(screen.getByText("Today's plan")).toBeInTheDocument();
+    expect(screen.getByText('Planned for today')).toBeInTheDocument();
     expect(container.querySelectorAll('.contribution-card .projection-segment').length).toBeGreaterThan(0);
   });
 
@@ -210,7 +210,7 @@ describe('Pantry web UI', () => {
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getAllByRole('button', { name: 'Edit recipe' })[0]);
     expect(within(screen.getByRole('dialog')).getByLabelText('Recipe name')).toHaveValue('Simple Pancakes');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
     await user.click(within(screen.getByRole('article', { name: 'Simple Pancakes' })).getByRole('button', { name: /all-purpose flour/i }));
@@ -249,7 +249,7 @@ describe('Pantry web UI', () => {
     await user.click(within(quantity.closest('.prepared-row')!).getByRole('button', { name: 'Log eaten' }));
 
     await waitFor(() => expect(consume).toHaveBeenCalledWith('preview-prep-1', 1.5));
-    expect(screen.getByText('1.5 servings of Simple Pancakes logged as eaten.')).toBeInTheDocument();
+    expect(screen.getByText('1½ servings of Simple Pancakes logged as eaten.')).toBeInTheDocument();
   });
 
   it('logs an editable actual serving amount without changing the planned amount', async () => {
@@ -273,7 +273,7 @@ describe('Pantry web UI', () => {
     await user.click(button);
 
     await waitFor(() => expect(consume).toHaveBeenCalledWith([{ mealPlanId: 'made-plan', servings: 0.75 }]));
-    expect(screen.getByText('0.75 servings logged as eaten.')).toBeInTheDocument();
+    expect(screen.getByText('¾ servings logged as eaten.')).toBeInTheDocument();
   });
 
   it('shows planned and actual servings separately after a meal is eaten', async () => {
@@ -284,8 +284,8 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: /This week/ }));
     expect(screen.getByLabelText('Planned servings for Simple Pancakes')).toHaveValue(1.5);
-    expect(screen.getByText('servings planned')).toBeInTheDocument();
-    expect(screen.getByText('0.75 eaten')).toBeInTheDocument();
+    expect(screen.getByText('1½ servings planned')).toBeInTheDocument();
+    expect(screen.getByText('¾ servings eaten')).toBeInTheDocument();
   });
 
   it('checks grocery rows and updates the shopping summary', async () => {
@@ -558,9 +558,9 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     const costRow = screen.getByText('Cost', { selector: 'strong' }).closest('.contribution-row')!;
-    const costSegment = costRow.querySelector('.segment-bar i') as HTMLElement;
-    expect(Number.parseFloat(costSegment.style.width)).toBeGreaterThan(82);
-    expect(costSegment.style.maxWidth).toBe('none');
+    const costSegments = [...costRow.querySelectorAll('.segment-bar i')] as HTMLElement[];
+    expect(costSegments.reduce((total, segment) => total + Number.parseFloat(segment.style.width), 0)).toBeGreaterThan(82);
+    expect(costSegments.every((segment) => segment.style.maxWidth === 'none')).toBe(true);
   });
 
   it('shows every planned meal and every use-soon item on Today, with day arrows', async () => {
@@ -596,6 +596,51 @@ describe('Pantry web UI', () => {
     const eventDialog = screen.getByRole('dialog');
     expect(within(eventDialog).getByText('Consumption event')).toBeInTheDocument();
     expect(within(eventDialog).getByText('preview-log-1')).toBeInTheDocument();
+  });
+
+  it('plans a pantry item from a source-first composer without duplicate close actions', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Pantry item added to the day.');
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    await user.click(screen.getByRole('button', { name: 'Add to day' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add to day' });
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole('button', { name: 'Close' })).toHaveLength(1);
+
+    await user.click(within(dialog).getByRole('tab', { name: /Pantry item/ }));
+    await user.click(within(dialog).getByRole('option', { name: /Bailey's/ }));
+    expect(within(dialog).getByText('147 cal')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('1.5 fl oz')).toHaveLength(2);
+    await user.click(within(dialog).getByRole('radio', { name: /pantry · 9.3 servings/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add to day' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('meal');
+    expect(form.get('intent')).toBe('consume');
+    expect(form.get('inventory_lot')).toBe('preview-baileys-lot');
+    expect(form.get('product')).toBe('');
+  });
+
+  it('lets the Food Log try a drink before adding it to today', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('Pantry item added to the day.');
+    render(<App onSaveAction={save} />);
+
+    await user.click(screen.getByRole('button', { name: 'Food log' }));
+    await user.click(screen.getByRole('button', { name: /What if I ate something else/ }));
+    expect(screen.getByText(/Nothing changes until you plan or log it/)).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Bailey's/ }));
+    expect(screen.getByText(/1 serving adds 147 calories/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Log eaten now' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Add to today' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const [, form] = save.mock.calls[0] as [string, FormData];
+    expect(form.get('product')).toBe('preview-product-4');
+    expect(form.get('planned_servings')).toBe('1');
   });
 
   it('describes history spend as an average on logged days', async () => {

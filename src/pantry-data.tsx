@@ -56,6 +56,21 @@ export interface ProductView {
   costAsOf: string;
   emoji: string;
   nutrition: NutritionValues;
+  nutritionPerServing: NutritionValues;
+  packageQtyBase: number;
+  servingQtyBase: number;
+  servingLabel: string;
+  stockServings: number;
+  costPerServing: number | null;
+  availableLots: Array<{
+    id: string;
+    location: string;
+    remainingBase: number;
+    remainingServings: number;
+    dateLabel: string;
+    costPerServing: number | null;
+    costIsEstimated: boolean;
+  }>;
   servingsConsumed: number;
   lastUsedAt: string;
 }
@@ -69,6 +84,9 @@ export interface PlannedMealView {
   name: string;
   emoji: string;
   recipeId?: string;
+  productId?: string;
+  inventoryLotId?: string;
+  sourceKind?: 'recipe' | 'product' | 'lot';
   status: 'planned' | 'made' | 'skipped' | 'moved';
   isLeftover: boolean;
   scaleFactor?: number;
@@ -79,6 +97,7 @@ export interface PlannedMealView {
   preparedLotId?: string;
   cost: number | null;
   costIsEstimated: boolean;
+  nutrition?: NutritionValues;
 }
 
 export interface PreparationOptions {
@@ -199,9 +218,9 @@ export const previewPantryData: PantryData = {
   nutrients: NUTRIENTS,
   weekDays: WEEK_DAYS,
   plannedMeals: [
-    { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 4.72, costIsEstimated: true },
-    { id: 'preview-plan-eggs', groupId: 'preview-plan-eggs', dateKey: previewDateKey(), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true },
-    { id: 'preview-plan-eggs-later', groupId: 'preview-plan-eggs-later', dateKey: previewDateKey(2), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true },
+    { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', sourceKind: 'recipe', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 4.72, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },
+    { id: 'preview-plan-eggs', groupId: 'preview-plan-eggs', dateKey: previewDateKey(), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', sourceKind: 'recipe', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true, nutrition: { Calories: 220, Protein: 13, Carbs: 2, Fat: 17, Fiber: 0, Sodium: 340 } },
+    { id: 'preview-plan-eggs-later', groupId: 'preview-plan-eggs-later', dateKey: previewDateKey(2), slot: 'DINNER', name: 'Soft Scrambled Eggs', emoji: '🍳', recipeId: 'eggs', sourceKind: 'recipe', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 1.14, costIsEstimated: true, nutrition: { Calories: 220, Protein: 13, Carbs: 2, Fat: 17, Fiber: 0, Sodium: 340 } },
   ],
   foodLog: FOOD_LOG,
   nutritionIncompleteEntries: 0,
@@ -211,9 +230,10 @@ export const previewPantryData: PantryData = {
   history: HISTORY,
   foods: [],
   products: [
-    { id: 'preview-product-1', foodId: 'preview-food-milk', foodName: 'Chocolate milk', name: 'Chocolate milk', label: 'Chocolate milk', brand: 'Fairlife', barcode: '811620020657', emoji: '🥛', nutrition: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, servingsConsumed: 8, lastUsedAt: '2026-08-30T12:00:00Z', estimatedCost: 4.49, costSource: 'Store estimate', costAsOf: '2026-08-30' },
-    { id: 'preview-product-2', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Salted caramel mix-in yogurt', label: 'Salted caramel mix-in yogurt', brand: 'Oikos', barcode: '036632019742', emoji: '🥣', nutrition: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, servingsConsumed: 5, lastUsedAt: '2026-08-29T12:00:00Z', estimatedCost: 1.79, costSource: 'Store estimate', costAsOf: '2026-08-29' },
-    { id: 'preview-product-3', foodId: 'preview-food-yogurt', foodName: 'Vanilla Greek yogurt', name: 'Vanilla Greek yogurt', label: 'Vanilla Greek yogurt', brand: 'Oikos', barcode: '036632032093', emoji: '🥣', nutrition: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, servingsConsumed: 3, lastUsedAt: '2026-08-27T12:00:00Z', estimatedCost: 1.49, costSource: 'Store estimate', costAsOf: '2026-08-27' },
+    { id: 'preview-product-1', foodId: 'preview-food-milk', foodName: 'Chocolate milk', name: 'Chocolate milk', label: 'Fairlife · Chocolate milk', brand: 'Fairlife', barcode: '811620020657', emoji: '🥛', nutrition: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, nutritionPerServing: { Calories: 150, Protein: 13, Carbs: 13, Fat: 4.5, Fiber: 2, Sodium: 280 }, packageQtyBase: 52, servingQtyBase: 12, servingLabel: '1 cup (12 fl oz)', stockServings: 3.5, costPerServing: 1.04, availableLots: [{ id: 'preview-fairlife-lot', location: 'fridge', remainingBase: 42, remainingServings: 3.5, dateLabel: '5 days', costPerServing: 1.04, costIsEstimated: true }], servingsConsumed: 8, lastUsedAt: '2026-08-30T12:00:00Z', estimatedCost: 4.49, costSource: 'Store estimate', costAsOf: '2026-08-30' },
+    { id: 'preview-product-2', foodId: 'preview-food-yogurt', foodName: 'Greek yogurt', name: 'Salted caramel mix-in yogurt', label: 'Oikos · Salted caramel mix-in yogurt', brand: 'Oikos', barcode: '036632019742', emoji: '🥣', nutrition: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, nutritionPerServing: { Calories: 120, Protein: 11, Carbs: 14, Fat: 2, Fiber: 0, Sodium: 75 }, packageQtyBase: 1, servingQtyBase: 1, servingLabel: '1 container', stockServings: 2, costPerServing: 1.79, availableLots: [{ id: 'preview-oikos-caramel-lot', location: 'fridge', remainingBase: 2, remainingServings: 2, dateLabel: '8 days', costPerServing: 1.79, costIsEstimated: true }], servingsConsumed: 5, lastUsedAt: '2026-08-29T12:00:00Z', estimatedCost: 1.79, costSource: 'Store estimate', costAsOf: '2026-08-29' },
+    { id: 'preview-product-3', foodId: 'preview-food-yogurt', foodName: 'Vanilla Greek yogurt', name: 'Vanilla Greek yogurt', label: 'Oikos · Vanilla Greek yogurt', brand: 'Oikos', barcode: '036632032093', emoji: '🥣', nutrition: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, nutritionPerServing: { Calories: 90, Protein: 15, Carbs: 7, Fat: 0, Fiber: 0, Sodium: 55 }, packageQtyBase: 1, servingQtyBase: 1, servingLabel: '1 container', stockServings: 1, costPerServing: 1.49, availableLots: [{ id: 'preview-oikos-vanilla-lot', location: 'fridge', remainingBase: 1, remainingServings: 1, dateLabel: '4 days', costPerServing: 1.49, costIsEstimated: true }], servingsConsumed: 3, lastUsedAt: '2026-08-27T12:00:00Z', estimatedCost: 1.49, costSource: 'Store estimate', costAsOf: '2026-08-27' },
+    { id: 'preview-product-4', foodId: 'preview-food-liqueur', foodName: 'Irish cream liqueur', name: 'Original Irish Cream', label: "Bailey's · Original Irish Cream", brand: "Bailey's", barcode: '', emoji: '🥃', nutrition: { Calories: 147, Protein: 1.4, Carbs: 11.3, Fat: 5.8, Fiber: 0, Sodium: 34 }, nutritionPerServing: { Calories: 147, Protein: 1.4, Carbs: 11.3, Fat: 5.8, Fiber: 0, Sodium: 34 }, packageQtyBase: 25.36, servingQtyBase: 1.5, servingLabel: '1.5 fl oz', stockServings: 9.3, costPerServing: 1.77, availableLots: [{ id: 'preview-baileys-lot', location: 'pantry', remainingBase: 14, remainingServings: 9.3, dateLabel: 'Date unknown', costPerServing: 1.77, costIsEstimated: true }], servingsConsumed: 2, lastUsedAt: '2026-08-23T20:00:00Z', estimatedCost: 29.99, costSource: 'Store estimate', costAsOf: '2026-08-23' },
   ],
   units: [],
   categories: [],
@@ -250,7 +270,7 @@ export const previewPantryData: PantryData = {
   proteinTrend: Array.from({ length: 30 }, (_, index) => ({ date: String(index + 1), value: 0 })),
   nutrientDrivers: { Protein: [], Calories: [], Sodium: [] },
   nutritionHistory: [],
-  todayProjection: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 },
+  todayProjection: { Calories: 530, Protein: 22, Carbs: 50, Fat: 26, Fiber: 2, Sodium: 860 },
 };
 
 const PantryDataContext = createContext<PantryData>(previewPantryData);

@@ -611,6 +611,7 @@ export type Database = {
           emoji: string | null
           group_id: string | null
           id: string
+          inventory_lot: string | null
           intent: string
           leftover_of_group_id: string | null
           legacy_firebase_id: string | null
@@ -620,6 +621,7 @@ export type Database = {
           note: string | null
           plan_date: string
           preparation_tasks: Json
+          product: string | null
           recipe: string | null
           scale_factor: number
           scheduled_time: string | null
@@ -633,6 +635,7 @@ export type Database = {
           emoji?: string | null
           group_id?: string | null
           id?: string
+          inventory_lot?: string | null
           intent?: string
           leftover_of_group_id?: string | null
           legacy_firebase_id?: string | null
@@ -642,6 +645,7 @@ export type Database = {
           note?: string | null
           plan_date: string
           preparation_tasks?: Json
+          product?: string | null
           recipe?: string | null
           scale_factor?: number
           scheduled_time?: string | null
@@ -655,6 +659,7 @@ export type Database = {
           emoji?: string | null
           group_id?: string | null
           id?: string
+          inventory_lot?: string | null
           intent?: string
           leftover_of_group_id?: string | null
           legacy_firebase_id?: string | null
@@ -664,6 +669,7 @@ export type Database = {
           note?: string | null
           plan_date?: string
           preparation_tasks?: Json
+          product?: string | null
           recipe?: string | null
           scale_factor?: number
           scheduled_time?: string | null
@@ -679,10 +685,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_plans_inventory_lot_fkey"
+            columns: ["inventory_lot"]
+            isOneToOne: false
+            referencedRelation: "inventory_lots"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "meal_plans_meal_fkey"
             columns: ["meal"]
             isOneToOne: false
             referencedRelation: "meals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plans_product_fkey"
+            columns: ["product"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
           {

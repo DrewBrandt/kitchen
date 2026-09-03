@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(46);
+select plan(54);
 create temporary table transaction_test_results(result text);
 grant insert, select on transaction_test_results to authenticated;
 
@@ -49,13 +49,14 @@ values
   ('91000000-0000-0000-0000-000000000002', 'Transaction test prepared food', 'discrete', (select id from measure_conversions where short_name = 'ct'), false),
   ('91000000-0000-0000-0000-000000000003', 'Transaction test water', 'volume', (select id from measure_conversions where short_name = 'fl oz'), true);
 
-insert into products(id, food, name, package_qty_base, package_unit, nutrition_basis_qty, kcal, protein_g, carbs_g, fat_g, fiber_g, sodium_mg)
+insert into products(id, food, name, package_qty_base, package_unit, serving_qty_base, nutrition_basis_qty, kcal, protein_g, carbs_g, fat_g, fiber_g, sodium_mg)
 values (
   '92000000-0000-0000-0000-000000000001',
   '91000000-0000-0000-0000-000000000001',
   'Transaction test ingredient product',
   200,
   (select id from measure_conversions where short_name = 'g'),
+  10,
   100,
   300,
   10,
@@ -286,6 +287,66 @@ insert into transaction_test_results select is(
   (select count(*) from shopping_items where food = '91000000-0000-0000-0000-000000000003' and source = 'generated'),
   0::bigint,
   'Always-available ingredients never become generated grocery shortages'
+);
+
+-- Product plans reserve no stock. A generic source resolves FEFO at the moment
+-- it is eaten; an exact-lot source stays pinned even when an earlier lot exists.
+insert into inventory_lots(id, product, initial_qty, remaining_qty, total_cost, location, acquired_at, use_by)
+values
+  ('93000000-0000-0000-0000-000000000002', '92000000-0000-0000-0000-000000000001', 40, 40, 0.80, 'fridge', now() - interval '2 days', current_date + 1),
+  ('93000000-0000-0000-0000-000000000003', '92000000-0000-0000-0000-000000000001', 40, 40, 0.80, 'pantry', now() - interval '1 day', current_date + 10);
+
+insert into meal_plans(id, plan_date, daypart, product, intent, group_id)
+values ('96000000-0000-0000-0000-000000000002', current_date, 'snack', '92000000-0000-0000-0000-000000000001', 'consume', 'transaction-product-plan');
+update planned_consumptions set servings = 2
+where meal_plan = '96000000-0000-0000-0000-000000000002';
+
+insert into meal_plans(id, plan_date, daypart, inventory_lot, intent, group_id)
+values ('96000000-0000-0000-0000-000000000003', current_date, 'snack', '93000000-0000-0000-0000-000000000003', 'consume', 'transaction-lot-plan');
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
+  40::numeric,
+  'Planning a product portion does not deduct inventory'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000002'::uuid], array[1.5::numeric], now())$$,
+  'A generic product plan can be logged directly without a cooking step'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
+  25::numeric,
+  'Generic product fulfillment deducts the first-expiring product lot'
+);
+
+insert into transaction_test_results select ok(
+  (select status = 'fulfilled' and food_log is not null from planned_consumptions where meal_plan = '96000000-0000-0000-0000-000000000002'),
+  'Generic product fulfillment links the planned portion to its food log'
+);
+
+insert into transaction_test_results select is(
+  (select log.servings from planned_consumptions consumption join food_logs log on log.id = consumption.food_log where consumption.meal_plan = '96000000-0000-0000-0000-000000000002'),
+  1.5::numeric,
+  'Product fulfillment records the actual servings eaten'
+);
+
+insert into transaction_test_results select lives_ok(
+  $$select consume_planned_meals(array['96000000-0000-0000-0000-000000000003'::uuid], array[1::numeric], now())$$,
+  'An exact-lot plan can be logged directly'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000003'),
+  30::numeric,
+  'Exact-lot fulfillment deducts the pinned lot'
+);
+
+insert into transaction_test_results select is(
+  (select remaining_qty from inventory_lots where id = '93000000-0000-0000-0000-000000000002'),
+  25::numeric,
+  'Exact-lot fulfillment does not switch to an earlier-expiring lot'
 );
 
 insert into transaction_test_results select lives_ok(

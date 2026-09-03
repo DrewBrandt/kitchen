@@ -292,6 +292,28 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       if (consumptionError) throw consumptionError;
       return 'Leftovers added to the plan.';
     }
+    if (intent === 'consume') {
+      const product = optionalText(form, 'product');
+      const inventoryLot = optionalText(form, 'inventory_lot');
+      if (Number(Boolean(product)) + Number(Boolean(inventoryLot)) !== 1) {
+        throw new Error('Choose a pantry product or one exact lot.');
+      }
+      const { data: insertedPlan, error } = await client.from('meal_plans').insert({
+        product,
+        inventory_lot: inventoryLot,
+        plan_date: text(form, 'plan_date'),
+        daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
+        scale_factor: 1,
+        status: 'planned',
+        group_id: groupId,
+        intent: 'consume',
+        note: optionalText(form, 'note'),
+      }).select('id').single();
+      if (error) throw error;
+      const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).eq('meal_plan', insertedPlan.id);
+      if (consumptionError) throw consumptionError;
+      return 'Pantry item added to the day.';
+    }
     if (!text(form, 'recipe')) throw new Error('Choose a recipe for the meal.');
     const { data: insertedPlan, error } = await client.from('meal_plans').insert({
       recipe: text(form, 'recipe'),
@@ -306,7 +328,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
     if (error) throw error;
     const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).eq('meal_plan', insertedPlan.id);
     if (consumptionError) throw consumptionError;
-    return 'Meal added to the plan.';
+    return 'Recipe added to the day.';
   }
 
   if (kind === 'targets') {
