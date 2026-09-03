@@ -30,6 +30,7 @@ export type NutritionValues = Record<NutrientName, number>;
 
 export interface FoodLogEntry {
   id?: string;
+  eventIds?: string[];
   emoji: string;
   label: string;
   serving: string;

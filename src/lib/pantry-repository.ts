@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
-import type { NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
+import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 import { formatServings } from './format';
 import { nutritionForServings } from './nutrition';
@@ -190,6 +190,28 @@ const daysUntil = (date: string | null) => {
 
 const sum = (rows: FoodLogRow[], field: keyof Pick<FoodLogRow, 'kcal' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fiber_g' | 'sodium_mg'>) =>
   rows.reduce((total, row) => total + Number(row[field] ?? 0), 0);
+
+const FOOD_LOG_GROUP_WINDOW_MS = 60 * 60 * 1000;
+
+export const groupFoodLogRows = (logs: FoodLogRow[]) => {
+  const groups: FoodLogRow[][] = [];
+  const latestGroupByProduct = new Map<string, { group: FoodLogRow[]; newestTime: number }>();
+
+  for (const log of [...logs].sort((left, right) => right.occurred_at.localeCompare(left.occurred_at))) {
+    const occurredAt = Date.parse(log.occurred_at);
+    const candidate = log.product ? latestGroupByProduct.get(log.product) : undefined;
+    if (candidate && Number.isFinite(occurredAt) && candidate.newestTime - occurredAt <= FOOD_LOG_GROUP_WINDOW_MS) {
+      candidate.group.push(log);
+      continue;
+    }
+
+    const group = [log];
+    groups.push(group);
+    if (log.product && Number.isFinite(occurredAt)) latestGroupByProduct.set(log.product, { group, newestTime: occurredAt });
+  }
+
+  return groups;
+};
 
 const dateKeyInZone = (date: Date, timeZone: string) => {
   try {
@@ -565,34 +587,60 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     if (recipe?.costPerServing !== null && recipe?.costPerServing !== undefined) return { cost: recipe.costPerServing * Number(log.servings ?? 1), estimated: true, source: 'Recipe estimate' };
     return { cost: null, estimated: true, source: 'Price unavailable' };
   };
-  const buildFoodLog = (dayLogs: FoodLogRow[]) => dayLogs.map((log, index) => ({
-    id: log.id,
-    emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
-    label: log.label,
-    serving: `${log.portion_label ?? (log.servings === null ? 'Portion not specified' : formatServings(Number(log.servings)))}${log.nutrition_status === 'unknown' ? ' · nutrition unknown' : log.nutrition_status === 'partial' ? ' · partial nutrition' : log.nutrition_is_estimated ? ' · estimated' : ''}`,
-    calories: log.kcal === null ? 'Calories unknown' : `${Math.round(Number(log.kcal))} cal`,
-    protein: log.protein_g === null ? 'Protein unknown' : `${Math.round(Number(log.protein_g))} g protein`,
-    time: new Date(log.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-    color: palette[index % palette.length],
-    nutrition: log.nutrition_status === 'unknown' ? undefined : nutritionValues(log),
-    nutritionStatus: log.nutrition_status as 'complete' | 'partial' | 'unknown',
-    cost: costForLog(log).cost,
-    costIsEstimated: costForLog(log).estimated,
-  }));
+  const buildFoodLog = (dayLogs: FoodLogRow[]) => groupFoodLogRows(dayLogs).map((group, index) => {
+    const log = group[0];
+    const statuses = group.map((entry) => entry.nutrition_status);
+    const nutritionStatus: NonNullable<FoodLogEntry['nutritionStatus']> = statuses.every((status) => status === 'complete')
+      ? 'complete'
+      : statuses.every((status) => status === 'unknown') ? 'unknown' : 'partial';
+    const totalServings = group.every((entry) => entry.servings !== null)
+      ? group.reduce((total, entry) => total + Number(entry.servings), 0)
+      : null;
+    const costs = group.map(costForLog);
+    const cost = costs.every((value) => value.cost !== null)
+      ? costs.reduce((total, value) => total + Number(value.cost), 0)
+      : null;
+    const oldest = group.at(-1)!;
+    const formatTime = (entry: FoodLogRow) => new Date(entry.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const time = oldest.occurred_at === log.occurred_at ? formatTime(log) : `${formatTime(oldest)}–${formatTime(log)}`;
+    const summedNutrition = Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, sum(group, field)])) as NutritionValues;
+    const serving = group.length === 1
+      ? log.portion_label ?? (log.servings === null ? 'Portion not specified' : formatServings(Number(log.servings)))
+      : `${totalServings === null ? 'Combined portions' : formatServings(totalServings)} · ${group.length} events`;
+    const qualifier = nutritionStatus === 'unknown' ? ' · nutrition unknown' : nutritionStatus === 'partial' ? ' · partial nutrition' : group.some((entry) => entry.nutrition_is_estimated) ? ' · estimated' : '';
+    return {
+      id: log.id,
+      eventIds: group.map((entry) => entry.id),
+      emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
+      label: log.label,
+      serving: `${serving}${qualifier}`,
+      calories: group.every((entry) => entry.kcal === null) ? 'Calories unknown' : `${Math.round(sum(group, 'kcal'))} cal`,
+      protein: group.every((entry) => entry.protein_g === null) ? 'Protein unknown' : `${Math.round(sum(group, 'protein_g'))} g protein`,
+      time,
+      color: palette[index % palette.length],
+      nutrition: nutritionStatus === 'unknown' ? undefined : summedNutrition,
+      nutritionStatus,
+      cost,
+      costIsEstimated: costs.some((value) => value.estimated),
+    };
+  });
   const nutrients = buildNutrients(todayLogs);
   const foodLog = buildFoodLog(todayLogs);
-  const nutritionIncompleteEntries = todayLogs.filter((log) => log.nutrition_status !== 'complete').length;
+  const nutritionIncompleteEntries = foodLog.filter((entry) => entry.nutritionStatus !== 'complete').length;
 
   const byDay = new Map<string, FoodLogRow[]>();
   for (const log of logs) {
     const key = dateKeyInZone(new Date(log.occurred_at), settings.time_zone);
     byDay.set(key, [...(byDay.get(key) ?? []), log]);
   }
-  const foodLogByDate = Object.fromEntries([...byDay.entries()].map(([date, dayLogs]) => [date, {
-    nutrients: buildNutrients(dayLogs),
-    foodLog: buildFoodLog(dayLogs),
-    nutritionIncompleteEntries: dayLogs.filter((log) => log.nutrition_status !== 'complete').length,
-  }]));
+  const foodLogByDate = Object.fromEntries([...byDay.entries()].map(([date, dayLogs]) => {
+    const dayFoodLog = buildFoodLog(dayLogs);
+    return [date, {
+      nutrients: buildNutrients(dayLogs),
+      foodLog: dayFoodLog,
+      nutritionIncompleteEntries: dayFoodLog.filter((entry) => entry.nutritionStatus !== 'complete').length,
+    }];
+  }));
   // History carries the numbers the page renders rather than pre-formatted strings,
   // so the heat strip and stat strip derive from real rows instead of re-parsing text.
   const history = [...byDay.entries()].slice(0, 90).map(([date, dayLogs]) => {

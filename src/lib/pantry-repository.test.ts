@@ -1,5 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { formatRecipeQuantity, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+
+describe('food log display groups', () => {
+  const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
+
+  it('groups the same product inside one hour while retaining each event', () => {
+    const groups = groupFoodLogRows([
+      log('orange-2', 'orange-juice', '2026-09-03T02:52:00Z'),
+      log('orange-1', 'orange-juice', '2026-09-03T02:10:00Z'),
+      log('toast', 'toast', '2026-09-03T02:30:00Z'),
+    ] as unknown as Parameters<typeof groupFoodLogRows>[0]);
+
+    expect(groups.map((group) => group.map((entry) => entry.id))).toEqual([
+      ['orange-2', 'orange-1'],
+      ['toast'],
+    ]);
+  });
+
+  it('does not merge breakfast with dinner or combine unlinked manual entries', () => {
+    const groups = groupFoodLogRows([
+      log('dinner', 'orange-juice', '2026-09-03T23:00:00Z'),
+      log('breakfast', 'orange-juice', '2026-09-03T12:00:00Z'),
+      log('manual-2', null, '2026-09-03T18:20:00Z'),
+      log('manual-1', null, '2026-09-03T18:00:00Z'),
+    ] as unknown as Parameters<typeof groupFoodLogRows>[0]);
+
+    expect(groups.map((group) => group.map((entry) => entry.id))).toEqual([
+      ['dinner'],
+      ['manual-2'],
+      ['manual-1'],
+      ['breakfast'],
+    ]);
+  });
+});
 
 describe('base food names', () => {
   it('keeps the singular name when no explicit plural is stored', () => {
