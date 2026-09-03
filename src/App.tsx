@@ -1118,6 +1118,8 @@ const COMPARE_ROWS: Array<{ label: string; higherIsBetter: boolean; read: (produ
 const costPer100Cal = (cost: number | null, calories: number) =>
   cost === null || !calories ? '—' : `$${(cost / calories * 100).toFixed(2)}`;
 
+const formatServingCount = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
 function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify }) {
   const { products } = usePantryData();
   const [query, setQuery] = useState('');
@@ -1134,7 +1136,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
     sort === 'name'
       ? (left.brand || 'Unbranded').localeCompare(right.brand || 'Unbranded') || left.name.localeCompare(right.name)
       : sort === 'used'
-        ? right.useCount - left.useCount
+        ? right.servingsConsumed - left.servingsConsumed
         : (Date.parse(right.lastUsedAt) || 0) - (Date.parse(left.lastUsedAt) || 0)
   );
   const compared = comparison.map((id) => products.find((product) => product.id === id)).filter(Boolean) as typeof products;
@@ -1158,7 +1160,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
       <div className="toolbar product-toolbar">
         <label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, foods, brands, barcode, or cost…" /></label>
         <select aria-label="Filter by brand" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option>All brands</option>{brands.map((brand) => <option key={brand}>{brand}</option>)}</select>
-        <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="used">Most used</option><option value="recent">Recently used</option><option value="name">Brand A–Z</option></select>
+        <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="used">Most consumed</option><option value="recent">Recently consumed</option><option value="name">Brand A–Z</option></select>
         <button className="button secondary" onClick={() => onOpen('scan')}><ScanLine />Scan</button>
       </div>
       {compared.length > 0 && (
@@ -1186,7 +1188,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
         <div className="product-table">
           <div className="product-table-head">
             <span className="product-cell-name">Product</span>
-            <span>Cost</span><span>Cal</span><span>Protein</span><span>Sodium</span><span>Used</span>
+            <span>Cost</span><span>Cal</span><span>Protein</span><span>Sodium</span><span>Consumed</span>
             <span className="product-cell-actions" />
           </div>
           {sorted.map((product) => (
@@ -1199,7 +1201,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
               <span>{Math.round(product.nutrition.Calories).toLocaleString()}</span>
               <span>{Math.round(product.nutrition.Protein)} g</span>
               <span>{Math.round(product.nutrition.Sodium).toLocaleString()}</span>
-              <span>{product.useCount}×</span>
+              <span>{formatServingCount(product.servingsConsumed)}</span>
               <div className="product-cell-actions">
                 <button className={cx('button secondary compact', comparison.includes(product.id) && 'selected')} onClick={() => toggleCompare(product.id)}>{comparison.includes(product.id) ? 'Selected' : 'Compare'}</button>
                 <button className="button secondary compact" onClick={() => setViewing(product)}>Open</button>
@@ -1218,7 +1220,7 @@ function ProductsPage({ onOpen, notify }: { onOpen: (kind: PanelKind, recipe?: R
             <div className="panel-body">
               <div className="product-headline-stats">
                 <div><span>Estimated cost</span><strong className="spend">{viewing.estimatedCost === null ? 'Not estimated' : `$${viewing.estimatedCost.toFixed(2)}`}</strong>{viewing.costSource && <small>{viewing.costSource}{viewing.costAsOf ? ` · as of ${new Date(`${viewing.costAsOf}T00:00:00`).toLocaleDateString()}` : ''}</small>}</div>
-                <div><span>Times used</span><strong>{viewing.useCount}×</strong>{viewing.lastUsedAt && <small>last {new Date(viewing.lastUsedAt).toLocaleDateString()}</small>}</div>
+                <div><span>Servings consumed</span><strong>{formatServingCount(viewing.servingsConsumed)}</strong>{viewing.lastUsedAt && <small>last {new Date(viewing.lastUsedAt).toLocaleDateString()}</small>}</div>
                 <div><span>Cost per 100 cal</span><strong className="spend">{costPer100Cal(viewing.estimatedCost, viewing.nutrition.Calories)}</strong><small>what the energy costs</small></div>
               </div>
               <div className="nutrition-detail">{Object.entries(viewing.nutrition).map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()} {label === 'Calories' ? 'cal' : label === 'Sodium' ? 'mg' : 'g'}</strong></div>)}</div>

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(19);
+select plan(20);
 
 select ok(
   not public.is_app_owner(),
@@ -58,6 +58,11 @@ insert into inventory_lots (
   initial_qty,
   remaining_qty,
   total_cost,
+  out_of_pocket_cost,
+  paid_by,
+  cost_source,
+  price_as_of,
+  acquisition_type,
   location,
   acquired_at
 ) values (
@@ -66,8 +71,21 @@ insert into inventory_lots (
   453.59237,
   0,
   4.99,
+  4.99,
+  'Test owner',
+  'Test receipt',
+  '2026-08-29',
+  'grocery',
   'pantry',
   '2026-08-29 12:00:00-04'
+);
+
+select ok(
+  (select estimated_cost = 4.99
+      and cost_source like 'Latest recorded purchase (used as current estimate)%'
+      and cost_as_of = '2026-08-29'
+   from products where id = '20000000-0000-0000-0000-000000000001'),
+  'A first priced lot fills a missing normalized product estimate with provenance'
 );
 
 select is(

@@ -9,6 +9,48 @@ type FoodLogRow = Database['public']['Tables']['food_logs']['Row'];
 type LotRow = Database['public']['Tables']['inventory_lots']['Row'];
 type ProductRow = Database['public']['Tables']['products']['Row'];
 
+type ProductConsumptionLog = Pick<FoodLogRow, 'product' | 'servings' | 'occurred_at'>;
+type ProductCostLot = Pick<LotRow, 'product' | 'initial_qty' | 'total_cost' | 'cost_source' | 'price_as_of' | 'acquired_at' | 'created_at'>;
+type ProductPrice = { estimatedCost: number | null; costSource: string; costAsOf: string };
+
+export function summarizeProductConsumption(logs: ProductConsumptionLog[]) {
+  const summaries = new Map<string, { servingsConsumed: number; lastUsedAt: string }>();
+  for (const log of logs) {
+    if (!log.product) continue;
+    const current = summaries.get(log.product) ?? { servingsConsumed: 0, lastUsedAt: '' };
+    const occurredAt = Date.parse(log.occurred_at);
+    const lastUsedAt = Date.parse(current.lastUsedAt);
+    summaries.set(log.product, {
+      servingsConsumed: current.servingsConsumed + Number(log.servings ?? 1),
+      lastUsedAt: !current.lastUsedAt || (Number.isFinite(occurredAt) && occurredAt > lastUsedAt) ? log.occurred_at : current.lastUsedAt,
+    });
+  }
+  return summaries;
+}
+
+export function resolveProductPrice(product: Pick<ProductRow, 'id' | 'package_qty_base' | 'estimated_cost' | 'cost_source' | 'cost_as_of'>, lots: ProductCostLot[]): ProductPrice {
+  if (product.estimated_cost !== null) {
+    return {
+      estimatedCost: Number(product.estimated_cost),
+      costSource: product.cost_source ?? '',
+      costAsOf: product.cost_as_of ?? '',
+    };
+  }
+  const latest = lots
+    .filter((lot) => lot.product === product.id && lot.total_cost !== null && Number(lot.initial_qty) > 0)
+    .sort((left, right) => {
+      const leftDate = left.price_as_of ?? left.acquired_at ?? left.created_at;
+      const rightDate = right.price_as_of ?? right.acquired_at ?? right.created_at;
+      return Date.parse(rightDate) - Date.parse(leftDate);
+    })[0];
+  if (!latest) return { estimatedCost: null, costSource: '', costAsOf: '' };
+  return {
+    estimatedCost: Number((Number(latest.total_cost) * Number(product.package_qty_base) / Number(latest.initial_qty)).toFixed(2)),
+    costSource: ['Latest recorded purchase', latest.cost_source].filter(Boolean).join(' · '),
+    costAsOf: latest.price_as_of ?? latest.acquired_at.slice(0, 10),
+  };
+}
+
 type CostValue = { cost: number | null; estimated: boolean; source: string };
 const INVENTORY_QUANTITY_EPSILON = 0.000001;
 
@@ -138,7 +180,7 @@ const dateKeyInZone = (date: Date, timeZone: string) => {
 export async function loadPantryData(client: Client): Promise<PantryData> {
   const [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, plannedConsumptionsResult, logsResult, settingsResult, eventsResult, eventCostsResult] = await Promise.all([
     client.from('base_foods').select('*'),
-    client.from('products').select('*'),
+    client.from('products').select('*').is('archived_at', null),
     client.from('inventory_lots').select('*'),
     client.from('measure_conversions').select('*'),
     client.from('grocery_categories').select('*').order('sort_order'),
@@ -161,6 +203,11 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
   const foods = new Map((foodsResult.data ?? []).map((food) => [food.id, food]));
   const products = new Map((productsResult.data ?? []).map((product) => [product.id, product]));
+  const productConsumption = summarizeProductConsumption(logsResult.data ?? []);
+  const lotsByProduct = new Map<string, ProductCostLot[]>();
+  for (const lot of lotsResult.data ?? []) {
+    if (lot.product) lotsByProduct.set(lot.product, [...(lotsByProduct.get(lot.product) ?? []), lot]);
+  }
   const units = new Map((unitsResult.data ?? []).map((unit) => [unit.id, unit]));
   const categoryOrder = new Map((categoriesResult.data ?? []).map((category, index) => [category.category, index]));
   const orderCategories = <T,>(entries: Array<[string, T]>) => entries.sort(([left], [right]) =>
@@ -621,22 +668,24 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     foodLogByDate,
     history,
     foods: [...foods.values()].map((food) => ({ id: food.id, name: food.name, emoji: food.emoji ?? '🍽️', measureStyle: food.measure_style })),
-    products: [...products.values()].map((product) => ({
-      id: product.id,
-      foodId: product.food,
-      foodName: foods.get(product.food)?.name ?? 'Food',
-      name: product.name,
-      label: [product.brand, product.name].filter(Boolean).join(' · '),
-      brand: product.brand ?? '',
-      barcode: product.barcode ?? '',
-      estimatedCost: product.estimated_cost === null ? null : Number(product.estimated_cost),
-      costSource: product.cost_source ?? '',
-      costAsOf: product.cost_as_of ?? '',
-      emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
-      nutrition: nutritionValues(product),
-      useCount: product.use_count,
-      lastUsedAt: product.last_used_at ?? '',
-    })),
+    products: [...products.values()].map((product) => {
+      const usage = productConsumption.get(product.id);
+      const price = resolveProductPrice(product, lotsByProduct.get(product.id) ?? []);
+      return {
+        id: product.id,
+        foodId: product.food,
+        foodName: foods.get(product.food)?.name ?? 'Food',
+        name: product.name,
+        label: [product.brand, product.name].filter(Boolean).join(' · '),
+        brand: product.brand ?? '',
+        barcode: product.barcode ?? '',
+        ...price,
+        emoji: product.emoji ?? foods.get(product.food)?.emoji ?? '🍽️',
+        nutrition: nutritionValues(product),
+        servingsConsumed: usage?.servingsConsumed ?? 0,
+        lastUsedAt: usage?.lastUsedAt ?? '',
+      };
+    }),
     units: [...units.values()].map((unit) => ({ id: unit.id, label: `${unit.full_name} (${unit.short_name})`, shortName: unit.short_name, measureStyle: unit.measure_style })),
     categories: (categoriesResult.data ?? []).map((category) => category.category),
     locations: (locationsResult.data ?? []).map((location) => location.location),

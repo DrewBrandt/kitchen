@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(20);
+select plan(21);
 
 select is(
   (select count(*) from history_quality_issues),
@@ -37,6 +37,12 @@ select is(
 select ok(
   (select archived_at is not null and merged_into = 'cb5bc9b0-d129-5038-8618-db0827971aa8' from products where id = 'ccb25d14-4406-442f-9e64-457db779d599'),
   'The duplicate Chicken Biscuit product is archived with a merge target'
+);
+
+select ok(
+  (select estimated_cost = 4.29 and cost_source is not null and cost_as_of is not null
+   from products where id = '4507778e-e63a-498e-a36c-cd2ef4e51d65'),
+  'The Fairlife chocolate protein shake has a sourced package-price estimate'
 );
 
 select is(
