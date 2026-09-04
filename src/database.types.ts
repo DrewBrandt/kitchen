@@ -1582,6 +1582,10 @@ export type Database = {
         Args: { p_food: string; p_unit: string }
         Returns: boolean
       }
+      bulk_import_inventory: {
+        Args: { p_entries: Json; p_location: string }
+        Returns: Json
+      }
       from_base_quantity: {
         Args: { p_base_amount: number; p_food: string; p_unit: string }
         Returns: number

@@ -485,6 +485,34 @@ describe('Pantry web UI', () => {
     expect(within(dialog).getByRole('button', { name: 'Enable camera' })).toBeEnabled();
   });
 
+  it('collects known package counts and unknown barcodes in the mobile bulk scanner', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue('2 packages added to inventory.');
+    render(<App onSaveAction={save} />);
+
+    const scanButtons = screen.getAllByRole('button', { name: 'Look up barcode' });
+    await user.click(scanButtons[scanButtons.length - 1]);
+    const dialog = screen.getByRole('dialog');
+    const barcode = within(dialog).getByLabelText('UPC / EAN');
+
+    await user.type(barcode, '036632032093');
+    await user.click(within(dialog).getByRole('button', { name: 'Add typed barcode' }));
+    await user.type(barcode, '036632032093');
+    await user.click(within(dialog).getByRole('button', { name: 'Add typed barcode' }));
+    expect(within(dialog).getByLabelText('Quantity of Oikos · Vanilla Greek yogurt')).toHaveValue(2);
+
+    await user.type(barcode, '999999999999');
+    await user.click(within(dialog).getByRole('button', { name: 'Add typed barcode' }));
+    expect((within(dialog).getByLabelText('Unknown barcode lookup list') as HTMLTextAreaElement).value).toContain('999999999999');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Add 2 packages' }));
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const [kind, form] = save.mock.calls[0] as [string, FormData];
+    expect(kind).toBe('bulk-import');
+    expect(JSON.parse(String(form.get('entries')))).toEqual([{ productId: 'preview-product-3', packages: 2, bestBy: null }]);
+    expect(within(dialog).getByLabelText('Unknown barcode lookup list')).toBeInTheDocument();
+  });
+
   it('offers undo on a reversible action and runs the compensating call', async () => {
     const user = userEvent.setup();
     const onVoidFoodLog = vi.fn().mockResolvedValue(undefined);

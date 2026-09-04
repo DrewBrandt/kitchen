@@ -374,7 +374,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
         </div>
       </main>
 
-      <MobileNav page={page} onNavigate={setPage} onScan={() => open('scan')} />
+      <MobileNav page={page} onNavigate={setPage} onScan={() => open('bulk-import')} />
       {panel && <ActionPanel state={panel} onClose={() => setPanel(null)} notify={notify} onSave={onSaveAction} onCookRecipe={onCookRecipe} onSavePrepFeedback={onSavePrepFeedback} onCookRecipes={onCookRecipes} onRecipeProgress={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} onConsumeInventoryLot={onConsumeInventoryLot} onSetInventoryLotQuantity={onSetInventoryLotQuantity} undo={reversals} />}
       {toast && <div className="toast" role="status"><Check /><span className="grow">{toast.message}</span>{toast.undo && <button className="toast-undo" onClick={runUndo}>Undo</button>}<button className="toast-dismiss" aria-label="Dismiss" onClick={dismissToast}><X /></button></div>}
     </div>
@@ -1252,6 +1252,7 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
   targets: { title: 'Targets & budget', save: 'Save targets' },
   export: { title: 'Export range', save: 'Download CSV' },
   scan: { title: 'Look up a barcode', save: 'Look up' },
+  'bulk-import': { title: 'Bulk inventory scan', subtitle: 'Scan everything first, then add all recognized products at once.', save: 'Add inventory' },
   profile: { title: 'Routine & food profile', save: 'Save profile' },
   calendar: { title: 'Mise Planner', subtitle: 'Schedule-aware grocery and preparation reminders.', save: 'Sync now' },
 };
@@ -1267,6 +1268,7 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepF
   if (state.kind === 'combined-meal') return <CombinedMealPanel onClose={onClose} notify={notify} onCook={onCookRecipes} />;
   if (state.kind === 'inventory-detail') return state.inventoryFood ? <InventoryLotsPanel food={state.inventoryFood} onClose={onClose} notify={notify} onConsume={onConsumeInventoryLot} onSetQuantity={onSetInventoryLotQuantity} undo={undo} /> : null;
   if (state.kind === 'consumption-detail') return state.consumptionEvent ? <ConsumptionDetailPanel entry={state.consumptionEvent} onClose={onClose} /> : null;
+  if (state.kind === 'bulk-import') return <BulkInventoryPanel onClose={onClose} notify={notify} onSave={onSave} />;
   const copy = PANEL_COPY[state.kind];
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1613,7 +1615,67 @@ function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity, u
   })}{!food.lotDetails?.length && <div className="empty-inline">No available lots.</div>}</div></aside></div>;
 }
 
-function BarcodeScanner() {
+type BulkScanRow = { barcode: string; product: ProductView; quantity: number; bestBy: string };
+
+function BulkInventoryPanel({ onClose, notify, onSave }: { onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string> }) {
+  const { locations, products } = usePantryData();
+  const [rows, setRows] = useState<BulkScanRow[]>([]);
+  const [unknown, setUnknown] = useState<string[]>([]);
+  const [defaultBestBy, setDefaultBestBy] = useState('');
+  const [location, setLocation] = useState(locations[0] ?? 'pantry');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const productByBarcode = useMemo(() => new Map(products.filter((product) => product.barcode).map((product) => [product.barcode, product])), [products]);
+
+  function addBarcode(raw: string) {
+    const barcode = raw.trim();
+    if (!barcode) return;
+    const product = productByBarcode.get(barcode);
+    if (!product) {
+      setUnknown((current) => current.includes(barcode) ? current : [...current, barcode]);
+      return;
+    }
+    setRows((current) => {
+      const existing = current.findIndex((row) => row.barcode === barcode && row.bestBy === defaultBestBy);
+      if (existing < 0) return [...current, { barcode, product, quantity: 1, bestBy: defaultBestBy }];
+      return current.map((row, index) => index === existing ? { ...row, quantity: row.quantity + 1 } : row);
+    });
+  }
+
+  const lookupText = `Please look up these pantry products by UPC/EAN and return the product name, brand, package size, and nutrition label for each:\n${unknown.map((barcode) => `- ${barcode}`).join('\n')}`;
+  async function copyUnknown() {
+    try {
+      await navigator.clipboard.writeText(lookupText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { setError('Could not copy automatically. Select the list and copy it manually.'); }
+  }
+  async function save() {
+    if (!rows.length) return;
+    if (!onSave) { setError('A live Supabase connection is required to add inventory.'); return; }
+    const form = new FormData();
+    form.set('location', location);
+    form.set('entries', JSON.stringify(rows.map((row) => ({ productId: row.product.id, packages: row.quantity, bestBy: row.bestBy || null }))));
+    setSaving(true);
+    setError('');
+    try {
+      const message = await onSave('bulk-import', form);
+      if (unknown.length) {
+        setRows([]);
+        notify(message);
+      } else {
+        onClose();
+        notify(message);
+      }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not import inventory.'); }
+    finally { setSaving(false); }
+  }
+
+  return <div className="panel-layer"><button className="panel-scrim" aria-label="Close bulk inventory scan" onClick={onClose} /><aside className="action-panel bulk-import-panel" role="dialog" aria-modal="true" aria-labelledby="panel-title"><PanelHeader title="Bulk inventory scan" subtitle="Each scan adds one package. Scan the same item again to increase its count." onClose={onClose} /><div className="panel-body bulk-import-body"><BarcodeScanner onDetected={addBarcode} actionLabel="Add typed barcode" /><div className="form-grid two bulk-defaults"><label className="field"><span>Best by for new scans</span><input type="date" value={defaultBestBy} onChange={(event) => setDefaultBestBy(event.target.value)} /></label><label className="field"><span>Store in</span><select value={location} onChange={(event) => setLocation(event.target.value)}>{locations.map((value) => <option key={value}>{value}</option>)}</select></label></div>{rows.length > 0 && <PanelSection title={`READY TO ADD · ${rows.reduce((sum, row) => sum + row.quantity, 0)} PACKAGES`}><div className="bulk-scan-list">{rows.map((row, index) => <div className="bulk-scan-row" key={`${row.barcode}-${index}`}><span className="row-emoji">{row.product.emoji}</span><div className="grow"><strong>{row.product.label}</strong><small>{row.barcode}</small></div><label><span>Qty</span><input aria-label={`Quantity of ${row.product.label}`} type="number" min="1" step="1" value={row.quantity} onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item))} /></label><label><span>Best by</span><input aria-label={`Best by for ${row.product.label}`} type="date" value={row.bestBy} onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bestBy: event.target.value } : item))} /></label><button className="icon-button" aria-label={`Remove ${row.product.label}`} onClick={() => setRows((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X /></button></div>)}</div></PanelSection>}{unknown.length > 0 && <PanelSection title={`NEEDS LOOKUP · ${unknown.length}`}><div className="unknown-scan-list"><p>These barcodes are not saved products yet. Copy this list into ChatGPT to identify them.</p><textarea readOnly value={lookupText} rows={Math.min(8, unknown.length + 3)} aria-label="Unknown barcode lookup list" /><button className="button secondary full" type="button" onClick={() => void copyUnknown()}><ClipboardList />{copied ? 'Copied' : 'Copy for ChatGPT'}</button></div></PanelSection>}{!rows.length && !unknown.length && <div className="empty-inline">Scanned products will collect here until you finish.</div>}{error && <div className="auth-error" role="alert">{error}</div>}</div><div className="panel-footer"><span className="panel-footer-spacer" /><button className="button primary" disabled={!rows.length || saving} onClick={() => void save()}>{saving ? 'Adding…' : `Add ${rows.reduce((sum, row) => sum + row.quantity, 0)} package${rows.reduce((sum, row) => sum + row.quantity, 0) === 1 ? '' : 's'}`}</button></div></aside></div>;
+}
+
+function BarcodeScanner({ onDetected, actionLabel }: { onDetected?: (barcode: string) => void; actionLabel?: string } = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -1664,6 +1726,7 @@ function BarcodeScanner() {
           setBarcode(found);
           setMessage(`Found ${found}`);
           setScanning(false);
+          onDetected?.(found);
         },
       );
       if (scanSessionRef.current !== session) { controls.stop(); return; }
@@ -1684,7 +1747,7 @@ function BarcodeScanner() {
       stop();
     }
   }
-  return <div className="scan-box"><div className={cx('scanner-frame', scanning && 'live')}><video ref={videoRef} muted playsInline /><ScanLine /><span role="status" aria-live="polite">{message}</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" onClick={() => scanning ? stop() : void start()}>{scanning ? 'Stop camera' : 'Enable camera'}</button><label className="field"><span>UPC / EAN</span><input name="barcode" inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Enter barcode" required /></label></div>;
+  return <div className="scan-box"><div className={cx('scanner-frame', scanning && 'live')}><video ref={videoRef} muted playsInline /><ScanLine /><span role="status" aria-live="polite">{message}</span><i /><i /><i /><i /></div><button className="button secondary full" type="button" onClick={() => scanning ? stop() : void start()}>{scanning ? 'Stop camera' : 'Enable camera'}</button><label className="field"><span>UPC / EAN</span><input name="barcode" inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Enter barcode" required={!onDetected} /></label>{onDetected && <button className="button secondary full" type="button" disabled={!barcode.trim()} onClick={() => { onDetected(barcode); setBarcode(''); setMessage('Ready for the next barcode.'); }}>{actionLabel ?? 'Add barcode'}</button>}</div>;
 }
 
 function RatingInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

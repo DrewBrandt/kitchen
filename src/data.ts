@@ -23,6 +23,7 @@ export type PanelKind =
   | 'targets'
   | 'export'
   | 'scan'
+  | 'bulk-import'
   | 'profile'
   | 'calendar'
   | 'recipe-detail'

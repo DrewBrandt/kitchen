@@ -119,6 +119,20 @@ async function saveRecipe(client: Client, form: FormData) {
 }
 
 export async function savePanelAction(client: Client, kind: PanelKind, form: FormData): Promise<string> {
+  if (kind === 'bulk-import') {
+    let entries: unknown;
+    try { entries = JSON.parse(text(form, 'entries')); }
+    catch { throw new Error('The scanned inventory list is invalid.'); }
+    if (!Array.isArray(entries) || !entries.length) throw new Error('Scan at least one saved product.');
+    const { error } = await client.rpc('bulk_import_inventory', {
+      p_entries: entries as Database['public']['Functions']['bulk_import_inventory']['Args']['p_entries'],
+      p_location: text(form, 'location') || 'pantry',
+    });
+    if (error) throw error;
+    const packages = entries.reduce((total, entry) => total + (typeof entry === 'object' && entry !== null ? Number((entry as { packages?: unknown }).packages) || 0 : 0), 0);
+    return `${packages} package${packages === 1 ? '' : 's'} added to inventory.`;
+  }
+
   if (kind === 'scan') {
     const barcode = text(form, 'barcode');
     const { data, error } = await client.from('products').select('name,brand').eq('barcode', barcode).maybeSingle();
