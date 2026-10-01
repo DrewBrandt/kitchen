@@ -129,16 +129,25 @@ async function saveRecipe(client: Client, form: FormData) {
     source_url: optionalText(form, 'source_url'),
     prompt_for_feedback: form.get('prompt_for_feedback') === 'on',
   };
-  const recipeResult = recipeId
-    ? await client.from('recipes').update(recipeValues).eq('id', recipeId).select('id').single()
-    : await client.from('recipes').insert(recipeValues).select('id').single();
-  const { data: recipe, error: recipeError } = recipeResult;
-  if (recipeError) throw recipeError;
-
   if (recipeId) {
-    const { error } = await client.from('recipe_ingredients').delete().eq('recipe', recipeId);
+    if (!ingredients.length) throw new Error('At least one ingredient is required.');
+    const { error } = await client.rpc('gpt_update_recipe', {
+      p_recipe: recipeId,
+      p_patch: {
+        name, emoji: recipeValues.emoji, servings: recipeValues.servings,
+        instructions: steps, sourceUrl: recipeValues.source_url,
+        promptForFeedback: recipeValues.prompt_for_feedback,
+        ingredients: ingredients.map((ingredient) => ({
+          foodId: ingredient.ingredient, quantity: ingredient.qty,
+          unit: ingredient.unit, sortOrder: ingredient.sort_order,
+        })),
+      },
+    });
     if (error) throw error;
+    return;
   }
+  const { data: recipe, error: recipeError } = await client.from('recipes').insert(recipeValues).select('id').single();
+  if (recipeError) throw recipeError;
 
   if (ingredients.length) {
     const { error } = await client.from('recipe_ingredients').insert(ingredients.map((ingredient) => ({ ...ingredient, recipe: recipe.id })));
