@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
 
 describe('food log display groups', () => {
   const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
@@ -86,5 +86,17 @@ describe('product page summaries', () => {
       costSource: 'Latest recorded purchase · User-provided purchase total',
       costAsOf: '2026-09-01',
     });
+  });
+});
+
+describe('estimated consumed product cost', () => {
+  const product = (price: number | null) => ({ estimated_cost: price, package_qty_base: 1000, serving_qty_base: 100, nutrition_basis_qty: 100, servings_per_package: null }) as Parameters<typeof estimatedProductPortionCost>[0];
+  it('allocates package price to eaten quantity rather than charging one package per serving', () => {
+    expect(estimatedProductPortionCost(product(10), 0.5)).toBe(0.5);
+    expect(estimatedProductPortionCost(product(10), 2)).toBe(2);
+  });
+  it('keeps unknown price different from a free package', () => {
+    expect(estimatedProductPortionCost(product(null), 1)).toBeNull();
+    expect(estimatedProductPortionCost(product(0), 1)).toBe(0);
   });
 });

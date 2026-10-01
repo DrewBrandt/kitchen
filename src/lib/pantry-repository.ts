@@ -124,7 +124,7 @@ const nutritionValues = (row: Partial<Record<(typeof nutrientFields)[NutrientNam
 
 const emptyNutrition = (): NutritionValues => ({ Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 });
 
-const productQuantityForServings = (product: ProductRow, servings: number) => {
+export const productQuantityForServings = (product: ProductRow, servings: number) => {
   const labelAligned = product.servings_per_package !== null
     && Number(product.servings_per_package) > 0
     && Number(product.package_qty_base) > 0
@@ -134,6 +134,11 @@ const productQuantityForServings = (product: ProductRow, servings: number) => {
   return labelAligned
     ? servings * Number(product.package_qty_base) / Number(product.servings_per_package)
     : servings * Number(product.serving_qty_base ?? 1);
+};
+
+export const estimatedProductPortionCost = (product: ProductRow, servings: number): number | null => {
+  const unitCost = productUnitCost(product);
+  return unitCost === null ? null : unitCost * productQuantityForServings(product, servings);
 };
 
 const nutritionForProductServings = (product: ProductRow, food: FoodRow | undefined, servings: number): NutritionValues => {
@@ -583,7 +588,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     }
     if (log.cost !== null) return { cost: Number(log.cost), estimated: log.cost_is_estimated, source: log.cost_source ?? 'Directly logged cost' };
     const product = log.product ? products.get(log.product) : undefined;
-    if (product?.estimated_cost !== null && product?.estimated_cost !== undefined) return { cost: Number(product.estimated_cost) * Number(log.servings ?? 1), estimated: true, source: product.cost_source ?? 'Product price estimate' };
+    if (product?.estimated_cost !== null && product?.estimated_cost !== undefined) return { cost: estimatedProductPortionCost(product, Number(log.servings ?? 1)), estimated: true, source: product.cost_source ?? 'Product price estimate' };
     const recipe = log.recipe ? recipeCosts.get(log.recipe) : undefined;
     if (recipe?.costPerServing !== null && recipe?.costPerServing !== undefined) return { cost: recipe.costPerServing * Number(log.servings ?? 1), estimated: true, source: 'Recipe estimate' };
     return { cost: null, estimated: true, source: 'Price unavailable' };
@@ -693,6 +698,10 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys(), ...awayByDay.keys()])].sort().map((dateKey) => ({
     dateKey,
     spend: spendByDay.get(dateKey) ?? 0,
+    spendMissingCost: (byDay.get(dateKey) ?? []).filter((log) => costForLog(log).cost === null).length,
+    costIsEstimated: (byDay.get(dateKey) ?? []).some((log) => costForLog(log).estimated),
+    wasteMissingCost: wasteEvents.filter((event) => dateKeyInZone(new Date(event.occurred_at), settings.time_zone) === dateKey && eventCostById.get(event.id) == null).length,
+    awayMissingCost: (eventsResult.data ?? []).filter((event) => event.reason === 'eaten' && lotsResult.data?.find((lot) => lot.id === event.lot)?.is_external && dateKeyInZone(new Date(event.occurred_at), settings.time_zone) === dateKey && eventCostById.get(event.id) == null).length,
     waste: wasteByDay.get(dateKey) ?? 0,
     away: awayByDay.get(dateKey) ?? 0,
   }));

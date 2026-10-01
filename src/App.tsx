@@ -1027,17 +1027,22 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
     date.setDate(cutoff.getDate() + index);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const row = spendHistory.find((entry) => entry.dateKey === key);
-    return { label: String(date.getDate()), spend: row?.spend ?? 0, waste: row?.waste ?? 0, away: row?.away ?? 0 };
+    return { label: String(date.getDate()), spend: row?.spend ?? 0, waste: row?.waste ?? 0, away: row?.away ?? 0, missing: row?.spendMissingCost ?? 0, wasteMissing: row?.wasteMissingCost ?? 0, awayMissing: row?.awayMissingCost ?? 0, estimated: row?.costIsEstimated ?? false };
   });
+  const missingCosts = spendDays.reduce((total, day) => total + day.missing, 0);
+  const wasteMissingCosts = spendDays.reduce((total, day) => total + day.wasteMissing, 0);
+  const awayMissingCosts = spendDays.reduce((total, day) => total + day.awayMissing, 0);
+  const estimatedCosts = spendDays.some((day) => day.estimated);
+  const lastSevenMissing = spendDays.slice(-7).some((day) => day.missing > 0);
   const spendTotal = spendDays.reduce((total, day) => total + day.spend, 0);
   const lastSeven = spendDays.slice(-7).reduce((total, day) => total + day.spend, 0);
   const caloriesTotal = recent.reduce((total, day) => total + day.values.Calories, 0);
-  const per1000Cal = caloriesTotal > 0 ? spendTotal / caloriesTotal * 1000 : null;
+  const per1000Cal = caloriesTotal > 0 && missingCosts === 0 && incompleteEntries === 0 ? spendTotal / caloriesTotal * 1000 : null;
   const spendMaximum = Math.max(dailyBudget, ...spendDays.map((day) => day.spend + day.waste), 0.01) * 1.1;
 
   const wasteTotal = spendDays.reduce((total, day) => total + day.waste, 0);
   const awayTotal = spendDays.reduce((total, day) => total + day.away, 0);
-  const wasteDays = spendDays.filter((day) => day.waste > 0).length;
+  const wasteDays = spendDays.filter((day) => day.waste > 0 || day.wasteMissing > 0).length;
   const worstDay = spendDays.reduce((worst, day) => day.waste > worst.waste ? day : worst, { label: '—', waste: 0, spend: 0, away: 0 });
   const wasteShare = spendTotal > 0 ? wasteTotal / spendTotal * 100 : 0;
   const causeMax = Math.max(...wasteCauses.map((cause) => cause.amount), 0.01);
@@ -1057,12 +1062,13 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
         </Card>
       ) : (
         <Card className="trend-card">
-          <SectionTitle title="Spend, day by day" action="Edit budget" onAction={() => onOpen('targets')} />
+          <SectionTitle title="Food cost, day by day" subtitle="Value of food eaten on each day, not purchase payments" action="Edit budget" onAction={() => onOpen('targets')} />
+          {missingCosts > 0 && <div className="notice"><Info /><span>{missingCosts} consumption entries have unknown prices. Amounts below are known subtotals, not complete food costs.</span></div>}
           <div className="spend-figures">
-            <div><span>Last 7 days</span><strong className="spend">{usd(lastSeven)}</strong></div>
+            <div><span>Last 7 days</span><strong className="spend">{usd(lastSeven, estimatedCosts)}{lastSevenMissing ? ' + unknown' : ''}</strong></div>
             <div><span>Weekly budget</span><strong>{usd(weekly)}</strong></div>
-            <div><span>{range}-day total</span><strong className="spend">{usd(spendTotal)}</strong></div>
-            <div><span>Per 1,000 cal</span><strong>{per1000Cal === null ? '—' : usd(per1000Cal)}</strong></div>
+            <div><span>{range}-day total</span><strong className="spend">{usd(spendTotal, estimatedCosts)}{missingCosts ? ' + unknown' : ''}</strong></div>
+            <div><span>Per 1,000 cal</span><strong>{per1000Cal === null ? '—' : usd(per1000Cal, estimatedCosts)}</strong></div>
           </div>
           <div className="trend-controls">
             <div className="chart-legend"><span><i style={{ background: 'var(--spend)' }} />Eaten</span><span><i style={{ background: 'var(--urgent)' }} />Wasted</span></div>
@@ -1083,12 +1089,13 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
 
       {view === 'spend' && (
         <Card>
-          <SectionTitle title="Lost to waste" action={`${wasteShare.toFixed(1)}% of ${range}-day spend`} />
+          {wasteMissingCosts > 0 && <div className="notice"><Info /><span>{wasteMissingCosts} discarded items have unknown prices. Waste amounts and categories show known subtotals only.</span></div>}
+          <SectionTitle title="Lost to waste" action={missingCosts || wasteMissingCosts ? 'Share unavailable: incomplete prices' : `${wasteShare.toFixed(1)}% of ${range}-day food cost`} />
           <div className="stat-strip four">
-            <div><span>{range} days</span><strong className="waste">{usd(wasteTotal)}</strong></div>
-            <div><span>Per week</span><strong className="waste">{usd(wasteTotal / (range / 7))}</strong></div>
+            <div><span>{range} days</span><strong className="waste">{usd(wasteTotal)}{wasteMissingCosts ? ' + unknown' : ''}</strong></div>
+            <div><span>Per week</span><strong className="waste">{usd(wasteTotal / (range / 7))}{wasteMissingCosts ? ' + unknown' : ''}</strong></div>
             <div><span>Days with waste</span><strong>{wasteDays} of {range}</strong></div>
-            <div><span>Worst day</span><strong className="waste">{usd(worstDay.waste)}</strong><small>day {worstDay.label}</small></div>
+            <div><span>Worst day</span><strong className="waste">{wasteMissingCosts ? 'Unknown' : usd(worstDay.waste)}</strong><small>{wasteMissingCosts ? 'Some prices missing' : `day ${worstDay.label}`}</small></div>
           </div>
           <div className="waste-causes">
             {wasteCauses.map((cause) => (
@@ -1098,7 +1105,7 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
               </div>
             ))}
           </div>
-          {wasteTotal === 0 && <div className="empty-inline">Nothing discarded in the last {range} days.</div>}
+          {wasteTotal === 0 && wasteMissingCosts === 0 && <div className="empty-inline">Nothing discarded in the last {range} days.</div>}
         </Card>
       )}
 
@@ -1107,11 +1114,11 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
           <SectionTitle title={view === 'spend' ? 'Averages' : 'Daily average vs target'} subtitle={view === 'spend' ? undefined : `Average per calendar day over ${range} days.`} />
           {view === 'spend' ? (
             <>
-              <div className="gap-row"><span>Per day</span><strong className="spend">{usd(spendTotal / range)}</strong></div>
-              <div className="gap-row"><span>Per week</span><strong className="spend">{usd(spendTotal / (range / 7))}</strong></div>
-              <div className="gap-row"><span>Groceries</span><strong className="spend">{usd(Math.max(0, spendTotal - awayTotal))}</strong></div>
-              <div className="gap-row"><span>Food away from home</span><strong className="spend">{usd(awayTotal)}</strong></div>
-              <div className="gap-row"><span>Wasted</span><strong className="waste">{usd(wasteTotal)}</strong></div>
+              <div className="gap-row"><span>Per day</span><strong className="spend">{usd(spendTotal / range, estimatedCosts)}{missingCosts ? ' + unknown' : ''}</strong></div>
+              <div className="gap-row"><span>Per week</span><strong className="spend">{usd(spendTotal / (range / 7), estimatedCosts)}{missingCosts ? ' + unknown' : ''}</strong></div>
+              <div className="gap-row"><span>Food from inventory</span><strong className="spend">{usd(Math.max(0, spendTotal - awayTotal), estimatedCosts)}{missingCosts || awayMissingCosts ? ' + unknown' : ''}</strong></div>
+              <div className="gap-row"><span>Food away from home</span><strong className="spend">{usd(awayTotal, estimatedCosts)}{awayMissingCosts ? ' + unknown' : ''}</strong></div>
+              <div className="gap-row"><span>Wasted</span><strong className="waste">{usd(wasteTotal)}{wasteMissingCosts ? ' + unknown' : ''}</strong></div>
             </>
           ) : averages.map((row) => <MacroRow key={row.label} label={row.label} value={`${Math.round(row.value).toLocaleString()} ${row.unit}`} target={`/ ${row.target.toLocaleString()} ${row.unit}`} pct={row.target ? row.value / row.target * 100 : 0} color={row.color} />)}
         </Card>
@@ -1478,14 +1485,15 @@ function PanelFields({ kind, values = {}, recipe, onValidityChange }: { kind: Ex
   </div>;
 
   if (kind === 'product') return <div className="form-grid">
+    <div className="notice"><Info /><span>Use the selected stock unit for package, serving, and nutrition quantities. For a 2 lb package with a 4 oz serving, choose ounces and enter 32, 4, and 4 if the nutrition label is per serving. Prices are per whole package; leave unknown prices blank.</span></div>
     <div className="form-grid two"><Field name="name" label="Food and product name" placeholder="Name" required /><Field name="brand" label="Brand" placeholder="Optional" /></div>
     <div className="form-grid two"><Field name="emoji" label="Emoji" placeholder="🍽️" /><Field name="barcode" label="Barcode" placeholder="Optional UPC/EAN" /></div>
     <div className="form-grid two"><SelectField name="measure_style" label="Stock style" options={['discrete', 'weight', 'volume'].map((value) => ({ value, label: value }))} required /><SelectField name="unit" label="Stock unit" defaultValue={defaultUnit} options={units.map((unit) => ({ value: unit.id, label: unit.label }))} required /></div>
-    <div className="form-grid two"><Field name="package_qty_base" label="Package quantity" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="serving_qty_base" label="Serving quantity" type="number" defaultValue="1" min="0.001" step="any" /></div>
+    <div className="form-grid two"><Field name="package_qty_base" label="Quantity in one package (stock unit)" type="number" defaultValue="1" min="0.001" step="any" required /><Field name="serving_qty_base" label="Quantity in one serving (stock unit)" type="number" defaultValue="1" min="0.001" step="any" /></div>
     <SelectField name="grocery_category" label="Grocery category" options={categories.map((category) => ({ value: category, label: category }))} />
     <Field name="ingredient_role" label="Ingredient role" placeholder="Main, supporting, staple…" />
     <label className="toggle-row"><input name="always_available" type="checkbox" /><span><strong>Always available</strong><small>Recipes can use this without tracked stock or grocery shortages.</small></span></label>
-    <Field name="nutrition_basis_qty" label="Nutrition basis quantity" type="number" defaultValue="100" min="0.001" step="any" required />
+    <Field name="nutrition_basis_qty" label="Nutrition values below are per (stock unit)" type="number" defaultValue="100" min="0.001" step="any" required />
     <div className="form-grid two"><Field name="kcal" label="Calories" type="number" min="0" defaultValue="0" /><Field name="protein_g" label="Protein (g)" type="number" min="0" defaultValue="0" /></div>
     <div className="form-grid two"><Field name="carbs_g" label="Carbs (g)" type="number" min="0" defaultValue="0" /><Field name="fat_g" label="Fat (g)" type="number" min="0" defaultValue="0" /></div>
     <div className="form-grid two"><Field name="fiber_g" label="Fiber (g)" type="number" min="0" defaultValue="0" /><Field name="sodium_mg" label="Sodium (mg)" type="number" min="0" defaultValue="0" /></div>

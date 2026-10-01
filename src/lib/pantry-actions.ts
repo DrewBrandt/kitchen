@@ -21,10 +21,36 @@ const requiredNumber = (form: FormData, key: string) => {
 const optionalNumber = (form: FormData, key: string) => text(form, key) ? number(form, key) : null;
 const list = (form: FormData, key: string) => text(form, key).split(',').map((item) => item.trim()).filter(Boolean);
 
+/** Form quantities share the selected unit; database quantities use the food's base unit. */
+export function normalizeProductQuantities(form: FormData, unit: { measure_style: string; base_to_this_ratio: number }) {
+  if (text(form, 'measure_style') !== unit.measure_style) throw new Error('Stock style must match the selected stock unit. Choose a weight unit for weight, volume for volume, or count for discrete foods.');
+  const ratio = Number(unit.base_to_this_ratio);
+  if (!Number.isFinite(ratio) || ratio <= 0) throw new Error('The selected unit has no valid conversion.');
+  const quantity = (key: string, label: string) => {
+    if (!text(form, key)) throw new Error(label + ' is required in the selected stock unit.');
+    const value = number(form, key);
+    if (value <= 0 || !Number.isFinite(value / ratio)) throw new Error(label + ' must be greater than zero.');
+    return value / ratio;
+  };
+  const result = {
+    packageQuantity: quantity('package_qty_base', 'Package quantity'),
+    servingQuantity: quantity('serving_qty_base', 'Serving quantity'),
+    nutritionBasis: quantity('nutrition_basis_qty', 'Nutrition basis quantity'),
+  };
+  for (const key of ['kcal', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg', 'estimated_cost']) {
+    if (text(form, key) && number(form, key) < 0) throw new Error(key.replaceAll('_', ' ') + ' cannot be negative.');
+  }
+  return result;
+}
+
 async function createProductAndFood(client: Client, form: FormData) {
   const name = text(form, 'name');
   const unit = text(form, 'unit');
   if (!name || !unit) throw new Error('Name and stock unit are required.');
+
+  const { data: selectedUnit, error: unitError } = await client.from('measure_conversions').select('measure_style,base_to_this_ratio').eq('id', unit).single();
+  if (unitError) throw unitError;
+  const quantities = normalizeProductQuantities(form, selectedUnit);
 
   const { data: food, error: foodError } = await client.from('base_foods').insert({
     name,
@@ -35,7 +61,7 @@ async function createProductAndFood(client: Client, form: FormData) {
     grocery_category: optionalText(form, 'grocery_category'),
     ingredient_role: optionalText(form, 'ingredient_role'),
     always_available: form.get('always_available') === 'on',
-    nutrition_basis_qty: number(form, 'nutrition_basis_qty', 100),
+    nutrition_basis_qty: quantities.nutritionBasis,
     kcal: number(form, 'kcal', 0),
     protein_g: number(form, 'protein_g', 0),
     carbs_g: number(form, 'carbs_g', 0),
@@ -51,10 +77,10 @@ async function createProductAndFood(client: Client, form: FormData) {
     name,
     brand: optionalText(form, 'brand'),
     barcode: optionalText(form, 'barcode'),
-    package_qty_base: number(form, 'package_qty_base', 1),
+    package_qty_base: quantities.packageQuantity,
     package_unit: unit,
-    serving_qty_base: number(form, 'serving_qty_base', 1),
-    nutrition_basis_qty: number(form, 'nutrition_basis_qty', 100),
+    serving_qty_base: quantities.servingQuantity,
+    nutrition_basis_qty: quantities.nutritionBasis,
     kcal: number(form, 'kcal', 0),
     protein_g: number(form, 'protein_g', 0),
     carbs_g: number(form, 'carbs_g', 0),

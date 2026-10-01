@@ -175,7 +175,7 @@ export interface PantryData {
   };
   preparedLots: Array<{ id: string; prepId?: string; mealPlanId?: string; emoji: string; name: string; location: string; remaining: string; due: string; progress: number; batchCost: number | null; servingsTotal: number; servingsLeft: number; costPerServing: number | null; valueRemaining: number | null; costIsEstimated: boolean }>;
   preparationHistory: Array<{ id: string; recipeId: string | null; emoji: string; name: string; preparedAt: string; dateKey: string; servingsMade: number; servingsRemaining: number; location: string }>;
-  spendHistory: Array<{ dateKey: string; spend: number; waste: number; away: number }>;
+  spendHistory: Array<{ dateKey: string; spend: number; waste: number; away: number; spendMissingCost?: number; wasteMissingCost?: number; awayMissingCost?: number; costIsEstimated?: boolean }>;
   wasteCauses: Array<{ label: string; note: string; amount: number }>;
   proteinTrend: Array<{ date: string; value: number }>;
   nutrientDrivers: Record<'Protein' | 'Calories' | 'Sodium', Array<{ label: string; pct: number }>>;
