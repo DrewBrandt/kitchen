@@ -6,6 +6,7 @@
 - Start every implementation task in its own Git worktree on a dedicated `codex/` branch. Do not implement directly on `main`.
 - Preserve unrelated user or agent changes. Do not copy uncommitted work from another worktree unless its owner explicitly asks you to.
 - New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `npm ci` at the repository root. Use the lockfile; do not copy `node_modules` or build output from another worktree.
+- When validating a feature worktree without environment files, also build with nonempty `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` placeholders. Otherwise Vite can remove the authenticated application as unreachable, leaving its bundle unverified. Use `https://example.supabase.co` and `build-validation-placeholder` for this build-only check; never deploy that output.
 - If the sandbox blocks dependency network access, rerun only the standard locked restore command with the required network approval. Do not replace the locked restore with copied dependencies or an unpinned install.
 - Supabase CLI commands write telemetry state under `C:\Users\<user>\.supabase` even for read-only help and validation commands. In a restricted workspace, use narrowly scoped approval for the exact Supabase command; do not redirect or copy that user-level state into the repository.
 - New worktrees do not inherit the ignored Supabase project link. Before a dry run,
