@@ -5,7 +5,7 @@ import { usePantryData, type NutrientName, type NutritionValues, type PlannedMea
 import { usd } from './lib/cost';
 import { formatPreparedAt, formatAmount, formatNutritionAmount, formatServings } from './lib/format';
 import { nutritionForServings } from './lib/nutrition';
-import { runRetryableMutation } from './lib/mutation-feedback';
+import { pendingMutationPayload, runRetryableMutation } from './lib/mutation-feedback';
 
 type SourceType = 'recipe' | 'pantry' | 'leftover';
 type Notify = (message: string) => void;
@@ -162,6 +162,16 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
   const selectedProduct = type === 'pantry' ? products.find((product) => product.id === selectedId) : undefined;
   const selectedRecipe = type === 'recipe' ? recipes.find((recipe) => recipe.id === selectedId) : undefined;
   const amount = Math.max(0, Number(servings) || 0);
+  const selectionKey = JSON.stringify({ type, selectedId, stockChoice, amount });
+  const [pendingPlan, setPendingPlan] = useState<{ key: string; payload?: [string, FormDataEntryValue][] }>();
+  useEffect(() => {
+    let active = true;
+    void pendingMutationPayload<[string, FormDataEntryValue][]>('scratchpad_plan', { type, selectedId, stockChoice, amount })
+      .then((payload) => { if (active) setPendingPlan({ key: selectionKey, payload }); })
+      .catch(() => { if (active) setPendingPlan({ key: selectionKey }); });
+    return () => { active = false; };
+  }, [type, selectedId, stockChoice, amount, selectionKey]);
+  const pendingFields = pendingPlan?.key === selectionKey && pendingPlan.payload ? new Map(pendingPlan.payload) : undefined;
   const candidate = selectedProduct ? multiplyNutrition(selectedProduct.nutritionPerServing, amount) : selectedRecipe ? multiplyNutrition(recipePerServing(selectedRecipe), amount) : EMPTY_NUTRITION;
   const current = Object.fromEntries((Object.keys(EMPTY_NUTRITION) as NutrientName[]).map((label) => [label, foodLog.reduce((sum, entry) => sum + Number(entry.nutrition?.[label] ?? 0), 0)])) as NutritionValues;
   const baseline = Object.fromEntries((Object.keys(current) as NutrientName[]).map((label) => [label, current[label] + todayProjection[label]])) as NutritionValues;
@@ -190,9 +200,14 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
         attempt.set('request_id', requestId);
         return onPlan(attempt);
       }, { type, selectedId, stockChoice, amount });
+      setPendingPlan((current) => current?.key === selectionKey ? { key: selectionKey } : current);
       notify(message); setOpen(false);
     }
-    catch (error) { notify(error instanceof Error ? error.message : 'Could not add this to today.'); }
+    catch (error) {
+      const payload = await pendingMutationPayload<[string, FormDataEntryValue][]>('scratchpad_plan', { type, selectedId, stockChoice, amount }).catch(() => undefined);
+      setPendingPlan((current) => current?.key === selectionKey ? { key: selectionKey, payload } : current);
+      notify(error instanceof Error ? error.message : 'Could not add this to today.');
+    }
     finally { setSaving(''); }
   }
   async function logNow() {
@@ -222,7 +237,8 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
             const over = (label === 'Calories' || label === 'Sodium') && after > targets[label];
             return <div className={over ? 'over' : ''} key={label}><strong>{label}</strong><span>{formatNutritionAmount(baseline[label], label)}</span><span>+{formatNutritionAmount(candidate[label], label)}</span><span><b>{formatNutritionAmount(after, label)}</b> / {formatNutritionAmount(targets[label], label)} {unit}</span><i style={{ width: `${Math.min(100, after / Math.max(1, targets[label]) * 100)}%` }} /></div>;
           })}</div>
-          <div className="sandbox-actions"><button className="button secondary" disabled={!exactLot || !onConsumeLot || saving !== '' || exactLot.remainingServings + 0.0001 < amount} onClick={() => void logNow()} title={!exactLot ? 'Choose one exact lot to log now' : undefined}>{saving === 'log' ? 'Logging…' : 'Log eaten now'}</button><button className="button primary" disabled={!onPlan || saving !== ''} onClick={() => void plan()}><CalendarDays />{saving === 'plan' ? 'Adding…' : 'Add to today'}</button></div>
+          {pendingFields && <small role="status">Pending: {String(pendingFields.get('plan_date'))} · {String(pendingFields.get('daypart'))}</small>}
+          <div className="sandbox-actions"><button className="button secondary" disabled={!exactLot || !onConsumeLot || saving !== '' || exactLot.remainingServings + 0.0001 < amount} onClick={() => void logNow()} title={!exactLot ? 'Choose one exact lot to log now' : undefined}>{saving === 'log' ? 'Logging…' : 'Log eaten now'}</button><button className="button primary" disabled={!onPlan || saving !== '' || pendingPlan?.key !== selectionKey} onClick={() => void plan()}><CalendarDays />{saving === 'plan' ? (pendingFields ? 'Retrying…' : 'Adding…') : pendingFields ? 'Retry addition' : 'Add to today'}</button></div>
           {selectedProduct && !exactLot && <small className="sandbox-action-hint">Choose an exact lot above to log immediately, or leave it automatic and add it to today’s plan.</small>}
         </>}
       </div>

@@ -30,7 +30,8 @@ it('retries scratchpad append after a lost response and remount with the origina
   const first = render(app());
   await choose();
   await user.click(screen.getByRole('button', { name: 'Add to today' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to today' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Retry addition' })).toBeEnabled());
+  expect(screen.getByText(/^Pending:/)).toHaveTextContent('Pending: 2026-10-01 · dinner');
   expect(rpc).toHaveBeenCalledTimes(1);
   expect(committed.size).toBe(1);
   expect(rpc.mock.calls[0][1].p_request_id).toMatch(/^[0-9a-f-]{36}$/);
@@ -40,8 +41,31 @@ it('retries scratchpad append after a lost response and remount with the origina
   day.mockReturnValue('2026-10-02'); hour.mockReturnValue(23);
   render(app());
   await choose();
-  await user.click(screen.getByRole('button', { name: 'Add to today' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to today' })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Retry addition' })).toBeEnabled());
+  expect(screen.getByText(/^Pending:/)).toHaveTextContent('Pending: 2026-10-01 · dinner');
+  expect(screen.queryByRole('button', { name: 'Add to today' })).not.toBeInTheDocument();
+
+  // Different amount, lot, or source represents a new addition. Returning to
+  // the pending selection restores its original visible date and retry action.
+  async function expectNew() {
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add to today' })).toBeEnabled());
+    expect(screen.queryByText(/^Pending:/)).not.toBeInTheDocument();
+  }
+  async function expectRetry() {
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry addition' })).toBeEnabled());
+    expect(screen.getByText(/^Pending:/)).toHaveTextContent('Pending: 2026-10-01 · dinner');
+  }
+  await user.click(screen.getByRole('button', { name: 'Increase amount' })); await expectNew();
+  await user.click(screen.getByRole('button', { name: 'Decrease amount' })); await expectRetry();
+  await user.click(screen.getByRole('radio', { name: /pantry.*9.3 servings/ })); await expectNew();
+  await user.click(screen.getByRole('radio', { name: /Choose automatically/ })); await expectRetry();
+  await user.click(screen.getByRole('tab', { name: /Recipe/ }));
+  await user.click(screen.getByRole('option', { name: /Simple Pancakes/ })); await expectNew();
+  await user.click(screen.getByRole('tab', { name: /Pantry item/ }));
+  await user.click(screen.getByRole('option', { name: /Bailey's/ })); await expectRetry();
+  expect(rpc).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Retry addition' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry addition' })).not.toBeInTheDocument());
   expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
   expect(committed.size).toBe(1);
 
