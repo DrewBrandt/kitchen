@@ -1529,6 +1529,9 @@ export type Database = {
       }
     }
     Functions: {
+      owner_create_recipe: { Args: { p_request_id: string; p_payload: Json }; Returns: Json }
+      owner_append_plan: { Args: { p_request_id: string; p_payload: Json }; Returns: Json }
+
       receive_shopping_item: { Args: { p_request_id: string; p_item: string; p_receipt: Json }; Returns: Json }
       undo_inventory_receipt: { Args: { p_request_id: string; p_lot: string }; Returns: Json }
       correct_consumed_quantity: {

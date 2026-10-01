@@ -151,16 +151,11 @@ async function saveRecipe(client: Client, form: FormData) {
     if (error) throw error;
     return;
   }
-  const { data: recipe, error: recipeError } = await client.from('recipes').insert(recipeValues).select('id').single();
-  if (recipeError) throw recipeError;
-
-  if (ingredients.length) {
-    const { error } = await client.from('recipe_ingredients').insert(ingredients.map((ingredient) => ({ ...ingredient, recipe: recipe.id })));
-    if (error) {
-      if (!recipeId) await client.from('recipes').delete().eq('id', recipe.id);
-      throw error;
-    }
-  }
+  const { error } = await client.rpc('owner_create_recipe', {
+    p_request_id: optionalText(form, 'request_id') ?? crypto.randomUUID(),
+    p_payload: { ...recipeValues, ingredients },
+  });
+  if (error) throw error;
 }
 
 export async function savePanelAction(client: Client, kind: PanelKind, form: FormData): Promise<string> {
@@ -316,81 +311,20 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
 
   if (kind === 'meal') {
     const intent = text(form, 'intent') || 'prepare';
-    const groupId = crypto.randomUUID();
     const plannedServings = number(form, 'planned_servings', 1);
     if (plannedServings <= 0) throw new Error('Planned servings must be positive.');
-    if (intent === 'leftover') {
-      const sourceGroupId = text(form, 'source_group_id');
-      if (!sourceGroupId) throw new Error('Choose the meal that will provide the leftovers.');
-      let { data: sourceRows, error: sourceError } = await client.from('meal_plans').select('*').eq('group_id', sourceGroupId);
-      if (sourceError) throw sourceError;
-      if (!sourceRows?.length) {
-        const fallback = await client.from('meal_plans').select('*').eq('id', sourceGroupId);
-        sourceRows = fallback.data;
-        sourceError = fallback.error;
-      }
-      if (sourceError) throw sourceError;
-      sourceRows = (sourceRows ?? []).filter((row) => row.intent === 'prepare' && row.recipe);
-      if (!sourceRows?.length) throw new Error('Choose a recipe preparation that will provide the leftovers.');
-      const { data: insertedPlans, error } = await client.from('meal_plans').insert(sourceRows.map((row) => ({
-        plan_date: text(form, 'plan_date'),
-        daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
-        meal: row.meal,
-        recipe: row.recipe,
-        scale_factor: row.scale_factor,
-        status: 'planned' as const,
-        name: row.name,
-        emoji: row.emoji,
-        group_id: groupId,
-        leftover_of_group_id: sourceGroupId,
-        source_meal_plan: row.id,
-        intent: 'leftover',
-        preparation_tasks: [],
+    const { error } = await client.rpc('owner_append_plan', {
+      p_request_id: optionalText(form, 'request_id') ?? crypto.randomUUID(),
+      p_payload: {
+        intent, plan_date: text(form, 'plan_date'), daypart: text(form, 'daypart'),
+        planned_servings: plannedServings, scale_factor: number(form, 'scale_factor', 1),
+        recipe: optionalText(form, 'recipe'), product: optionalText(form, 'product'),
+        inventory_lot: optionalText(form, 'inventory_lot'), source_group_id: optionalText(form, 'source_group_id'),
         note: optionalText(form, 'note'),
-      }))).select('id');
-      if (error) throw error;
-      const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).in('meal_plan', (insertedPlans ?? []).map((plan) => plan.id));
-      if (consumptionError) throw consumptionError;
-      return 'Leftovers added to the plan.';
-    }
-    if (intent === 'consume') {
-      const product = optionalText(form, 'product');
-      const inventoryLot = optionalText(form, 'inventory_lot');
-      if (Number(Boolean(product)) + Number(Boolean(inventoryLot)) !== 1) {
-        throw new Error('Choose a pantry product or one exact lot.');
-      }
-      const { data: insertedPlan, error } = await client.from('meal_plans').insert({
-        product,
-        inventory_lot: inventoryLot,
-        consume_from_inventory: true,
-        plan_date: text(form, 'plan_date'),
-        daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
-        scale_factor: 1,
-        status: 'planned',
-        group_id: groupId,
-        intent: 'consume',
-        note: optionalText(form, 'note'),
-      }).select('id').single();
-      if (error) throw error;
-      const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).eq('meal_plan', insertedPlan.id);
-      if (consumptionError) throw consumptionError;
-      return 'Pantry item added to the day.';
-    }
-    if (!text(form, 'recipe')) throw new Error('Choose a recipe for the meal.');
-    const { data: insertedPlan, error } = await client.from('meal_plans').insert({
-      recipe: text(form, 'recipe'),
-      plan_date: text(form, 'plan_date'),
-      daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
-      scale_factor: number(form, 'scale_factor', 1),
-      status: 'planned',
-      group_id: groupId,
-      intent: 'prepare',
-      note: optionalText(form, 'note'),
-    }).select('id').single();
+      },
+    });
     if (error) throw error;
-    const { error: consumptionError } = await client.from('planned_consumptions').update({ servings: plannedServings }).eq('meal_plan', insertedPlan.id);
-    if (consumptionError) throw consumptionError;
-    return 'Recipe added to the day.';
+    return intent === 'leftover' ? 'Leftovers added to the plan.' : intent === 'consume' ? 'Pantry item added to the day.' : 'Recipe added to the day.';
   }
 
   if (kind === 'targets') {

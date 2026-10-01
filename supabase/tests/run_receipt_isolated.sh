@@ -29,6 +29,21 @@ do $$ begin
 end $$;
 SQL
       ;;
+    202610010013_atomic_owner_creation.sql)
+      sql <<'SQL'
+create table isolated_test.gpt_before as
+select oid,pg_get_functiondef(oid) definition,proacl from pg_proc
+where oid in ('public.gpt_save_plan(text,date,jsonb)'::regprocedure,'public.gpt_save_recipe(jsonb)'::regprocedure,'public.is_app_owner()'::regprocedure);
+SQL
+      sql < "$migration" >/dev/null
+      sql <<'SQL'
+do $$ begin
+if exists(select 1 from isolated_test.gpt_before b join pg_proc p using(oid)
+where b.definition is distinct from pg_get_functiondef(p.oid) or b.proacl is distinct from p.proacl)
+then raise exception 'Existing GPT/owner function or ACL changed'; end if;
+end $$;
+SQL
+      ;;
     *) sql < "$migration" >/dev/null ;;
   esac
 done
@@ -36,5 +51,8 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/receipt_regressions.sql"
 docker exec -i "$name" sh < "$repo/supabase/tests/receipt_concurrency.sh"
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/recipe_edit.sql"
+
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/owner_creation.sql"
+docker exec -i "$name" sh < "$repo/supabase/tests/owner_creation_concurrency.sh"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'

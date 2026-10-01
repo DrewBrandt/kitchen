@@ -1345,7 +1345,7 @@ function ActionPanel({ onStageRecipes, onStartCooking, state, onClose, notify, o
       const form = new FormData(event.currentTarget);
       form.set('owner_time_zone', settings.timeZone);
       form.set('action_kind', state.kind);
-      const attempt = ['manual-log', 'log', 'lot'].includes(state.kind) ? await formAttempt(form) : form;
+      const attempt = ['manual-log', 'log', 'lot', 'recipe', 'meal'].includes(state.kind) ? await formAttempt(form) : form;
       const message = await onSave(state.kind, attempt);
       if (attempt.has('request_id')) completeFormAttempt(attempt);
       onClose();
