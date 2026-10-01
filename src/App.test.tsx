@@ -697,3 +697,19 @@ describe('Pantry web UI', () => {
     expect(screen.queryByText(/a logged day/)).not.toBeInTheDocument();
   });
 });
+
+describe('food cost uncertainty in Trends', () => {
+  it('labels partial totals and does not claim zero waste when prices are missing', async () => {
+    const user = userEvent.setup();
+    const date = new Date();
+    const dateKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    render(<PantryDataProvider data={{ ...previewPantryData, spendHistory: [{ dateKey, spend: 4.75, waste: 0, away: 0, spendMissingCost: 1, wasteMissingCost: 1, costIsEstimated: true }] }}><App /></PantryDataProvider>);
+    await user.click(screen.getAllByRole('button', { name: 'Trends' })[0]);
+    await user.click(screen.getByRole('button', { name: /^Spend$/ }));
+    expect(screen.getByText(/known subtotals, not complete food costs/)).toBeInTheDocument();
+    expect(screen.getAllByText('~$4.75 + unknown').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/discarded items have unknown prices/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing discarded/)).not.toBeInTheDocument();
+    expect(screen.getByText('Share unavailable: incomplete prices')).toBeInTheDocument();
+  });
+});
