@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { foodLogNutrition, cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
 
 describe('food log display groups', () => {
   const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
@@ -135,5 +135,14 @@ describe('cooking recovery across refreshed inventory and reload', () => {
     await reloaded.cookRecipe(client, 'recipe', refreshed);
     expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[0][1].p_request_id);
     expect(rpc.mock.calls[2][1].p_piece_inputs).toEqual(refreshed.pieceInputs);
+  });
+});
+
+
+describe('consumption detail uncertainty', () => {
+  it('distinguishes unknown from known zero and does not present partial group sums as complete', () => {
+    const rows = [{ kcal: 100, protein_g: null, carbs_g: 0, fat_g: null, fiber_g: null, sodium_mg: null }] as unknown as Parameters<typeof foodLogNutrition>[0];
+    expect(foodLogNutrition(rows)).toMatchObject({ Calories: 100, Protein: null, Carbs: 0 });
+    expect(foodLogNutrition([...rows, { ...rows[0], kcal: null }])).toMatchObject({ Calories: null, Carbs: 0 });
   });
 });

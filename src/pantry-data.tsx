@@ -40,7 +40,7 @@ export interface FoodLogEntry {
   protein: string;
   time: string;
   color: string;
-  nutrition?: NutritionValues;
+  nutrition?: Record<NutrientName, number | null>;
   nutritionStatus?: 'complete' | 'partial' | 'unknown';
   cost?: number | null;
   costIsEstimated?: boolean;
