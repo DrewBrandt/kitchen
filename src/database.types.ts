@@ -491,6 +491,8 @@ export type Database = {
           prep: string | null
           price_as_of: string | null
           product: string | null
+          piece_count: number | null
+          piece_basis_qty: number | null
           remaining_qty: number
           total_cost: number | null
           use_by: string | null
@@ -515,6 +517,8 @@ export type Database = {
           prep?: string | null
           price_as_of?: string | null
           product?: string | null
+          piece_count?: number | null
+          piece_basis_qty?: number | null
           remaining_qty: number
           total_cost?: number | null
           use_by?: string | null
@@ -539,6 +543,8 @@ export type Database = {
           prep?: string | null
           price_as_of?: string | null
           product?: string | null
+          piece_count?: number | null
+          piece_basis_qty?: number | null
           remaining_qty?: number
           total_cost?: number | null
           use_by?: string | null

@@ -102,7 +102,16 @@ export interface PlannedMealView {
   nutrition?: NutritionValues;
 }
 
+export interface PieceInput {
+  ingredientId: string;
+  lotId: string;
+  pieces: number;
+  lotPieces?: number;
+  expectedRemaining: number;
+}
+
 export interface PreparationOptions {
+  pieceInputs?: PieceInput[];
   scale?: number;
   servingsMade?: number;
   location?: string;

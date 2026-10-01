@@ -1119,3 +1119,10 @@ button.soon-row:hover { background: #121715; }
   .sandbox-actions { flex-direction: column-reverse; }
   .sandbox-actions .button { width: 100%; min-height: 40px; }
 }
+
+/* Piece entry stays with its ingredient so the cooking workspace remains readable. */
+.piece-ingredient-control { margin: 0 0 12px 28px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; }
+.piece-ingredient-control > label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.piece-ingredient-control .deck-batch-fields { margin-top: 12px; }
+.piece-ingredient-control p { grid-column: 1 / -1; line-height: 1.5; }
+.piece-ingredient-control [role="group"] { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

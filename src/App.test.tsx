@@ -272,6 +272,27 @@ describe('Pantry web UI', () => {
     expect(screen.getAllByRole('article', { name: recipe.name })).toHaveLength(1);
   });
 
+  it('cooks explicit whole or fractional pieces using an estimated lot weight without changing the recipe', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const recipe = { ...previewPantryData.recipes[0], ingredients: [{ id: 'ingredient', label: '600 g chicken', name: 'chicken', stock: '900 g in stock', quantity: 600, unit: 'g', pieceLots: [{ id: 'chicken-lot', label: 'Chicken package · 900 g', remainingBase: 900 }] }] };
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', servingsMade: 4, servingsRemaining: 4, location: 'fridge', foodLogId: null });
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: [] }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Make batch' }));
+    const card = screen.getByRole('article', { name: recipe.name });
+    await user.click(within(card).getByRole('checkbox', { name: 'Use pieces for chicken' }));
+    expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
+    await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
+    await user.click(within(card).getByRole('button', { name: 'Half' }));
+    expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Quarter' }));
+    expect(within(card).getByLabelText('Pieces to cook')).toHaveValue(0.25);
+    await user.click(within(card).getByRole('button', { name: 'Whole' }));
+    await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ pieceInputs: [{ ingredientId: 'ingredient', lotId: 'chicken-lot', pieces: 1, lotPieces: 6, expectedRemaining: 900 }] })));
+  });
+
   it('finishes a planned recipe as one linked batch and removes it from on deck', async () => {
     localStorage.clear();
     const user = userEvent.setup();

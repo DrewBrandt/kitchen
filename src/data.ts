@@ -96,7 +96,7 @@ export interface Recipe {
   servings: number;
   minutes: number;
   nutrition: string;
-  ingredients: { label: string; stock: string; quantity?: number; unit?: string; name?: string; availableQuantity?: number }[];
+  ingredients: { label: string; stock: string; quantity?: number; unit?: string; name?: string; availableQuantity?: number; id?: string; pieceLots?: Array<{ id: string; label: string; remainingBase: number; remainingPieces?: number }> }[];
   steps: string[];
   ease: number;
   taste: number;
