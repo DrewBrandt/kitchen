@@ -289,6 +289,11 @@ describe('Pantry web UI', () => {
     expect(cards).toHaveLength(2);
     expect(within(cards[0]).getByText('2 cups flour')).toBeInTheDocument();
     expect(within(cards[1]).getByText('4 cups flour')).toBeInTheDocument();
+    const linkedMultiplier = within(cards[1]).getByLabelText('Recipe multiplier for ' + recipe.name);
+    expect(linkedMultiplier).toHaveAttribute('readonly');
+    await user.type(linkedMultiplier, '3');
+    expect(linkedMultiplier).toHaveValue(2);
+    expect(within(cards[1]).getByText(/Edit the plan to change its recipe multiplier/)).toBeInTheDocument();
     expect(within(cards[0]).getByText('3 cups in stock')).toBeInTheDocument();
     expect(within(cards[1]).getByText('3 cups in stock · short')).toBeInTheDocument();
     await user.click(within(cards[0]).getByRole('button', { name: /2 cups flour/ }));
@@ -322,6 +327,35 @@ describe('Pantry web UI', () => {
     await user.click(within(card).getByRole('button', { name: 'Whole' }));
     await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
     await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ pieceInputs: [{ ingredientId: 'ingredient', lotId: 'chicken-lot', pieces: 1, lotPieces: 6, expectedRemaining: 900 }] })));
+  });
+
+  it('uses the linked plan multiplier for normal ingredients alongside explicit piece quantities', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const recipe = { ...previewPantryData.recipes[0], ingredients: [
+      { id: 'chicken', label: '600 g chicken', name: 'chicken', stock: '900 g in stock', quantity: 600, unit: 'g', pieceLots: [{ id: 'lot', label: 'Chicken package', remainingBase: 900, remainingPieces: 6 }] },
+      { id: 'rice', label: '100 g rice', name: 'rice', stock: 'In stock', quantity: 100, unit: 'g' },
+    ] };
+    const plan = { ...previewPantryData.plannedMeals[0], id: 'piece-plan', groupId: 'piece-group', dateKey: currentDateKey(), recipeId: recipe.id, status: 'planned' as const, isLeftover: false, scaleFactor: 2, plannedServings: 1 };
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'result', servingsMade: 3, servingsRemaining: 3, location: 'fridge', foodLogId: null });
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: [plan] }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: 'On deck' }));
+    const card = screen.getByRole('article', { name: recipe.name });
+    const multiplier = within(card).getByLabelText('Recipe multiplier for ' + recipe.name);
+    expect(multiplier).toHaveAttribute('readonly');
+    await user.type(multiplier, '3');
+    expect(multiplier).toHaveValue(2);
+    expect(within(card).getByText('200 g rice')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Choose pieces instead for chicken' }));
+    await user.click(within(card).getByRole('button', { name: 'Half' }));
+    expect(within(card).getByText(/Original recipe requirement: 1200 g chicken.*replaced by pieces/)).toBeInTheDocument();
+    expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    const yieldInput = within(card).getByLabelText('Servings of ' + recipe.name + ' made');
+    await user.clear(yieldInput);
+    await user.type(yieldInput, '3');
+    expect(within(card).getByText('200 g rice')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ scale: 2, mealPlanId: 'piece-plan', servingsMade: 3, pieceInputs: [{ ingredientId: 'chicken', lotId: 'lot', pieces: 0.5, expectedRemaining: 900 }] })));
   });
 
   it('scales recipe ingredients separately from actual batch yield', async () => {
