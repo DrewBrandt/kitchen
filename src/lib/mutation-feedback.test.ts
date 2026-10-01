@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+// @vitest-environment node
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFormAttempt, formTimestamp, mutationError, runRetryableMutation } from './mutation-feedback';
 
+const stored = new Map<string, string>();
+vi.stubGlobal('localStorage', { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value), clear: () => stored.clear() });
 beforeEach(() => localStorage.clear());
 
 describe('mutation feedback and retry identity', () => {
@@ -16,15 +19,16 @@ describe('mutation feedback and retry identity', () => {
     await runRetryableMutation(client, 'eat', { lot: 'one', quantity: 1 }, perform);
     expect(attempts[2]).not.toBe(attempts[0]);
   });
-  it('reuses the request and generated timestamp after ambiguous failure, but changes identity when input changes', () => {
+  it('reuses the request and generated timestamp after ambiguous failure, but changes identity when input changes', async () => {
     const attempt = createFormAttempt();
     const form = () => { const data = new FormData(); data.set('label', 'Lunch'); return data; };
-    const first = attempt(form());
-    const retry = createFormAttempt()(form());
+    const first = await attempt(form());
+    const retry = await createFormAttempt()(form());
     expect(retry.get('request_id')).toBe(first.get('request_id'));
     expect(retry.get('occurred_at')).toBe(first.get('occurred_at'));
+    expect(JSON.stringify([...stored])).not.toContain('Lunch');
     const changed = form(); changed.set('label', 'Dinner');
-    expect(attempt(changed).get('request_id')).not.toBe(first.get('request_id'));
+    expect((await attempt(changed)).get('request_id')).not.toBe(first.get('request_id'));
   });
 
   it('shows PostgREST validation messages and a clear permission error', () => {

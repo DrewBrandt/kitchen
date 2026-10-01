@@ -1,5 +1,9 @@
-type PendingAttempt = { requestId: string; occurredAt: string };
+type PendingAttempt = { requestId: string; occurredAt: string; payload?: unknown };
 const storageKey = 'mise.pending-mutations.v1';
+async function fingerprint(value: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 function readPending(): Record<string, PendingAttempt> {
   try { return JSON.parse(localStorage.getItem(storageKey) ?? '{}') as Record<string, PendingAttempt>; }
   catch { throw new Error('The browser could not read pending actions. Check browser storage before retrying.'); }
@@ -8,9 +12,9 @@ function writePending(pending: Record<string, PendingAttempt>) {
   try { localStorage.setItem(storageKey, JSON.stringify(pending)); }
   catch { throw new Error('The browser could not retain this action for safe retry. Check browser storage and try again.'); }
 }
-function pendingAttempt(key: string): PendingAttempt {
+function pendingAttempt(key: string, payload?: unknown): PendingAttempt {
   const pending = readPending();
-  if (!pending[key]) { pending[key] = { requestId: crypto.randomUUID(), occurredAt: new Date().toISOString() }; writePending(pending); }
+  if (!pending[key]) { pending[key] = { requestId: crypto.randomUUID(), occurredAt: new Date().toISOString(), ...(payload === undefined ? {} : { payload }) }; writePending(pending); }
   return pending[key];
 }
 export function completeFormAttempt(form: FormData) {
@@ -18,11 +22,11 @@ export function completeFormAttempt(form: FormData) {
   for (const [key, value] of Object.entries(pending)) if (value.requestId === form.get('request_id')) delete pending[key];
   writePending(pending);
 }
-/** Retains the payload/identity in this browser across panel closes and reloads. Edited input starts a new action. */
+/** Retains an opaque payload fingerprint and identity in this browser across panel closes and reloads. Edited input starts a new action. */
 export function createFormAttempt() {
-  return (form: FormData) => {
-    const fingerprint = JSON.stringify(['form', Array.from(form.entries()).filter(([key]) => key !== 'request_id').sort(([a], [b]) => a.localeCompare(b))]);
-    const attempt = pendingAttempt(fingerprint);
+  return async (form: FormData) => {
+    const key = await fingerprint(['form', Array.from(form.entries()).filter(([key]) => key !== 'request_id').sort(([a], [b]) => a.localeCompare(b))]);
+    const attempt = pendingAttempt(key);
     form.set('request_id', attempt.requestId);
     if (!form.get('occurred_at')) form.set('occurred_at', attempt.occurredAt);
     if (!form.get('acquired_at')) form.set('acquired_at', attempt.occurredAt);
@@ -56,13 +60,25 @@ export function formTimestamp(form: FormData, key: string): string {
   return new Date(candidate).toISOString();
 }
 
-/** Confirmed results clear the pending action; ambiguous failures remain recoverable after reload. */
-export async function runRetryableMutation<T>(_client: object, operation: string, payload: unknown, perform: (requestId: string, occurredAt: string) => Promise<T>): Promise<T> {
-  const key = JSON.stringify(['rpc', operation, payload]);
-  const attempt = pendingAttempt(key);
-  const result = await perform(attempt.requestId, attempt.occurredAt);
-  const pending = readPending();
-  delete pending[key];
-  writePending(pending);
+export function isDefiniteMutationFailure(cause: unknown): boolean {
+  const code = cause && typeof cause === 'object' ? (cause as { code?: unknown }).code : undefined;
+  return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code);
+}
+
+export async function pendingMutationPayload<P>(operation: string, identity: unknown): Promise<P | undefined> {
+  return readPending()[await fingerprint(['rpc', operation, identity])]?.payload as P | undefined;
+}
+
+/** Frozen payloads are used only for cooking; they contain IDs and quantities, never log text. */
+export async function runRetryableMutation<T, P = unknown>(_client: object, operation: string, payload: P, perform: (requestId: string, occurredAt: string, submitted: P) => Promise<T>, identity?: unknown): Promise<T> {
+  const key = await fingerprint(['rpc', operation, identity ?? payload]);
+  const attempt = pendingAttempt(key, identity === undefined ? undefined : payload);
+  let result: T;
+  try { result = await perform(attempt.requestId, attempt.occurredAt, (attempt.payload ?? payload) as P); }
+  catch (cause) {
+    if (isDefiniteMutationFailure(cause)) { const pending = readPending(); delete pending[key]; writePending(pending); }
+    throw cause;
+  }
+  const pending = readPending(); delete pending[key]; writePending(pending);
   return result;
 }

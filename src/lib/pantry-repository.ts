@@ -905,15 +905,16 @@ export async function undoPrep(client: Client, prepId: string) {
 }
 
 export async function cookRecipe(client: Client, recipeId: string, options: PreparationOptions = {}): Promise<PreparationResult> {
-  return runRetryableMutation(client, options.pieceInputs?.length ? 'prepareRecipePieces' : 'prepare_recipe', { recipeId, options }, async (requestId, occurredAt) => {
+  return runRetryableMutation(client, 'prepare_recipe', { recipeId, options }, async (requestId, occurredAt, submitted) => {
+    const { recipeId: submittedRecipeId, options: savedOptions } = submitted;
     const { data, error } = await client.rpc('prepare_recipe', {
-      p_recipe: recipeId, p_request_id: requestId, p_occurred_at: occurredAt,
-      p_scale: options.scale ?? 1,
-      ...(options.servingsMade === undefined ? {} : { p_servings: options.servingsMade }),
-      p_location: options.location ?? 'fridge',
-      ...(options.mealPlanId ? { p_meal_plan: options.mealPlanId } : {}),
-      p_eaten_servings: options.servingsEaten ?? 0,
-      ...(options.pieceInputs?.length ? { p_piece_inputs: options.pieceInputs.map((input) => ({ ...input })) } : {}),
+      p_recipe: submittedRecipeId, p_request_id: requestId, p_occurred_at: occurredAt,
+      p_scale: savedOptions.scale ?? 1,
+      ...(savedOptions.servingsMade === undefined ? {} : { p_servings: savedOptions.servingsMade }),
+      p_location: savedOptions.location ?? 'fridge',
+      ...(savedOptions.mealPlanId ? { p_meal_plan: savedOptions.mealPlanId } : {}),
+      p_eaten_servings: savedOptions.servingsEaten ?? 0,
+      ...(savedOptions.pieceInputs?.length ? { p_piece_inputs: savedOptions.pieceInputs.map((input) => ({ ...input })) } : {}),
     });
     if (error) throw error;
     const result = data as Record<string, unknown>;
@@ -923,7 +924,7 @@ export async function cookRecipe(client: Client, recipeId: string, options: Prep
       servingsMade: Number(result.servingsMade), servingsRemaining: Number(result.servingsRemaining),
       location: String(result.location), foodLogId: result.foodLogId ? String(result.foodLogId) : null,
     };
-  });
+  }, { recipeId, mealPlanId: options.mealPlanId ?? null });
 }
 
 export async function savePrepFeedback(client: Client, prepId: string, ease: number, taste: number, actualMinutes: number) {

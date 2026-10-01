@@ -115,3 +115,25 @@ describe('piece cooking retry contract', () => {
     expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[1][1].p_request_id);
   });
 });
+
+
+describe('cooking recovery across refreshed inventory and reload', () => {
+  it('freezes the submitted piece payload until a lost response is reconciled', async () => {
+    localStorage.clear();
+    const rpc = vi.fn().mockResolvedValueOnce({ data: null, error: { message: 'Connection lost', code: '' } }).mockResolvedValue({ data: { prepId: 'already-saved-prep', lotId: 'output', servingsMade: 3, servingsRemaining: 3, location: 'fridge' }, error: null });
+    const client = { rpc } as unknown as Parameters<typeof cookRecipe>[0];
+    const original = { servingsMade: 3, pieceInputs: [{ ingredientId: 'ingredient', lotId: 'input', pieces: 2, lotPieces: 6, expectedRemaining: 900 }] };
+    await expect(cookRecipe(client, 'recipe', original)).rejects.toMatchObject({ message: 'Connection lost' });
+    // The server committed. Realtime/focus refresh now reports less mass and persisted piece count.
+    const refreshed = { servingsMade: 3, pieceInputs: [{ ingredientId: 'ingredient', lotId: 'input', pieces: 2, expectedRemaining: 600 }] };
+    vi.resetModules();
+    const reloaded = await import('./pantry-repository');
+    await reloaded.cookRecipe(client, 'recipe', refreshed);
+    expect(rpc.mock.calls[1][1].p_request_id).toBe(rpc.mock.calls[0][1].p_request_id);
+    expect(rpc.mock.calls[1][1].p_occurred_at).toBe(rpc.mock.calls[0][1].p_occurred_at);
+    expect(rpc.mock.calls[1][1].p_piece_inputs).toEqual(original.pieceInputs);
+    await reloaded.cookRecipe(client, 'recipe', refreshed);
+    expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[0][1].p_request_id);
+    expect(rpc.mock.calls[2][1].p_piece_inputs).toEqual(refreshed.pieceInputs);
+  });
+});
