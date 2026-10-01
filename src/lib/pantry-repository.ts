@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
 import type { ShoppingReceipt, FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue, inventoryValueLabel } from './cost';
-import { formatAmount, formatServings, formatStockQuantity, formatShoppingQuantity } from './format';
+import { formatAmount, formatServings, formatStockQuantity, shoppingQuantityPresentation } from './format';
 import { runRetryableMutation } from './mutation-feedback';
 import { nutritionForServings } from './nutrition';
 
@@ -566,7 +566,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       foodId: item.food ?? undefined, pinnedProductId: item.pinned_product ?? undefined, unitId: item.unit ?? undefined,
       quantityNeeded: remainingDisplay ?? item.qty_needed ?? undefined, receiptLotId: item.lot ?? undefined,
       demandNotice: item.generated_demand_changed && food && itemUnit ? `Plan now needs ${formatQuantity(fromFoodBase(food, shortageBase, itemUnit), itemUnit.short_name)} more. Your check and quantity were kept.` : undefined,
-      quantity: item.lot && remainingDisplay !== null ? `${formatQuantity(remainingDisplay, itemUnit?.short_name)} outstanding` : formatShoppingQuantity(item.quantity_label, item.qty_needed === null ? null : Number(item.qty_needed), itemUnit?.short_name, item.source === 'generated'),
+      ...(item.lot && remainingDisplay !== null ? { quantity: `${formatQuantity(remainingDisplay, itemUnit?.short_name)} outstanding` } : shoppingQuantityPresentation(item.quantity_label, item.qty_needed === null ? null : Number(item.qty_needed), itemUnit?.short_name, item.source === 'generated')),
       checked: Boolean(item.checked_at),
       cost: itemCost,
     });

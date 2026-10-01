@@ -47,3 +47,12 @@ it('associates receipt labels explicitly and sorts foods without mutating shared
     expect(Array.from(control.labels ?? []).some((node) => node.htmlFor === control.id)).toBe(true);
   }
 });
+
+it('shows recorded grocery quantity first and preserved zero label separately', async () => {
+  render(<PantryDataProvider data={{ ...previewPantryData, grocerySections: [{ emoji: '', label: 'Herbs', items: [{ name: 'Dried oregano', quantity: '0.012 oz', savedQuantityLabel: '0 oz', cost: 0.04 }] }] }}><App /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'Grocery list' }));
+  const row = screen.getByText('Dried oregano').closest('button')!;
+  const labels = row.querySelectorAll('.grocery-quantity small');
+  expect(labels[0]).toHaveTextContent('0.012 oz');
+  expect(labels[1]).toHaveTextContent('Saved label: 0 oz');
+});

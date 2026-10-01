@@ -41,14 +41,14 @@ export function formatNutritionAmount(value: number, nutrient: string) {
 }
 
 /** Preserve stored text while exposing a positive amount hidden by a legacy zero label. */
-export function formatShoppingQuantity(label: string | null, value: number | null, unit?: string | null, generated = false) {
+export function shoppingQuantityPresentation(label: string | null, value: number | null, unit?: string | null, generated = false) {
   if (label !== null) {
     const match = label.trim().match(/^0(?:[.,]0+)?\s*(.*)$/);
     const isZeroLabel = unit && match && match[1].toLowerCase() === unit.toLowerCase();
     if (generated && value !== null && Number.isFinite(value) && value > 0 && isZeroLabel) {
-      return `${label} (recorded amount: ${formatStockQuantity(value, unit)})`;
+      return { quantity: formatStockQuantity(value, unit), savedQuantityLabel: label };
     }
-    return label;
+    return { quantity: label };
   }
-  return value !== null ? formatStockQuantity(value, unit) : 'As needed';
+  return { quantity: value !== null ? formatStockQuantity(value, unit) : 'As needed' };
 }

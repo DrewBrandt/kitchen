@@ -147,7 +147,7 @@ export interface ShoppingReceipt {
 export interface GroceryItem {
   id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null;
   foodId?: string; pinnedProductId?: string; quantityNeeded?: number; unitId?: string;
-  receiptLotId?: string; demandNotice?: string;
+  receiptLotId?: string; demandNotice?: string; savedQuantityLabel?: string;
 }
 export interface PantryData {
   inventorySections: Array<{ emoji: string; label: string; foods: InventoryFood[] }>;

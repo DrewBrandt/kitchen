@@ -1146,3 +1146,5 @@ button.soon-row:hover { background: #121715; }
 .deck-section > summary { cursor: pointer; padding: 14px 0 8px; color: var(--mint); font-size: 13px; font-weight: 600; }
 .piece-ingredient-control:not(:has(.deck-batch-fields)) { border: 0; padding: 2px 0; margin-bottom: 8px; }
 .piece-ingredient-control [aria-pressed="true"] { border-color: var(--mint); color: var(--mint); }
+
+.grocery-quantity { display: grid; gap: 4px; text-align: right; }

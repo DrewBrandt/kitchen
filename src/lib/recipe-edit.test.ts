@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import { savePanelAction } from './pantry-actions';
-import { formatShoppingQuantity } from './format';
+import { shoppingQuantityPresentation } from './format';
 
 function fixture(error: Error | null = null) {
   const rpc = vi.fn().mockResolvedValue({ error });
@@ -40,12 +40,12 @@ it.each(['', '10 unknown Rice', '10 g Unknown'])('rejects invalid edit ingredien
 });
 
 it('clarifies legacy generated zero labels while preserving their exact text', () => {
-  expect(formatShoppingQuantity('0 oz', 0.011757987317254566, 'oz', true)).toBe('0 oz (recorded amount: 0.012 oz)');
-  expect(formatShoppingQuantity(' 0.0 OZ ', 0.00001, 'oz', true)).toBe(' 0.0 OZ  (recorded amount: <0.001 oz)');
-  expect(formatShoppingQuantity('0 oz', 0, 'oz', true)).toBe('0 oz');
-  expect(formatShoppingQuantity('0 oz', 0.01, 'oz', false)).toBe('0 oz');
-  expect(formatShoppingQuantity('0 oz optional', 0.01, 'oz', true)).toBe('0 oz optional');
-  expect(formatShoppingQuantity('0.012 oz', 0.012, 'oz', true)).toBe('0.012 oz');
-  expect(formatShoppingQuantity('Buy a jar', 0.012, 'oz', true)).toBe('Buy a jar');
-  expect(formatShoppingQuantity(null, 0.012, 'oz', true)).toBe('0.012 oz');
+  expect(shoppingQuantityPresentation('0 oz', 0.011757987317254566, 'oz', true)).toEqual({ quantity: '0.012 oz', savedQuantityLabel: '0 oz' });
+  expect(shoppingQuantityPresentation(' 0.0 OZ ', 0.00001, 'oz', true)).toEqual({ quantity: '<0.001 oz', savedQuantityLabel: ' 0.0 OZ ' });
+  expect(shoppingQuantityPresentation('0 oz', 0, 'oz', true)).toEqual({ quantity: '0 oz' });
+  expect(shoppingQuantityPresentation('0 oz', 0.01, 'oz', false)).toEqual({ quantity: '0 oz' });
+  expect(shoppingQuantityPresentation('0 oz optional', 0.01, 'oz', true)).toEqual({ quantity: '0 oz optional' });
+  expect(shoppingQuantityPresentation('0.012 oz', 0.012, 'oz', true)).toEqual({ quantity: '0.012 oz' });
+  expect(shoppingQuantityPresentation('Buy a jar', 0.012, 'oz', true)).toEqual({ quantity: 'Buy a jar' });
+  expect(shoppingQuantityPresentation(null, 0.012, 'oz', true)).toEqual({ quantity: '0.012 oz' });
 });
