@@ -1381,6 +1381,11 @@ export type Database = {
       }
       shopping_items: {
         Row: {
+          generated_active: boolean
+          generated_qty_base: number | null
+          generated_shortage_base: number | null
+          generated_demand_changed: boolean
+          received_qty_base: number
           checked_at: string | null
           created_at: string
           first_needed_date: string | null
@@ -1397,6 +1402,11 @@ export type Database = {
           unit: string | null
         }
         Insert: {
+          generated_active?: boolean
+          generated_qty_base?: number | null
+          generated_shortage_base?: number | null
+          generated_demand_changed?: boolean
+          received_qty_base?: number
           checked_at?: string | null
           created_at?: string
           first_needed_date?: string | null
@@ -1413,6 +1423,11 @@ export type Database = {
           unit?: string | null
         }
         Update: {
+          generated_active?: boolean
+          generated_qty_base?: number | null
+          generated_shortage_base?: number | null
+          generated_demand_changed?: boolean
+          received_qty_base?: number
           checked_at?: string | null
           created_at?: string
           first_needed_date?: string | null
@@ -1508,6 +1523,8 @@ export type Database = {
       }
     }
     Functions: {
+      receive_shopping_item: { Args: { p_request_id: string; p_item: string; p_receipt: Json }; Returns: Json }
+      undo_inventory_receipt: { Args: { p_request_id: string; p_lot: string }; Returns: Json }
       correct_consumed_quantity: {
         Args: { p_request_id: string; p_food_log: string; p_expected_quantity: number; p_quantity: number }
         Returns: Json

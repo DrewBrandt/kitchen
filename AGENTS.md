@@ -14,6 +14,7 @@
   do not copy `supabase/.temp` from another worktree.
 - In PowerShell scripts, invoke the Node package runner as `npx.cmd`. Calling `npx` with the call operator (`& npx ...`) can make the installed `npx.ps1` misparse the command as the unrelated `px` package.
 - When a task discovers another repeatable worktree-specific setup requirement or workaround, add it to this file in the same change so future agents do not have to rediscover it.
+- Receipt lifecycle validation uses `sh supabase/tests/run_receipt_isolated.sh` with Docker, cached `postgres:17`, and Python 3. On this Windows host, Docker is available through `wsl.exe -d Ubuntu -u root -- sh <WSL-worktree-path>/supabase/tests/run_receipt_isolated.sh` (scoped escalation required). This disposable harness never links Supabase: it uses synthetic auth rows with actual database roles, omits production-only historical repair DML in migration 009, and verifies the guard already installed by 018 instead of rerunning the deployment-only 019 text patch. It removes only its own container on exit.
 - Before integrating, update the feature branch from the latest committed `main`, resolve conflicts in the feature worktree, and rerun the feature tests plus the full regression suite. Verify that previously working behavior still works with the new feature.
 - A completed change is not delivered until it is merged into `main`, pushed to GitHub, and the GitHub Pages Actions deployment succeeds. Deploy changed Supabase migrations before or alongside application code that depends on them.
 

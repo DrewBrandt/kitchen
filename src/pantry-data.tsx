@@ -139,10 +139,20 @@ export interface PreparationResult {
   foodLogId: string | null;
 }
 
+export interface ShoppingReceipt {
+  foodId: string; productId: string | null; quantity: number; unit: string;
+  totalPrice: number | null; location: string; bestBy: string | null; note: string | null;
+}
+export interface GroceryItem {
+  id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null;
+  foodId?: string; pinnedProductId?: string; quantityNeeded?: number; unitId?: string;
+  receiptLotId?: string; demandNotice?: string;
+}
 export interface PantryData {
   inventorySections: Array<{ emoji: string; label: string; foods: InventoryFood[] }>;
   recipes: Recipe[];
-  grocerySections: Array<{ emoji: string; label: string; items: Array<{ id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null }> }>;
+  grocerySections: Array<{ emoji: string; label: string; items: GroceryItem[] }>;
+  receiptHistory?: Array<{ lotId: string; name: string; acquiredAt: string; quantity: string; cost: number | null }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<Partial<PlannedMealView> & Pick<PlannedMealView, 'slot' | 'name' | 'emoji'>> }>;
   plannedMeals: PlannedMealView[];

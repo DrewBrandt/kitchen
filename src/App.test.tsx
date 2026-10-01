@@ -412,7 +412,8 @@ describe('Pantry web UI', () => {
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getByRole('button', { name: 'Make batch' }));
     const card = screen.getByRole('article', { name: recipe.name });
-    await user.click(within(card).getByRole('button', { name: 'Choose pieces instead for chicken' }));
+    await user.click(within(card).getByText('Adjust ingredient quantities'));
+    await user.selectOptions(within(card).getByLabelText('Ingredient to adjust'), 'ingredient');
     expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
     await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
     await user.click(within(card).getByRole('button', { name: 'Half' }));

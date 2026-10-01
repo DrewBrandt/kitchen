@@ -338,6 +338,12 @@ button.soon-row:hover { background: #121715; }
 .heat-strip i { flex: 1; min-width: 0; height: 26px; border-radius: 3px; }
 .history-row { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
 .history-row:last-child { border-bottom: 0; }
+.receipt-editor { padding: 20px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); max-width: 680px; }
+.receipt-editor label { display: grid; gap: 6px; margin: 12px 0; }
+.receipt-editor input, .receipt-editor select { width: 100%; min-width: 0; min-height: 40px; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.receipt-editor p { font-size: 12px; line-height: 1.5; }
+.grocery-row { flex-wrap: wrap; }
+.grocery-row > small { flex-basis: 100%; padding: 6px 12px; font-size: 12px; line-height: 1.5; }
 .prep-history-row { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
 .prep-history-row:last-child { border-bottom: 0; }
 .prep-history-row > .grow { flex: 1; min-width: 0; }

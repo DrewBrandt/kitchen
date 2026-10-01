@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { correctConsumedQuantity, consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, updateFoodLog, voidFoodLog } from './lib/pantry-repository';
+import { receiveShoppingItem, undoInventoryReceipt, correctConsumedQuantity, consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, updateFoodLog, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 import { SignInError, signInError, takeAuthCallback } from './lib/auth-callback';
@@ -126,6 +126,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onSetInventoryLotQuantity={async (id, remaining, discard) => { const eventId = await setInventoryLotQuantity(supabase, id, remaining, discard); await refresh(); return eventId; }}
         onRestoreFoodLog={async (id) => { await restoreFoodLog(supabase, id); await refresh(); }}
         onUndoInventoryAdjustment={async (eventId) => { await undoInventoryAdjustment(supabase, eventId); await refresh(); }}
+        onReceiveShopping={async (id, receipt) => { await receiveShoppingItem(supabase, id, receipt); await refresh(); }}
+        onUndoReceipt={async (id) => { await undoInventoryReceipt(supabase, id); await refresh(); }}
         onUndoPrep={async (prepId) => { await undoPrep(supabase, prepId); await refresh(); }}
       />
     </PantryDataProvider>

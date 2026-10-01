@@ -1,7 +1,7 @@
 import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
-import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
+import type { ShoppingReceipt, FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 import { formatAmount, formatServings } from './format';
 import { runRetryableMutation } from './mutation-feedback';
@@ -249,7 +249,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     client.from('recipes').select('*').order('name'),
     client.from('recipe_ingredients').select('*').order('sort_order'),
     client.from('preps').select('*').is('voided_at', null),
-    client.from('shopping_items').select('*').is('lot', null).order('created_at'),
+    client.from('shopping_items').select('*').order('created_at'),
     client.from('meal_plans').select('*').order('plan_date'),
     client.from('planned_consumptions').select('*'),
     client.from('food_logs').select('*').is('voided_at', null).order('occurred_at', { ascending: false }),
@@ -534,22 +534,38 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
   const preparedLots = allPreparedLots.filter((lot) => lot.servingsLeft > INVENTORY_QUANTITY_EPSILON);
 
+  const receiptHistory = (shoppingResult.data ?? []).flatMap((item) => {
+    const lot = (lotsResult.data ?? []).find((candidate) => candidate.id === item.lot);
+    if (!lot || lot.acquisition_void_event || !(item.received_qty_base > 0)) return [];
+    const product = lot.product ? products.get(lot.product) : undefined;
+    const food = product ? foods.get(product.food) : undefined;
+    const unit = food?.display_unit ? units.get(food.display_unit) : undefined;
+    return [{ lotId: lot.id, name: product?.name ?? item.free_text ?? food?.name ?? 'Receipt', acquiredAt: lot.acquired_at, quantity: formatQuantity(food && unit ? fromFoodBase(food, Number(lot.initial_qty), unit) : Number(lot.initial_qty), unit?.short_name), cost: lot.total_cost }];
+  }).sort((a,b) => b.acquiredAt.localeCompare(a.acquiredAt));
   const groceryGroups = new Map<string, PantryData['grocerySections'][number]['items']>();
   for (const item of shoppingResult.data ?? []) {
+    if (item.source === 'generated' && item.generated_active === false) continue;
     const food = item.food ? foods.get(item.food) : undefined;
     const pinnedProduct = item.pinned_product ? products.get(item.pinned_product) : undefined;
     const pricedProduct = pinnedProduct ?? [...products.values()].filter((product) => product.food === item.food && product.estimated_cost !== null)
       .sort((left, right) => (productUnitCost(left) ?? Infinity) - (productUnitCost(right) ?? Infinity))[0];
     const itemUnit = item.unit ? units.get(item.unit) : undefined;
     const neededBase = food && itemUnit && item.qty_needed !== null ? toFoodBase(food, Number(item.qty_needed), itemUnit) : null;
+    const remainingBase = neededBase === null ? null : Math.max(0, neededBase - Number(item.received_qty_base ?? 0));
+    const shortageBase = Number(item.generated_shortage_base ?? 0);
+    if (item.lot && remainingBase !== null && remainingBase <= INVENTORY_QUANTITY_EPSILON && shortageBase <= INVENTORY_QUANTITY_EPSILON) continue;
+    const remainingDisplay = food && itemUnit && remainingBase !== null ? fromFoodBase(food, remainingBase, itemUnit) : null;
     const itemRate = productUnitCost(pricedProduct);
-    const itemCost = neededBase !== null && itemRate !== null ? neededBase * itemRate : pricedProduct?.estimated_cost === null || pricedProduct?.estimated_cost === undefined ? null : Number(pricedProduct.estimated_cost);
+    const itemCost = neededBase !== null && itemRate !== null ? (remainingBase ?? neededBase) * itemRate : pricedProduct?.estimated_cost === null || pricedProduct?.estimated_cost === undefined ? null : Number(pricedProduct.estimated_cost);
     const category = food?.grocery_category ?? 'Pantry & other';
     const items = groceryGroups.get(category) ?? [];
     items.push({
       id: item.id,
       name: item.free_text ?? food?.name ?? 'Grocery item',
-      quantity: item.quantity_label ?? (item.qty_needed ? formatQuantity(Number(item.qty_needed), units.get(item.unit ?? '')?.short_name) : 'As needed'),
+      foodId: item.food ?? undefined, pinnedProductId: item.pinned_product ?? undefined, unitId: item.unit ?? undefined,
+      quantityNeeded: remainingDisplay ?? item.qty_needed ?? undefined, receiptLotId: item.lot ?? undefined,
+      demandNotice: item.generated_demand_changed && food && itemUnit ? `Plan now needs ${formatQuantity(fromFoodBase(food, shortageBase, itemUnit), itemUnit.short_name)} more. Your check and quantity were kept.` : undefined,
+      quantity: item.lot && remainingDisplay !== null ? `${formatQuantity(remainingDisplay, itemUnit?.short_name)} outstanding` : item.quantity_label ?? (item.qty_needed ? formatQuantity(Number(item.qty_needed), units.get(item.unit ?? '')?.short_name) : 'As needed'),
       checked: Boolean(item.checked_at),
       cost: itemCost,
     });
@@ -868,6 +884,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     inventorySections,
     recipes,
     grocerySections,
+    receiptHistory,
     nutrients,
     weekDays,
     plannedMeals,
@@ -1049,4 +1066,17 @@ export async function rebuildShoppingFromPlan(client: Client) {
   });
   if (error) throw error;
   return data;
+}
+
+export async function receiveShoppingItem(client: Client, itemId: string, receipt: ShoppingReceipt) {
+  await runRetryableMutation(client, 'receive_shopping_item', { itemId, receipt }, async (requestId, occurredAt, submitted) => {
+    const { error } = await client.rpc('receive_shopping_item', { p_request_id: requestId, p_item: submitted.itemId, p_receipt: { ...submitted.receipt, acquiredAt: occurredAt } });
+    if (error) throw error;
+  });
+}
+export async function undoInventoryReceipt(client: Client, lotId: string) {
+  await runRetryableMutation(client, 'undo_inventory_receipt', { lotId }, async (requestId) => {
+    const { error } = await client.rpc('undo_inventory_receipt', { p_request_id: requestId, p_lot: lotId });
+    if (error) throw error;
+  });
 }
