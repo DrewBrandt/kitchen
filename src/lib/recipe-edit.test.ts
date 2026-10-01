@@ -12,7 +12,7 @@ function fixture(error: Error | null = null) {
     throw new Error(`Unexpected direct write: ${table}`);
   });
   const form = new FormData();
-  for (const [key, value] of Object.entries({ recipe_id: 'recipe', name: 'New name', servings: '2', instructions: 'Boil\nServe', ingredients: '10 g Rice', source_url: 'https://example.com', prompt_for_feedback: 'on' })) form.set(key, value);
+  for (const [key, value] of Object.entries({ ingredient_ids: '["row-a"]', recipe_id: 'recipe', name: 'New name', servings: '2', instructions: 'Boil\nServe', ingredients: '10 g Rice', source_url: 'https://example.com', prompt_for_feedback: 'on' })) form.set(key, value);
   return { client: { from, rpc } as unknown as SupabaseClient<Database>, rpc, from, form };
 }
 
@@ -21,7 +21,7 @@ it('edits the recipe and ingredients in one RPC and omits fields outside the edi
   await savePanelAction(client, 'recipe', form);
   expect(rpc).toHaveBeenCalledExactlyOnceWith('gpt_update_recipe', {
     p_recipe: 'recipe', p_patch: { name: 'New name', emoji: null, servings: 2, instructions: ['Boil', 'Serve'], sourceUrl: 'https://example.com', promptForFeedback: true,
-      ingredients: [{ foodId: 'food', quantity: 10, unit: 'unit', sortOrder: 0 }] },
+      ingredients: [{ id: 'row-a', foodId: 'food', quantity: 10, unit: 'unit', sortOrder: 0 }] },
   });
   expect(from.mock.calls.map(([table]) => table)).toEqual(['base_foods', 'measure_conversions']);
 });
@@ -48,4 +48,15 @@ it('clarifies legacy generated zero labels while preserving their exact text', (
   expect(shoppingQuantityPresentation('0.012 oz', 0.012, 'oz', true)).toEqual({ quantity: '0.012 oz' });
   expect(shoppingQuantityPresentation('Buy a jar', 0.012, 'oz', true)).toEqual({ quantity: 'Buy a jar' });
   expect(shoppingQuantityPresentation(null, 0.012, 'oz', true)).toEqual({ quantity: '0.012 oz' });
+});
+
+it('passes duplicate ingredient identities in their explicit edited order', async () => {
+  const { client, rpc, form } = fixture();
+  form.set('ingredients', '20 g Rice\n20 g Rice');
+  form.set('ingredient_ids', '["row-b","row-a"]');
+  await savePanelAction(client, 'recipe-edit', form);
+  expect(rpc.mock.calls[0][1].p_patch.ingredients).toEqual([
+    { id: 'row-b', foodId: 'food', quantity: 20, unit: 'unit', sortOrder: 0 },
+    { id: 'row-a', foodId: 'food', quantity: 20, unit: 'unit', sortOrder: 1 },
+  ]);
 });

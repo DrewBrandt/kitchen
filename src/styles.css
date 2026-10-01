@@ -1148,3 +1148,7 @@ button.soon-row:hover { background: #121715; }
 .piece-ingredient-control [aria-pressed="true"] { border-color: var(--mint); color: var(--mint); }
 
 .grocery-quantity { display: grid; gap: 4px; text-align: right; }
+
+.recipe-ingredient-editor { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
+.recipe-ingredient-edit-row { display: grid; gap: 6px; }
+.recipe-ingredient-edit-row > div { display: flex; gap: 6px; }

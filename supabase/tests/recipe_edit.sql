@@ -64,6 +64,46 @@ begin
      not exists(select 1 from public.recipe_ingredients where id=a and qty=30 and note='First duplicate' and pinned_product=prod) or
      not exists(select 1 from public.recipe_ingredients where id=b and qty=20 and note='Different amount') or
      not exists(select 1 from public.recipe_ingredients where id=c and qty=10 and note='Second duplicate' and pinned_product=prod) then raise exception 'Quantity edit lost duplicate metadata'; end if;
+  -- Explicit IDs disambiguate A's quantity collision with B and preserve a reorder.
+  payload:=jsonb_build_array(jsonb_build_object('id',a,'foodId',f,'quantity',20,'unit',u,'sortOrder',0),
+    jsonb_build_object('id',b,'foodId',f,'quantity',20,'unit',u,'sortOrder',1),jsonb_build_object('id',c,'foodId',f,'quantity',10,'unit',u,'sortOrder',2));
+  perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',payload));
+  if not exists(select 1 from public.recipe_ingredients where id=a and qty=20 and sort_order=0 and note='First duplicate' and pinned_product=prod) or
+    not exists(select 1 from public.recipe_ingredients where id=b and qty=20 and sort_order=1 and note='Different amount' and pinned_product is null) then raise exception 'Explicit quantity collision swapped identity'; end if;
+  payload:=jsonb_build_array(jsonb_build_object('id',b,'foodId',f,'quantity',20,'unit',u,'sortOrder',0),
+    jsonb_build_object('id',a,'foodId',f,'quantity',20,'unit',u,'sortOrder',1),jsonb_build_object('id',c,'foodId',f,'quantity',10,'unit',u,'sortOrder',2));
+  perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',payload));
+  if not exists(select 1 from public.recipe_ingredients where id=a and sort_order=1 and note='First duplicate' and pinned_product=prod) or
+    not exists(select 1 from public.recipe_ingredients where id=b and sort_order=0 and note='Different amount' and pinned_product is null) then raise exception 'Duplicate reorder swapped metadata'; end if;
+  -- Reproduce the reviewer collision for a legacy client: unchanged B must be reserved first.
+  update public.recipe_ingredients set qty=10,sort_order=0 where id=a;
+  update public.recipe_ingredients set sort_order=1 where id=b;
+  payload:=jsonb_build_array(jsonb_build_object('foodId',f,'quantity',20,'unit',u,'sortOrder',0),
+    jsonb_build_object('foodId',f,'quantity',20,'unit',u,'sortOrder',1),jsonb_build_object('foodId',f,'quantity',10,'unit',u,'sortOrder',2));
+  perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',payload));
+  if not exists(select 1 from public.recipe_ingredients where id=a and qty=20 and sort_order=0 and pinned_product=prod) or
+    not exists(select 1 from public.recipe_ingredients where id=b and sort_order=1 and pinned_product is null) then raise exception 'Legacy collision swapped identity'; end if;
+  select jsonb_agg(to_jsonb(i) order by sort_order,id) into before_ingredients from public.recipe_ingredients i where recipe=r;
+  begin
+    perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',jsonb_build_array(jsonb_build_object('foodId',f,'quantity',30,'unit',u,'sortOrder',0))));
+    raise exception 'Ambiguous edit accepted';
+  exception when raise_exception then
+    if sqlerrm not like 'Ambiguous duplicate ingredients;%' then raise; end if;
+  end;
+  -- Existing row from another recipe must never be reassigned.
+  begin
+    perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',jsonb_build_array(jsonb_build_object('id',(select id from public.recipe_ingredients where recipe<>r limit 1),'foodId',f,'quantity',1,'unit',u))));
+    raise exception 'Cross-recipe ID accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'Ingredient ID does not belong to this recipe' then raise; end if;
+  end;
+  begin
+    perform public.gpt_update_recipe(r,jsonb_build_object('ingredients',jsonb_build_array(jsonb_build_object('id',a,'foodId',f,'quantity',20,'unit',u),jsonb_build_object('id',a,'foodId',f,'quantity',20,'unit',u))));
+    raise exception 'Repeated ID accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'Duplicate ingredient ID' then raise; end if;
+  end;
+  if (select jsonb_agg(to_jsonb(i) order by sort_order,id) from public.recipe_ingredients i where recipe=r) is distinct from before_ingredients then raise exception 'Rejected edit changed ingredients'; end if;
   perform public.gpt_update_recipe(r,'{"nutrition":{"calories":800}}');
   if not exists(select 1 from public.recipes where id=r and override_basis_qty=8 and override_kcal=800) then raise exception 'Explicit nutrition no longer uses batch yield'; end if;
   perform public.gpt_update_recipe(r,'{"nutrition":null}');

@@ -131,14 +131,19 @@ async function saveRecipe(client: Client, form: FormData) {
   };
   if (recipeId) {
     if (!ingredients.length) throw new Error('At least one ingredient is required.');
+    const ingredientIds: unknown = JSON.parse(text(form, 'ingredient_ids') || 'null');
+    if (!Array.isArray(ingredientIds) || ingredientIds.length !== ingredients.length
+      || ingredientIds.some((id) => id !== null && (typeof id !== 'string' || !id))) {
+      throw new Error('Ingredient rows changed unexpectedly. Reopen the recipe editor and try again.');
+    }
     const { error } = await client.rpc('gpt_update_recipe', {
       p_recipe: recipeId,
       p_patch: {
         name, emoji: recipeValues.emoji, servings: recipeValues.servings,
         instructions: steps, sourceUrl: recipeValues.source_url,
         promptForFeedback: recipeValues.prompt_for_feedback,
-        ingredients: ingredients.map((ingredient) => ({
-          foodId: ingredient.ingredient, quantity: ingredient.qty,
+        ingredients: ingredients.map((ingredient, index) => ({
+          id: ingredientIds[index] as string | null, foodId: ingredient.ingredient, quantity: ingredient.qty,
           unit: ingredient.unit, sortOrder: ingredient.sort_order,
         })),
       },

@@ -408,7 +408,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         const food = foods.get(ingredient.ingredient);
         const unit = units.get(ingredient.unit);
         const requestedQuantity = Number(ingredient.qty);
-        if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
+        if (!food || !unit) return { id: ingredient.id, label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
         const ingredientName = pluralizeFoodName(food.name, food.plural, requestedQuantity);
         const pieceLots = food.measure_style === 'weight' && !food.always_available ? rawLots.filter((lot) => lot.product && products.get(lot.product)?.food === food.id && (!ingredient.pinned_product || lot.product === ingredient.pinned_product) && Number(lot.remaining_qty) > 0).map((lot) => ({
           id: lot.id,

@@ -1,3 +1,4 @@
+import { RecipeIngredientEditor } from './RecipeIngredientEditor';
 import { DurableUndo, ShoppingReceiptEditor } from './ShoppingReceiptEditor';
 import { QuantityCorrectionEditor } from './QuantityCorrectionEditor';
 import type { Json } from './database.types';
@@ -1458,7 +1459,7 @@ function PanelFields({ kind, values = {}, recipe, onValidityChange }: { kind: Ex
     {recipe && <input type="hidden" name="recipe_id" value={recipe.id} />}
     <div className="form-grid two"><Field name="name" label="Recipe name" defaultValue={recipe?.name} placeholder="Recipe name" required /><Field name="emoji" label="Emoji" defaultValue={recipe?.emoji} placeholder="🍳" /></div>
     <div className="form-grid two"><Field name="servings" label="Servings" type="number" defaultValue={String(recipe?.servings ?? 4)} min="0.25" step="0.25" required /><Field name="source_url" label="Source URL" type="url" defaultValue={recipe?.sourceUrl} placeholder="https://…" /></div>
-    <label className="field"><span>Ingredients</span><textarea name="ingredients" required rows={7} defaultValue={recipe?.ingredientText} placeholder={'1.5 cup All-purpose flour\n2 ct Egg'} /></label>
+    <>{recipe ? <RecipeIngredientEditor key={recipe.id} recipe={recipe} /> : <label className="field"><span>Ingredients</span><textarea name="ingredients" required rows={7} placeholder={'1.5 cup All-purpose flour\n2 ct Egg'} /></label>}</>
     <small>Use: quantity, unit abbreviation, then the exact tracked food name.</small>
     <label className="field"><span>Method</span><textarea name="instructions" rows={7} defaultValue={recipe?.instructionText} placeholder="One step per line" /></label>
     <label className="toggle-row"><input name="prompt_for_feedback" type="checkbox" defaultChecked={recipe?.promptForFeedback ?? true} /><span><strong>Ask how it went after making</strong></span></label>
