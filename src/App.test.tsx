@@ -27,6 +27,21 @@ const currentDateKey = (timeZone = previewPantryData.settings.timeZone) => {
 };
 
 describe('Pantry web UI', () => {
+  it('removes only the selected event from a grouped consumption', async () => {
+    const onVoidFoodLog = vi.fn().mockResolvedValue(undefined);
+    const entry = { ...previewPantryData.foodLog[0], id: 'event-one', eventIds: ['event-one', 'event-two'], events: [
+      { id: 'event-one', label: 'Snack', portion: '1 serving', time: '1:00 PM', cost: 1, costIsEstimated: false },
+      { id: 'event-two', label: 'Snack', portion: 'half serving', time: '1:20 PM', cost: 0.5, costIsEstimated: false },
+    ] };
+    render(<PantryDataProvider data={{ ...previewPantryData, foodLog: [entry] }}><App onVoidFoodLog={onVoidFoodLog} /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Food log' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Choose ' + entry.label + ' event to remove' }));
+    expect(onVoidFoodLog).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove consumption 2' }));
+    expect(onVoidFoodLog).toHaveBeenCalledExactlyOnceWith('event-two');
+    expect(screen.getByRole('button', { name: 'Remove consumption 1' })).toBeEnabled();
+  });
+
   it('renders the mockup-inspired dashboard and complete navigation', () => {
     render(<App />);
 
@@ -641,7 +656,7 @@ describe('Pantry web UI', () => {
     await user.click(screen.getByRole('button', { name: 'View Simple Pancakes consumption event' }));
     const eventDialog = screen.getByRole('dialog');
     expect(within(eventDialog).getByText('Consumption event')).toBeInTheDocument();
-    expect(within(eventDialog).getByText('preview-log-1')).toBeInTheDocument();
+    expect(within(eventDialog).getByText('Individual events')).toBeInTheDocument();
   });
 
   it('plans a pantry item from a source-first composer without duplicate close actions', async () => {

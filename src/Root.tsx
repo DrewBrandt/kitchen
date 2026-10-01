@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { mutationError } from './lib/mutation-feedback';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
@@ -57,13 +58,18 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [error, setError] = useState('');
   const [syncStatus, setSyncStatus] = useState<'connecting' | 'synced' | 'error'>('connecting');
 
+  const refreshVersion = useRef(0);
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
     try {
       setError('');
-      setData(await loadPantryData(supabase));
+      const next = await loadPantryData(supabase);
+      if (version !== refreshVersion.current) return;
+      setData(next);
       setSyncStatus('synced');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load pantry data.');
+      if (version !== refreshVersion.current) return;
+      setError(mutationError(cause, 'Could not load pantry data.'));
       setSyncStatus('error');
     }
   }, []);
@@ -90,11 +96,12 @@ function AuthenticatedApp({ session }: { session: Session }) {
     };
   }, [refresh]);
 
-  if (error) return <FullPageStatus message={error} action="Try again" onAction={() => void refresh()} />;
+  if (error && !data) return <FullPageStatus message={error} action="Try again" onAction={() => void refresh()} />;
   if (!data) return <FullPageStatus message="Loading inventory, recipes, and plans…" />;
 
   return (
     <PantryDataProvider data={data}>
+      {error && <div role="alert">The latest pantry data could not be loaded. Completed saves are retained. <button onClick={() => void refresh()}>Refresh data</button></div>}
       <App
         ownerName={String(session.user.user_metadata.full_name ?? session.user.user_metadata.name ?? session.user.email?.split('@')[0] ?? 'Drew').split(' ')[0]}
         ownerEmail={session.user.email}

@@ -1,3 +1,4 @@
+import { formTimestamp } from './mutation-feedback';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { PanelKind } from '../data';
@@ -12,6 +13,10 @@ const number = (form: FormData, key: string, fallback?: number) => {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) throw new Error(`${key.replaceAll('_', ' ')} must be a number.`);
   return parsed;
+};
+const requiredNumber = (form: FormData, key: string) => {
+  if (!text(form, key)) throw new Error(`${key.replaceAll('_', ' ')} must be stated, including zero.`);
+  return number(form, key);
 };
 const optionalNumber = (form: FormData, key: string) => text(form, key) ? number(form, key) : null;
 const list = (form: FormData, key: string) => text(form, key).split(',').map((item) => item.trim()).filter(Boolean);
@@ -142,14 +147,14 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'lot') {
-    const acquiredAt = optionalText(form, 'acquired_at') ? new Date(text(form, 'acquired_at')).toISOString() : new Date().toISOString();
+    const acquiredAt = formTimestamp(form, 'acquired_at');
     const { error } = await client.rpc('gpt_add_grocery_lots', {
       p_items: [{
         productId: text(form, 'product'),
         quantity: number(form, 'initial_qty'),
         unit: text(form, 'quantity_unit'),
-        totalPrice: number(form, 'total_cost'),
-        outOfPocketCost: number(form, 'out_of_pocket_cost'),
+        totalPrice: requiredNumber(form, 'total_cost'),
+        outOfPocketCost: requiredNumber(form, 'out_of_pocket_cost'),
         paidBy: text(form, 'paid_by'),
         costIsEstimated: form.get('cost_is_estimated') === 'on',
         priceAsOf: text(form, 'price_as_of'),
@@ -160,7 +165,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
         ...(optionalText(form, 'note') ? { note: optionalText(form, 'note') } : {}),
       }],
       p_source: text(form, 'cost_source'),
-      p_request_id: crypto.randomUUID(),
+      p_request_id: optionalText(form, 'request_id') ?? crypto.randomUUID(),
     });
     if (error) throw error;
     return 'Lot added.';
@@ -196,8 +201,8 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'log') {
-    const occurredAt = optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString();
-    const totalPrice = number(form, 'total_cost');
+    const occurredAt = formTimestamp(form, 'occurred_at');
+    const totalPrice = optionalNumber(form, 'total_cost');
     const { error } = await client.rpc('consume_product_purchase', {
       p_product: text(form, 'product'),
       p_purchased_quantity: number(form, 'purchased_quantity', 1),
@@ -205,10 +210,10 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       p_quantity_unit: text(form, 'quantity_unit'),
       p_acquisition_type: text(form, 'acquisition_type'),
       p_total_price: totalPrice as number,
-      p_out_of_pocket_cost: number(form, 'out_of_pocket_cost'),
+      p_out_of_pocket_cost: requiredNumber(form, 'out_of_pocket_cost'),
       p_paid_by: text(form, 'paid_by'),
       p_price_as_of: text(form, 'price_as_of'),
-      p_request_id: crypto.randomUUID(),
+      p_request_id: optionalText(form, 'request_id') ?? crypto.randomUUID(),
       ...(optionalText(form, 'location') ? { p_location: optionalText(form, 'location')! } : {}),
       p_occurred_at: occurredAt,
       p_time_precision: text(form, 'time_precision'),
@@ -222,7 +227,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
   }
 
   if (kind === 'manual-log') {
-    const occurredAt = optionalText(form, 'occurred_at') ? new Date(text(form, 'occurred_at')).toISOString() : new Date().toISOString();
+    const occurredAt = formTimestamp(form, 'occurred_at');
     const nutritionFields = {
       calories: optionalNumber(form, 'kcal'),
       proteinG: optionalNumber(form, 'protein_g'),
@@ -257,12 +262,12 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
       p_components: components.length ? components : [{ label: text(form, 'label'), ...(portionLabel ? { portionLabel } : {}) }],
       p_acquisition_type: text(form, 'acquisition_type'),
       p_total_price: totalPrice as number,
-      p_out_of_pocket_cost: number(form, 'out_of_pocket_cost'),
+      p_out_of_pocket_cost: requiredNumber(form, 'out_of_pocket_cost'),
       p_paid_by: text(form, 'paid_by'),
       p_cost_is_estimated: form.get('cost_is_estimated') === 'on',
       p_cost_source: text(form, 'cost_source'),
       p_price_as_of: (totalPrice === null ? null : text(form, 'price_as_of')) as string,
-      p_request_id: crypto.randomUUID(),
+      p_request_id: optionalText(form, 'request_id') ?? crypto.randomUUID(),
       ...(optionalText(form, 'note') ? { p_note: optionalText(form, 'note')! } : {}),
     });
     if (error) throw error;

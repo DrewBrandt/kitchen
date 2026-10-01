@@ -1,3 +1,4 @@
+import { completeFormAttempt, createFormAttempt, mutationError } from './lib/mutation-feedback';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccountAvatar } from './AccountAvatar';
 import { MobileAccount } from './MobileAccount';
@@ -858,7 +859,7 @@ function FoodLogPage({ onOpen, onOpenConsumption, notify, onVoid, onPlan, onCons
       </Card>
       <Card>
         <SectionTitle title="Food and drinks" action={`${foodLog.length} entr${foodLog.length === 1 ? 'y' : 'ies'} · ${costLabel(foodLog.every((entry) => entry.cost !== null && entry.cost !== undefined) ? foodLog.reduce((sum, entry) => sum + Number(entry.cost), 0) : null, foodLog.some((entry) => entry.costIsEstimated))}`} />
-        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><button className="log-event-button" onClick={() => onOpenConsumption(entry)} aria-label={`View ${entry.label} consumption event`}><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small></button><div className="log-row-actions">{entry.id && onVoid && <button className="row-icon-button" aria-label={`Remove ${entry.label}`} onClick={() => { const entryIds = entry.eventIds?.length ? entry.eventIds : [entry.id!]; void Promise.all(entryIds.map((entryId) => onVoid(entryId))).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await Promise.all(entryIds.map((entryId) => undo.restoreFoodLog!(entryId))); } : undefined)).catch(() => notify(`Could not remove ${entry.label}.`)); }}><Trash2 /></button>}</div></div>)}
+        {foodLog.map((entry) => <div className="log-row" key={entry.id ?? entry.label}><i style={{ background: entry.color }} /><button className="log-event-button" onClick={() => onOpenConsumption(entry)} aria-label={`View ${entry.label} consumption event`}><span className="row-emoji">{entry.emoji}</span><div className="grow"><strong>{entry.label}</strong><small>{entry.serving}</small></div><strong className="log-cost">{costLabel(entry.cost, entry.costIsEstimated)}</strong><span>{entry.calories}</span><span>{entry.protein}</span><small>{entry.time}</small></button><div className="log-row-actions">{entry.id && onVoid && <button className="row-icon-button" aria-label={entry.eventIds && entry.eventIds.length > 1 ? `Choose ${entry.label} event to remove` : `Remove ${entry.label}`} onClick={() => { if ((entry.eventIds?.length ?? 0) > 1) { onOpenConsumption(entry); return; } void onVoid(entry.id!).then(() => notify(`${entry.label} removed from the food log.`, undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(entry.id!); } : undefined)).catch((cause) => notify(mutationError(cause, `Could not remove ${entry.label}.`))); }}><Trash2 /></button>}</div></div>)}
         {!foodLog.length && <div className="empty-inline">Nothing logged for this day.</div>}
       </Card>
     </div>
@@ -1269,11 +1270,12 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepF
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [formValid, setFormValid] = useState(state.kind !== 'meal');
+  const [formAttempt] = useState(createFormAttempt);
   if (state.kind === 'cook') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} undo={undo} />;
   if (state.kind === 'recipe-detail') return <RecipePanel recipe={state.recipe ?? recipes[0]} cooking={false} onClose={onClose} notify={notify} onCook={onCookRecipe} onFeedback={onSavePrepFeedback} onProgressChange={onRecipeProgress} undo={undo} />;
   if (state.kind === 'combined-meal') return <CombinedMealPanel onClose={onClose} notify={notify} onCook={onCookRecipes} />;
   if (state.kind === 'inventory-detail') return state.inventoryFood ? <InventoryLotsPanel food={state.inventoryFood} onClose={onClose} notify={notify} onConsume={onConsumeInventoryLot} onSetQuantity={onSetInventoryLotQuantity} undo={undo} /> : null;
-  if (state.kind === 'consumption-detail') return state.consumptionEvent ? <ConsumptionDetailPanel entry={state.consumptionEvent} onClose={onClose} /> : null;
+  if (state.kind === 'consumption-detail') return state.consumptionEvent ? <ConsumptionDetailPanel entry={state.consumptionEvent} onClose={onClose} undo={undo} notify={notify} /> : null;
   if (state.kind === 'bulk-import') return <BulkInventoryPanel onClose={onClose} notify={notify} onSave={onSave} />;
   const copy = PANEL_COPY[state.kind];
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -1299,11 +1301,16 @@ function ActionPanel({ state, onClose, notify, onSave, onCookRecipe, onSavePrepF
     setSaving(true);
     setError('');
     try {
-      const message = await onSave(state.kind, new FormData(event.currentTarget));
+      const form = new FormData(event.currentTarget);
+      form.set('owner_time_zone', settings.timeZone);
+      form.set('action_kind', state.kind);
+      const attempt = ['manual-log', 'log', 'lot'].includes(state.kind) ? formAttempt(form) : form;
+      const message = await onSave(state.kind, attempt);
+      if (attempt.has('request_id')) completeFormAttempt(attempt);
       onClose();
       notify(message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save this change.');
+      setError(mutationError(cause));
     } finally {
       setSaving(false);
     }
@@ -1508,10 +1515,23 @@ function SelectField({ name, label, options, defaultValue, required }: { name: s
   return <label className="field"><span>{label}</span><select name={name} defaultValue={defaultValue} required={required}><option value="">Choose…</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function ConsumptionDetailPanel({ entry, onClose }: { entry: FoodLogEntry; onClose: () => void }) {
+function ConsumptionDetailPanel({ entry, onClose, undo, notify }: { entry: FoodLogEntry; onClose: () => void; undo: Reversals; notify: Notify }) {
+  const [busyId, setBusyId] = useState('');
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  async function removeEvent(id: string) {
+    if (!undo.voidFoodLog || busyId) return;
+    setBusyId(id); setError('');
+    try {
+      await undo.voidFoodLog(id);
+      setRemoved((current) => [...current, id]);
+      notify('One consumption event removed. Inventory was restored where applicable.', undo.restoreFoodLog ? async () => { await undo.restoreFoodLog!(id); setRemoved((current) => current.filter((value) => value !== id)); } : undefined);
+    } catch (cause) { setError(mutationError(cause, 'Could not remove this consumption event.')); }
+    finally { setBusyId(''); }
+  }
   const nutrition = entry.nutrition ? Object.entries(entry.nutrition) : [];
   const eventIds = entry.eventIds?.length ? entry.eventIds : entry.id ? [entry.id] : [];
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{eventIds.map((eventId) => <div className="event-reference" key={eventId}><span>EVENT REFERENCE</span><code>{eventId}</code></div>)}</div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{error && <div role="alert">{error}</div>}<PanelSection title="Individual events">{eventIds.map((eventId, index) => { const detail = entry.events?.find((event) => event.id === eventId); return <div className="event-reference" key={eventId}><span>{detail ? `${detail.portion} · ${detail.time} · ${costLabel(detail.cost, detail.costIsEstimated)}` : `Consumption ${index + 1}`}</span>{removed.includes(eventId) ? <span>Removed</span> : undo.voidFoodLog && <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => void removeEvent(eventId)} aria-label={`Remove consumption ${index + 1}`}>{busyId === eventId ? 'Removing…' : 'Remove this event'}</button>}</div>; })}</PanelSection></div></aside></div>;
 }
 
 type RecipePanelProps = { recipe: Recipe; cooking: boolean; onClose: () => void; notify: Notify; onCook?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals };
@@ -1674,7 +1694,7 @@ function BulkInventoryPanel({ onClose, notify, onSave }: { onClose: () => void; 
         onClose();
         notify(message);
       }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not import inventory.'); }
+    } catch (cause) { setError(mutationError(cause, 'Could not import inventory.')); }
     finally { setSaving(false); }
   }
 
@@ -1748,7 +1768,7 @@ function BarcodeScanner({ onDetected, actionLabel }: { onDetected?: (barcode: st
             ? 'Firefox could not find a camera on this device.'
             : name === 'NotReadableError'
               ? 'The camera is busy. Close other apps using it, then try again.'
-              : cause instanceof Error ? cause.message : 'Camera access was not available.',
+              : mutationError(cause, 'Camera access was not available.'),
       );
       stop();
     }

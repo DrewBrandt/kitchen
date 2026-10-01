@@ -31,6 +31,7 @@ export type NutritionValues = Record<NutrientName, number>;
 export interface FoodLogEntry {
   id?: string;
   eventIds?: string[];
+  events?: Array<{ id: string; label: string; portion: string; time: string; cost: number | null; costIsEstimated: boolean }>;
   emoji: string;
   label: string;
   serving: string;

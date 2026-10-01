@@ -1,3 +1,4 @@
+import { runRetryableMutation } from './mutation-feedback';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
@@ -199,7 +200,7 @@ export const groupFoodLogRows = (logs: FoodLogRow[]) => {
 
   for (const log of [...logs].sort((left, right) => right.occurred_at.localeCompare(left.occurred_at))) {
     const occurredAt = Date.parse(log.occurred_at);
-    const candidate = log.product ? latestGroupByProduct.get(log.product) : undefined;
+    const candidate = log.product && log.time_precision !== 'dateOnly' ? latestGroupByProduct.get(log.product) : undefined;
     if (candidate && Number.isFinite(occurredAt) && candidate.newestTime - occurredAt <= FOOD_LOG_GROUP_WINDOW_MS) {
       candidate.group.push(log);
       continue;
@@ -207,7 +208,7 @@ export const groupFoodLogRows = (logs: FoodLogRow[]) => {
 
     const group = [log];
     groups.push(group);
-    if (log.product && Number.isFinite(occurredAt)) latestGroupByProduct.set(log.product, { group, newestTime: occurredAt });
+    if (log.product && log.time_precision !== 'dateOnly' && Number.isFinite(occurredAt)) latestGroupByProduct.set(log.product, { group, newestTime: occurredAt });
   }
 
   return groups;
@@ -601,7 +602,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       ? costs.reduce((total, value) => total + Number(value.cost), 0)
       : null;
     const oldest = group.at(-1)!;
-    const formatTime = (entry: FoodLogRow) => new Date(entry.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const formatTime = (entry: FoodLogRow) => entry.time_precision === 'dateOnly' ? 'Time not specified' : new Date(entry.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: settings.time_zone });
     const time = oldest.occurred_at === log.occurred_at ? formatTime(log) : `${formatTime(oldest)}–${formatTime(log)}`;
     const summedNutrition = Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, sum(group, field)])) as NutritionValues;
     const serving = group.length === 1
@@ -611,6 +612,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return {
       id: log.id,
       eventIds: group.map((entry) => entry.id),
+      events: group.map((entry) => ({ id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
       emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
       label: log.label,
       serving: `${serving}${qualifier}`,
@@ -872,7 +874,9 @@ export async function undoPrep(client: Client, prepId: string) {
 }
 
 export async function cookRecipe(client: Client, recipeId: string, options: PreparationOptions = {}): Promise<PreparationResult> {
+  return runRetryableMutation(client, 'prepare_recipe', { recipeId, options }, async (requestId, occurredAt) => {
   const { data, error } = await client.rpc('prepare_recipe', {
+    p_request_id: requestId, p_occurred_at: occurredAt,
     p_recipe: recipeId,
     p_scale: options.scale ?? 1,
     ...(options.servingsMade === undefined ? {} : { p_servings: options.servingsMade }),
@@ -891,6 +895,7 @@ export async function cookRecipe(client: Client, recipeId: string, options: Prep
     location: String(result.location),
     foodLogId: result.foodLogId ? String(result.foodLogId) : null,
   };
+  });
 }
 
 export async function savePrepFeedback(client: Client, prepId: string, ease: number, taste: number, actualMinutes: number) {
@@ -905,16 +910,19 @@ export async function removePlannedMeal(client: Client, planId: string) {
 
 export async function removePlannedMeals(client: Client, planIds: string[]) {
   const { error } = await client.from('meal_plans').delete().in('id', planIds);
+  if (error?.code === '23503') throw new Error('This preparation still supplies future leftovers. Remove those leftover plans or reassign them to a cooked batch first.');
   if (error) throw error;
 }
 
 export async function consumePlannedMeals(client: Client, consumptions: PlannedMealConsumption[]) {
-  const { data, error } = await client.rpc('consume_planned_meals', {
+  return runRetryableMutation(client, 'consume_planned_meals', consumptions, async (requestId, occurredAt) => {
+  const { data, error } = await client.rpc('consume_planned_meals', { p_request_id: requestId, p_occurred_at: occurredAt,
     p_meal_plans: consumptions.map((consumption) => consumption.mealPlanId),
     p_servings: consumptions.map((consumption) => consumption.servings),
   });
   if (error) throw error;
   return data;
+  });
 }
 
 export async function setPlannedConsumptionServings(client: Client, planId: string, servings: number) {
@@ -929,26 +937,34 @@ export async function removeShoppingItem(client: Client, itemId: string) {
 }
 
 export async function consumeInventoryLot(client: Client, lotId: string, quantity: number) {
-  const { data, error } = await client.rpc('consume_inventory_lot', { p_lot: lotId, p_quantity: quantity });
+  return runRetryableMutation(client, 'consume_inventory_lot', { lotId, quantity }, async (requestId, occurredAt) => {
+  const { data, error } = await client.rpc('consume_inventory_lot', { p_request_id: requestId, p_occurred_at: occurredAt, p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
   return data;
+  });
 }
 
 export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false) {
-  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_lot: lotId, p_remaining: remaining, p_discard: discard });
+  return runRetryableMutation(client, 'set_inventory_lot_quantity', { lotId, remaining, discard }, async (requestId) => {
+  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_request_id: requestId, p_lot: lotId, p_remaining: remaining, p_discard: discard });
   if (error) throw error;
   return data;
+  });
 }
 
 export async function cookRecipes(client: Client, recipeIds: string[]) {
-  const { error } = await client.rpc('cook_recipes', { p_recipes: recipeIds });
+  return runRetryableMutation(client, 'cook_recipes', recipeIds, async (requestId) => {
+  const { error } = await client.rpc('cook_recipes', { p_request_id: requestId, p_recipes: recipeIds });
   if (error) throw error;
+  });
 }
 
 export async function consumePreparedLot(client: Client, lotId: string, quantity = 1) {
-  const { data, error } = await client.rpc('consume_prepared_lot', { p_lot: lotId, p_quantity: quantity });
+  return runRetryableMutation(client, 'consume_prepared_lot', { lotId, quantity }, async (requestId, occurredAt) => {
+  const { data, error } = await client.rpc('consume_prepared_lot', { p_request_id: requestId, p_occurred_at: occurredAt, p_lot: lotId, p_quantity: quantity });
   if (error) throw error;
   return data;
+  });
 }
 
 export async function rebuildShoppingFromPlan(client: Client) {

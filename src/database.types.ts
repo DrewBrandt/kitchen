@@ -1500,11 +1500,11 @@ export type Database = {
     }
     Functions: {
       consume_inventory_lot: {
-        Args: { p_lot: string; p_occurred_at?: string; p_quantity: number }
+        Args: { p_request_id?: string;  p_lot: string; p_occurred_at?: string; p_quantity: number }
         Returns: string
       }
       consume_planned_meals: {
-        Args: {
+        Args: { p_request_id?: string;
           p_meal_plans: string[]
           p_occurred_at?: string
           p_servings: number[]
@@ -1521,7 +1521,7 @@ export type Database = {
         Returns: string
       }
       consume_prepared_lot: {
-        Args: { p_lot: string; p_occurred_at?: string; p_quantity?: number }
+        Args: { p_request_id?: string;  p_lot: string; p_occurred_at?: string; p_quantity?: number }
         Returns: string
       }
       consume_product_purchase:
@@ -1577,7 +1577,7 @@ export type Database = {
         }
         Returns: string
       }
-      cook_recipes: { Args: { p_recipes: string[] }; Returns: string[] }
+      cook_recipes: { Args: { p_request_id?: string;  p_recipes: string[] }; Returns: string[] }
       food_accepts_unit: {
         Args: { p_food: string; p_unit: string }
         Returns: boolean
@@ -1757,7 +1757,7 @@ export type Database = {
       }
       prep_total_cost: { Args: { p_prep: string }; Returns: number }
       prepare_recipe: {
-        Args: {
+        Args: { p_request_id?: string;
           p_eaten_servings?: number
           p_location?: string
           p_meal_plan?: string
@@ -1805,7 +1805,7 @@ export type Database = {
         Returns: undefined
       }
       set_inventory_lot_quantity: {
-        Args: { p_discard?: boolean; p_lot: string; p_remaining: number }
+        Args: { p_request_id?: string;  p_discard?: boolean; p_lot: string; p_remaining: number }
         Returns: string
       }
       to_base_quantity: {
