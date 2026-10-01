@@ -394,12 +394,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         const requestedQuantity = Number(ingredient.qty);
         if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
         const ingredientName = pluralizeFoodName(food.name, food.plural, requestedQuantity);
-        if (food.always_available) return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
+        if (food.always_available) return { quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
         const enough = availableBase + 0.0000001 >= neededBase;
         const availableInRequestedUnit = fromFoodBase(food, availableBase, unit);
-        return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
+        return { quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, availableQuantity: availableInRequestedUnit, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
       ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,
