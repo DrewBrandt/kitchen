@@ -5,6 +5,7 @@ import { usePantryData, type NutrientName, type NutritionValues, type PlannedMea
 import { usd } from './lib/cost';
 import { formatPreparedAt, formatAmount, formatNutritionAmount, formatServings } from './lib/format';
 import { nutritionForServings } from './lib/nutrition';
+import { runRetryableMutation } from './lib/mutation-feedback';
 
 type SourceType = 'recipe' | 'pantry' | 'leftover';
 type Notify = (message: string) => void;
@@ -182,7 +183,15 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
     form.set('scale_factor', '1');
     form.set('planned_servings', String(amount));
     setSaving('plan');
-    try { notify(await onPlan(form)); setOpen(false); }
+    try {
+      const message = await runRetryableMutation({}, 'scratchpad_plan', Array.from(form.entries()), async (requestId, _occurredAt, submitted) => {
+        const attempt = new FormData();
+        for (const [key, value] of submitted) attempt.set(key, value);
+        attempt.set('request_id', requestId);
+        return onPlan(attempt);
+      }, { type, selectedId, stockChoice, amount });
+      notify(message); setOpen(false);
+    }
     catch (error) { notify(error instanceof Error ? error.message : 'Could not add this to today.'); }
     finally { setSaving(''); }
   }
