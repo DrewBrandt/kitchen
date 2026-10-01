@@ -614,6 +614,7 @@ export type Database = {
           id: string
           inventory_lot: string | null
           intent: string
+          source_meal_plan: string | null
           leftover_of_group_id: string | null
           legacy_firebase_id: string | null
           made_at: string | null
@@ -639,6 +640,7 @@ export type Database = {
           id?: string
           inventory_lot?: string | null
           intent?: string
+          source_meal_plan?: string | null
           leftover_of_group_id?: string | null
           legacy_firebase_id?: string | null
           made_at?: string | null
@@ -664,6 +666,7 @@ export type Database = {
           id?: string
           inventory_lot?: string | null
           intent?: string
+          source_meal_plan?: string | null
           leftover_of_group_id?: string | null
           legacy_firebase_id?: string | null
           made_at?: string | null
