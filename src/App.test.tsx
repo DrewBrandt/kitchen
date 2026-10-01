@@ -212,7 +212,7 @@ describe('Pantry web UI', () => {
     localStorage.setItem('mise.recipe-progress.pancakes', JSON.stringify(['i0']));
     localStorage.setItem('mise.recipe-progress.eggs', JSON.stringify(['i0']));
     const user = userEvent.setup();
-    render(<App />);
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: [] }}><App /></PantryDataProvider>);
 
     const pinned = screen.getByRole('navigation', { name: 'Pinned cooking' });
     await user.click(within(pinned).getByRole('button', { name: /Simple Pancakes/ }));
@@ -249,6 +249,63 @@ describe('Pantry web UI', () => {
     await user.click(within(screen.getByRole('article', { name: 'Simple Pancakes' })).getByRole('button', { name: /all-purpose flour/i }));
     await user.click(within(screen.getByRole('navigation', { name: 'Kitchen' })).getByRole('button', { name: 'Today' }));
     expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
+  });
+
+  it('starts a combined meal with no recipes selected', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    render(<App onCookRecipes={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Choose recipes' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Cook 0 recipes' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: /Simple Pancakes/ }));
+    expect(within(dialog).getByRole('button', { name: 'Cook 1 recipes' })).toBeEnabled();
+  });
+
+  it('keeps repeated planned recipes independent and scales ingredients without changing yield semantics', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const recipe = { ...previewPantryData.recipes[0], ingredients: [{ label: '2 cups flour', stock: 'In stock', quantity: 2, unit: 'cups', name: 'flour', availableQuantity: 3 }] };
+    const plans = [1, 2].map((n) => ({ ...previewPantryData.plannedMeals[0], id: `plan-${n}`, groupId: `group-${n}`, dateKey: currentDateKey(), recipeId: recipe.id, status: 'planned' as const, isLeftover: false, scaleFactor: n, plannedServings: 1 }));
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', mealPlanId: 'plan-2', servingsMade: 3, servingsRemaining: 3, location: 'fridge', foodLogId: null });
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: plans }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: 'On deck' }));
+    const cards = screen.getAllByRole('article', { name: recipe.name });
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('2 cups flour')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('4 cups flour')).toBeInTheDocument();
+    expect(within(cards[0]).getByText('3 cups in stock')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('3 cups in stock · short')).toBeInTheDocument();
+    await user.click(within(cards[0]).getByRole('button', { name: /2 cups flour/ }));
+    expect(within(cards[1]).getByText(`0 of ${recipe.steps.length + 1} complete`)).toBeInTheDocument();
+    const yieldInput = within(cards[1]).getByLabelText(`Servings of ${recipe.name} made`);
+    await user.clear(yieldInput);
+    await user.type(yieldInput, '3');
+    await user.click(within(cards[1]).getByRole('button', { name: 'Finish cooking' }));
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, { scale: 2, servingsMade: 3, location: 'fridge', mealPlanId: 'plan-2', servingsEaten: 0 }));
+    expect(screen.getAllByRole('article', { name: recipe.name })).toHaveLength(1);
+  });
+
+  it('cooks explicit whole or fractional pieces using an estimated lot weight without changing the recipe', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const recipe = { ...previewPantryData.recipes[0], ingredients: [{ id: 'ingredient', label: '600 g chicken', name: 'chicken', stock: '900 g in stock', quantity: 600, unit: 'g', pieceLots: [{ id: 'chicken-lot', label: 'Chicken package · 900 g', remainingBase: 900 }] }] };
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', servingsMade: 4, servingsRemaining: 4, location: 'fridge', foodLogId: null });
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: [] }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Make batch' }));
+    const card = screen.getByRole('article', { name: recipe.name });
+    await user.click(within(card).getByRole('checkbox', { name: 'Use pieces for chicken' }));
+    expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
+    await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
+    await user.click(within(card).getByRole('button', { name: 'Half' }));
+    expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Quarter' }));
+    expect(within(card).getByLabelText('Pieces to cook')).toHaveValue(0.25);
+    await user.click(within(card).getByRole('button', { name: 'Whole' }));
+    await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ pieceInputs: [{ ingredientId: 'ingredient', lotId: 'chicken-lot', pieces: 1, lotPieces: 6, expectedRemaining: 900 }] })));
   });
 
   it('finishes a planned recipe as one linked batch and removes it from on deck', async () => {

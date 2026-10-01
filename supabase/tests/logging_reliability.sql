@@ -13,15 +13,15 @@ begin
     raise exception 'Unauthorized request changed the ledger';
   end if;
   perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
-  result := public.log_manual_consumption('QA rollback meal', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
-  repeated := public.log_manual_consumption('QA rollback meal', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
+  result := public.log_manual_consumption('QA rollback meal', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[{"label":"QA rollback meal"}]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
+  repeated := public.log_manual_consumption('QA rollback meal', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[{"label":"QA rollback meal"}]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
   if result is distinct from repeated then raise exception 'Retry did not return original result'; end if;
   select * into entry from public.food_logs where id = (result ->> 'id')::uuid;
   if entry.kcal is not null or entry.cost is not null or entry.out_of_pocket_cost <> 0 or entry.nutrition_status <> 'unknown' then
     raise exception 'Unknown value/nutrition or explicit paid zero was lost';
   end if;
   begin
-    perform public.log_manual_consumption('QA changed input', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
+    perform public.log_manual_consumption('QA changed input', 'half bowl', '2026-10-01T12:00:00Z', 'dateOnly', null, null, '[{"label":"QA rollback meal"}]', 'gift', null, 0, 'other', false, 'unknown value; paid zero', null, test_request_id, null);
     raise exception 'Changed retry unexpectedly succeeded';
   exception when others then
     if sqlerrm not like 'This request ID belongs%' then raise; end if;

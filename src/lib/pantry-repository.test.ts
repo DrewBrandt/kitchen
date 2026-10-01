@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { describe, expect, it, vi } from 'vitest';
+import { cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
 
 describe('food log display groups', () => {
   const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
@@ -98,5 +98,20 @@ describe('estimated consumed product cost', () => {
   it('keeps unknown price different from a free package', () => {
     expect(estimatedProductPortionCost(product(null), 1)).toBeNull();
     expect(estimatedProductPortionCost(product(0), 1)).toBe(0);
+  });
+});
+
+describe('piece cooking retry contract', () => {
+  it('reuses request ID and time after an ambiguous failure and starts a new intentional operation after success', async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({ data: null, error: { message: 'Connection lost' } }).mockResolvedValue({ data: { prepId: 'prep', lotId: 'lot', servingsMade: 3, servingsRemaining: 3, location: 'fridge' }, error: null });
+    const client = { rpc } as unknown as Parameters<typeof cookRecipe>[0];
+    const options = { pieceInputs: [{ ingredientId: 'ingredient', lotId: 'lot', pieces: 2, lotPieces: 6, expectedRemaining: 900 }] };
+    await expect(cookRecipe(client, 'recipe', options)).rejects.toMatchObject({ message: 'Connection lost' });
+    await cookRecipe(client, 'recipe', options);
+    expect(rpc.mock.calls[0][1].p_request_id).toBe(rpc.mock.calls[1][1].p_request_id);
+    expect(rpc.mock.calls[0][1].p_occurred_at).toBe(rpc.mock.calls[1][1].p_occurred_at);
+    expect(rpc.mock.calls[1][1].p_piece_inputs).toEqual(options.pieceInputs);
+    await cookRecipe(client, 'recipe', options);
+    expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[1][1].p_request_id);
   });
 });

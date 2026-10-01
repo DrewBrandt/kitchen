@@ -1,9 +1,9 @@
-import { runRetryableMutation } from './mutation-feedback';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
-import { formatServings } from './format';
+import { formatAmount, formatServings } from './format';
+import { runRetryableMutation } from './mutation-feedback';
 import { nutritionForServings } from './nutrition';
 
 type Client = SupabaseClient<Database>;
@@ -400,12 +400,19 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         const requestedQuantity = Number(ingredient.qty);
         if (!food || !unit) return { label: `${formatRecipeQuantity(requestedQuantity)} Ingredient`, stock: 'Unit unavailable · short' };
         const ingredientName = pluralizeFoodName(food.name, food.plural, requestedQuantity);
-        if (food.always_available) return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
+        const pieceLots = food.measure_style === 'weight' && !food.always_available ? rawLots.filter((lot) => lot.product && products.get(lot.product)?.food === food.id && (!ingredient.pinned_product || lot.product === ingredient.pinned_product) && Number(lot.remaining_qty) > 0).map((lot) => ({
+          id: lot.id,
+          label: `${products.get(lot.product!)?.name ?? food.name} · ${formatAmount(Number(lot.remaining_qty))} g · ${lot.location ?? 'unassigned'}`,
+          remainingBase: Number(lot.remaining_qty),
+          remainingPieces: lot.piece_count && lot.piece_basis_qty ? Number(lot.remaining_qty) * Number(lot.piece_count) / Number(lot.piece_basis_qty) : undefined,
+        })) : [];
+        const pieceFields = { id: ingredient.id, pieceLots };
+        if (food.always_available) return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
         const enough = availableBase + 0.0000001 >= neededBase;
         const availableInRequestedUnit = fromFoodBase(food, availableBase, unit);
-        return { label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
+        return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, availableQuantity: availableInRequestedUnit, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
       ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,
@@ -898,27 +905,24 @@ export async function undoPrep(client: Client, prepId: string) {
 }
 
 export async function cookRecipe(client: Client, recipeId: string, options: PreparationOptions = {}): Promise<PreparationResult> {
-  return runRetryableMutation(client, 'prepare_recipe', { recipeId, options }, async (requestId, occurredAt) => {
-  const { data, error } = await client.rpc('prepare_recipe', {
-    p_request_id: requestId, p_occurred_at: occurredAt,
-    p_recipe: recipeId,
-    p_scale: options.scale ?? 1,
-    ...(options.servingsMade === undefined ? {} : { p_servings: options.servingsMade }),
-    p_location: options.location ?? 'fridge',
-    ...(options.mealPlanId ? { p_meal_plan: options.mealPlanId } : {}),
-    p_eaten_servings: options.servingsEaten ?? 0,
-  });
-  if (error) throw error;
-  const result = data as Record<string, unknown>;
-  return {
-    prepId: String(result.prepId),
-    lotId: String(result.lotId),
-    mealPlanId: result.mealPlanId ? String(result.mealPlanId) : null,
-    servingsMade: Number(result.servingsMade),
-    servingsRemaining: Number(result.servingsRemaining),
-    location: String(result.location),
-    foodLogId: result.foodLogId ? String(result.foodLogId) : null,
-  };
+  return runRetryableMutation(client, options.pieceInputs?.length ? 'prepareRecipePieces' : 'prepare_recipe', { recipeId, options }, async (requestId, occurredAt) => {
+    const { data, error } = await client.rpc('prepare_recipe', {
+      p_recipe: recipeId, p_request_id: requestId, p_occurred_at: occurredAt,
+      p_scale: options.scale ?? 1,
+      ...(options.servingsMade === undefined ? {} : { p_servings: options.servingsMade }),
+      p_location: options.location ?? 'fridge',
+      ...(options.mealPlanId ? { p_meal_plan: options.mealPlanId } : {}),
+      p_eaten_servings: options.servingsEaten ?? 0,
+      ...(options.pieceInputs?.length ? { p_piece_inputs: options.pieceInputs.map((input) => ({ ...input })) } : {}),
+    });
+    if (error) throw error;
+    const result = data as Record<string, unknown>;
+    return {
+      prepId: String(result.prepId), lotId: String(result.lotId),
+      mealPlanId: result.mealPlanId ? String(result.mealPlanId) : null,
+      servingsMade: Number(result.servingsMade), servingsRemaining: Number(result.servingsRemaining),
+      location: String(result.location), foodLogId: result.foodLogId ? String(result.foodLogId) : null,
+    };
   });
 }
 

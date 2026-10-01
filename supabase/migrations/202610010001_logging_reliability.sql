@@ -343,8 +343,13 @@ declare
   purchased_base numeric;
   consumed_base numeric;
   action_result jsonb;
+  prior_result jsonb;
+  inner_request uuid;
 begin
   if not public.is_app_owner() then raise exception 'Unauthorized' using errcode = '42501'; end if;
+  prior_result := public.claim_mutation_payload(p_request_id, 'consumeProductPurchaseWithUnit', jsonb_build_object('p_product', p_product, 'p_purchased_quantity', p_purchased_quantity, 'p_consumed_quantity', p_consumed_quantity, 'p_quantity_unit', p_quantity_unit, 'p_acquisition_type', p_acquisition_type, 'p_total_price', p_total_price, 'p_out_of_pocket_cost', p_out_of_pocket_cost, 'p_paid_by', p_paid_by, 'p_cost_is_estimated', p_cost_is_estimated, 'p_cost_source', p_cost_source, 'p_price_as_of', p_price_as_of, 'p_location', p_location, 'p_occurred_at', p_occurred_at, 'p_time_precision', p_time_precision, 'p_label', p_label, 'p_note', p_note));
+  if prior_result is not null then return prior_result; end if;
+  inner_request := gen_random_uuid();
   if nullif(trim(coalesce(p_quantity_unit, '')), '') is null then
     raise exception 'quantityUnit is required';
   end if;
@@ -360,12 +365,14 @@ begin
   action_result := public.consume_product_purchase(
     p_product, purchased_base, consumed_base, p_acquisition_type,
     p_total_price, p_out_of_pocket_cost, p_paid_by, p_cost_is_estimated,
-    p_cost_source, p_price_as_of, p_request_id, p_location, p_occurred_at,
+    p_cost_source, p_price_as_of, inner_request, p_location, p_occurred_at,
     p_time_precision, p_label, p_note
   );
-  return (action_result - 'remainingQuantity') || jsonb_build_object(
+  action_result := (action_result - 'remainingQuantity') || jsonb_build_object(
     'remainingQuantity', p_purchased_quantity - p_consumed_quantity,
     'quantityUnit', trim(p_quantity_unit)
   );
+  perform public.gpt_complete_request(p_request_id, action_result);
+  return action_result;
 end;
 $$;
