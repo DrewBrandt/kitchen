@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AccountAvatar } from './AccountAvatar';
 import { App } from './App';
@@ -6,7 +6,8 @@ import { App } from './App';
 describe('signed-in account identity', () => {
   it('shows the photo and accessible email in the existing account control', () => {
     render(<App ownerName="Kitchen Owner" ownerEmail="owner@example.test" ownerAvatarUrl="https://example.test/photo.png" />);
-    expect(screen.getByRole('img', { name: "Kitchen Owner's Google profile photo" })).toHaveAttribute('src', 'https://example.test/photo.png');
+    const sidebar = within(screen.getByRole('complementary'));
+    expect(sidebar.getByRole('img', { name: "Kitchen Owner's Google profile photo" })).toHaveAttribute('src', 'https://example.test/photo.png');
     expect(screen.getByRole('button', { name: 'Kitchen Owner (owner@example.test) — Routine & food profile' })).toHaveAttribute('title', 'Signed in as owner@example.test');
     expect(screen.getByText('owner@example.test')).toBeVisible();
   });

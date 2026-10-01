@@ -57,9 +57,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar-spacer { flex: 1; min-height: 20px; }
 .profile-row { width: 100%; background: transparent; border: 0; border-top: 1px solid #191f1d; border-radius: 8px; padding: 10px 4px 2px; display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; }
 .profile-row:hover { background: #121715; }
-.profile-row .avatar { width: 28px; height: 28px; border-radius: 7px; background: #1c2320; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 10px; }
-.profile-row .avatar { flex-shrink: 0; overflow: hidden; }
-.profile-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-row .avatar, .mobile-account .avatar { width: 28px; height: 28px; border-radius: 7px; background: #1c2320; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 10px; flex-shrink: 0; overflow: hidden; }
+.profile-row .avatar img, .mobile-account .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .profile-row > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .profile-row .account-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-row strong { font-size: 12.5px; font-weight: 500; }
@@ -603,6 +602,13 @@ button.soon-row:hover { background: #121715; }
 .toast-dismiss svg { width: 13px; color: inherit; }
 @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
 .mobile-nav { display: none; }
+.mobile-account { display: none; position: relative; flex-shrink: 0; }
+.mobile-account-toggle { display: grid; place-items: center; width: 44px; height: 44px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; }
+.mobile-account .avatar { width: 34px; height: 34px; border-radius: 8px; }
+.mobile-account-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: min(280px, calc(100vw - 36px)); display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid #303b35; border-radius: 12px; background: #151b18; box-shadow: 0 12px 32px #0008; }
+.mobile-account-panel > small { color: var(--muted); }
+.mobile-account-email { overflow-wrap: anywhere; font-size: 13px; }
+.mobile-account-panel > button { min-height: 44px; padding: 8px 10px; text-align: left; border: 1px solid #303b35; border-radius: 8px; background: #1c2520; color: var(--text); cursor: pointer; }
 
 @media (max-width: 980px) {
   .sidebar { width: 198px; flex-basis: 198px; }
@@ -618,6 +624,7 @@ button.soon-row:hover { background: #121715; }
 }
 
 @media (max-width: 720px) {
+  .mobile-account { display: block; }
   body { background: #0c0f0e; }
   .app-shell { display: block; }
   .sidebar { display: none; }

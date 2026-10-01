@@ -320,7 +320,7 @@ describe('Pantry web UI', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: /Drew/ }));
+    await user.click(screen.getByRole('button', { name: /Drew.*Routine & food profile/ }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Food constraints')).toBeInTheDocument();
     expect(within(dialog).getByText('Google Calendar')).toBeInTheDocument();

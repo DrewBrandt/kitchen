@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccountAvatar } from './AccountAvatar';
+import { MobileAccount } from './MobileAccount';
 import type { IScannerControls } from '@zxing/browser';
 import {
   Archive,
@@ -343,6 +344,7 @@ export function App({ ownerName = 'Drew', ownerEmail, ownerAvatarUrl, syncStatus
               <button className="button primary" onClick={() => page === 'on-deck' ? setPage('recipes') : open(PANEL_FOR_PAGE[page])}>
                 <Plus /> <span>{meta.primary}</span>
               </button>
+              <MobileAccount name={ownerName} email={ownerEmail} photo={ownerAvatarUrl} onProfile={() => open('profile')} onSignOut={onSignOut} />
             </div>
           </div>
         </header>
