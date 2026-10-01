@@ -8,6 +8,7 @@
 - New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `npm ci` at the repository root. Use the lockfile; do not copy `node_modules` or build output from another worktree.
 - When validating a feature worktree without environment files, also build with nonempty `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` placeholders. Otherwise Vite can remove the authenticated application as unreachable, leaving its bundle unverified. Use `https://example.supabase.co` and `build-validation-placeholder` for this build-only check; never deploy that output.
 - If the sandbox blocks dependency network access, rerun only the standard locked restore command with the required network approval. Do not replace the locked restore with copied dependencies or an unpinned install.
+- If Vitest fails before running tests with `EPERM` creating its temporary `client` directory under the user's Temp folder, rerun the same test command with narrowly scoped approval; do not change machine permissions or copy dependencies.
 - Supabase CLI commands write telemetry state under `C:\Users\<user>\.supabase` even for read-only help and validation commands. In a restricted workspace, use narrowly scoped approval for the exact Supabase command; do not redirect or copy that user-level state into the repository.
 - New worktrees do not inherit the ignored Supabase project link. Before a dry run,
   database test, or deployment there, run `npx.cmd supabase link --project-ref xaetuqdtnolzspfvqvja`;
