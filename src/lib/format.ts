@@ -16,6 +16,10 @@ export function formatAmount(value: number, maximumFractionDigits = 2) {
   return value.toLocaleString(undefined, { maximumFractionDigits });
 }
 
+export function formatPreparedAt(value: string, timeZone: string) {
+  return new Date(value).toLocaleString([], { timeZone, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 export function formatServings(value: number) {
   return `${formatAmount(value)} serving${Math.abs(value - 1) < 0.001 ? '' : 's'}`;
 }

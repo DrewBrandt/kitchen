@@ -100,6 +100,8 @@ export interface PlannedMealView {
   consumptionStatus: string;
   prepId?: string;
   preparedLotId?: string;
+  preparedServingsAvailable?: number;
+  waitingForPreparation?: boolean;
   cost: number | null;
   costIsEstimated: boolean;
   nutrition?: NutritionValues;

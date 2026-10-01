@@ -1126,3 +1126,16 @@ button.soon-row:hover { background: #121715; }
 .piece-ingredient-control .deck-batch-fields { margin-top: 12px; }
 .piece-ingredient-control p { grid-column: 1 / -1; line-height: 1.5; }
 .piece-ingredient-control [role="group"] { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.meal-recipe-choice { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; padding: 14px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; margin-bottom: 8px; }
+.meal-recipe-choice[aria-pressed="true"] { border-color: var(--mint); background: #13241b; }
+.meal-recipe-choice strong, .meal-recipe-choice small { display: block; }
+.meal-recipe-choice small { color: var(--muted); margin-top: 4px; }
+.meal-waiting { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.5; margin: 8px 0 0; }
+.week-meal-cost small { display: block; font-size: 10px; font-weight: normal; color: var(--muted); }
+.deck-section-nav { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.deck-section-nav button { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: #18211c; font-size: 12px; }
+.deck-section { scroll-margin-top: 8px; }
+.deck-section > summary { cursor: pointer; padding: 14px 0 8px; color: var(--mint); font-size: 13px; font-weight: 600; }
+.piece-ingredient-control:not(:has(.deck-batch-fields)) { border: 0; padding: 2px 0; margin-bottom: 8px; }
+.piece-ingredient-control [aria-pressed="true"] { border-color: var(--mint); color: var(--mint); }

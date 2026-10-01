@@ -1,3 +1,4 @@
+import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
 import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
@@ -827,6 +828,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       sourceKind,
       consumeFromInventory: plan.consume_from_inventory ?? undefined,
       status: plan.status,
+      ...(plan.recipe || exactLot?.prep ? preparedPlanAvailability(plan, plansResult.data ?? [], prepsResult.data ?? [], lotsResult.data ?? []) : {}),
       isLeftover: plan.intent === 'leftover' || Boolean(exactLot?.prep),
       scaleFactor: Number(plan.scale_factor),
       plannedServings: servings,

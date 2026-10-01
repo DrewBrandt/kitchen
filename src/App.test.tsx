@@ -253,8 +253,8 @@ describe('Pantry web UI', () => {
 
     expect(screen.getByRole('heading', { name: 'On deck' })).toBeInTheDocument();
     const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
-    expect(within(workspace).getByText('INGREDIENTS')).toBeInTheDocument();
-    expect(within(workspace).getByText('METHOD')).toBeInTheDocument();
+    expect(within(workspace).getByText('Ingredients', { selector: 'summary' })).toBeInTheDocument();
+    expect(within(workspace).getByText('Method', { selector: 'summary' })).toBeInTheDocument();
     expect(within(workspace).getByText('0 of 8 complete')).toBeInTheDocument();
 
     await user.click(within(workspace).getByRole('button', { name: /all-purpose flour/i }));
@@ -305,16 +305,73 @@ describe('Pantry web UI', () => {
     expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
   });
 
+  it('waits for every uneaten leftover dish and enables only available linked portions', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const onConsume = vi.fn().mockResolvedValue([]);
+    const meals = ['Rice', 'Chicken'].map((name, i) => ({ ...previewPantryData.plannedMeals[0], id: `leftover-${i}`, name, groupId: 'leftovers', dateKey: currentDateKey(), isLeftover: true, status: 'planned' as const, consumptionStatus: 'planned', preparedServingsAvailable: i === 0 ? 2 : 0, waitingForPreparation: i === 1 }));
+    const { rerender } = render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: meals }}><App onConsumePlannedMeals={onConsume} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: /This week/ }));
+    expect(screen.getByText(/Chicken: waiting for its planned preparation/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log eaten' })).not.toBeInTheDocument();
+    rerender(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: meals.map((meal) => ({ ...meal, preparedServingsAvailable: 2, waitingForPreparation: false })) }}><App onConsumePlannedMeals={onConsume} /></PantryDataProvider>);
+    const rice = screen.getByRole('spinbutton', { name: 'Servings of Rice eaten now' });
+    await user.clear(rice); await user.type(rice, '3');
+    expect(screen.getByRole('button', { name: 'Log eaten' })).toBeDisabled();
+    await user.clear(rice); await user.type(rice, '1');
+    await user.click(screen.getByRole('button', { name: 'Log eaten' }));
+    expect(onConsume).toHaveBeenCalledWith([{ mealPlanId: 'leftover-0', servings: 1 }, { mealPlanId: 'leftover-1', servings: meals[1].plannedServings }]);
+  });
+
+  it('does not let an already eaten component block the remaining ready dish', async () => {
+    localStorage.clear();
+    const meals = ['Rice', 'Chicken'].map((name, i) => ({ ...previewPantryData.plannedMeals[0], id: `leftover-${i}`, name, groupId: 'leftovers', dateKey: currentDateKey(), isLeftover: true, status: 'planned' as const, consumptionStatus: i === 0 ? 'fulfilled' : 'planned', preparedServingsAvailable: i === 0 ? 0 : 2, waitingForPreparation: false }));
+    render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: meals }}><App onConsumePlannedMeals={vi.fn()} /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: /This week/ }));
+    expect(screen.getByRole('button', { name: 'Log eaten' })).toBeEnabled();
+    expect(screen.queryByRole('spinbutton', { name: 'Servings of Rice eaten now' })).not.toBeInTheDocument();
+  });
+
+  it('opens and jumps to the method without unmounting ingredient controls', async () => {
+    localStorage.clear();
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: 'Recipes' }));
+      await userEvent.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
+      const card = screen.getByRole('article', { name: previewPantryData.recipes[0].name });
+      const method = card.querySelectorAll('details')[1];
+      method.open = false;
+      await userEvent.click(within(card).getByRole('button', { name: 'Method' }));
+      expect(method.open).toBe(true);
+      expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
+      expect(within(card).getByRole('spinbutton', { name: /Servings of .* made/ })).toBeInTheDocument();
+    } finally { HTMLElement.prototype.scrollIntoView = previous; }
+  });
+
   it('starts a combined meal with no recipes selected', async () => {
     localStorage.clear();
     const user = userEvent.setup();
-    render(<App onCookRecipes={vi.fn()} />);
+    const onCookRecipes = vi.fn();
+    const onCookRecipe = vi.fn();
+    render(<App onCookRecipes={onCookRecipes} onCookRecipe={onCookRecipe} />);
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getByRole('button', { name: 'Choose recipes' }));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('button', { name: 'Cook 0 recipes' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Add to On deck' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: /Simple Pancakes/ }));
-    expect(within(dialog).getByRole('button', { name: 'Cook 1 recipes' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Add to On deck' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: /Simple Pancakes/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(dialog).getByRole('button', { name: /Simple Pancakes/ })).not.toHaveClass('checked');
+    await user.click(within(dialog).getByRole('button', { name: /Soft Scrambled Eggs/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add to On deck' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Simple Pancakes' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Soft Scrambled Eggs' })).toBeInTheDocument();
+    expect(onCookRecipes).not.toHaveBeenCalled();
+    expect(onCookRecipe).not.toHaveBeenCalled();
   });
 
   it('keeps repeated planned recipes independent and scales ingredients without changing yield semantics', async () => {

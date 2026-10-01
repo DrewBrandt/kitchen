@@ -3,7 +3,7 @@ import { BookOpen, CalendarDays, Check, ChevronDown, FlaskConical, PackageOpen, 
 import type { Recipe } from './data';
 import { usePantryData, type NutrientName, type NutritionValues, type PlannedMealView, type ProductView } from './pantry-data';
 import { usd } from './lib/cost';
-import { formatAmount, formatNutritionAmount, formatServings } from './lib/format';
+import { formatPreparedAt, formatAmount, formatNutritionAmount, formatServings } from './lib/format';
 import { nutritionForServings } from './lib/nutrition';
 
 type SourceType = 'recipe' | 'pantry' | 'leftover';
@@ -47,7 +47,7 @@ function ChoiceList({ type, query, selectedId, onSelect }: { type: SourceType; q
     ? recipes.map((recipe) => ({ id: recipe.id, emoji: recipe.emoji, label: recipe.name, meta: `${recipe.minutes} min · ${formatServings(recipe.servings)} per batch`, badge: recipe.cookable === false ? 'Needs groceries' : 'Ready to cook' }))
     : type === 'pantry'
       ? products.map((product) => ({ id: product.id, emoji: product.emoji, label: product.label, meta: `${product.servingLabel} · ${formatServings(product.stockServings)} on hand`, badge: product.stockServings > 0 ? `${formatAmount(product.stockServings)} available` : 'Out of stock' }))
-      : [...preparedLots.map((lot) => ({ id: `lot:${lot.id}`, emoji: lot.emoji, label: lot.name, meta: `${formatServings(lot.servingsLeft)} remaining · ${lot.location} · ${lot.preparedAt ? `Made ${new Date(lot.preparedAt).toLocaleString([], { timeZone: settings.timeZone, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Prep date unknown'}`, badge: 'Already cooked' })), ...leftoverGroups.map((plan) => ({ id: plan.groupId, emoji: plan.emoji, label: plan.name, meta: `Scheduled ${new Date(`${plan.dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}${plan.dateKey < new Intl.DateTimeFormat('en-CA', { timeZone: settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) ? ' · Past scheduled date' : ''}`, badge: 'Planned, not cooked' }))];
+      : [...preparedLots.map((lot) => ({ id: `lot:${lot.id}`, emoji: lot.emoji, label: lot.name, meta: `${formatServings(lot.servingsLeft)} remaining · ${lot.location} · ${lot.preparedAt ? `Made ${formatPreparedAt(lot.preparedAt, settings.timeZone)}` : 'Prep date unknown'}`, badge: 'Already cooked' })), ...leftoverGroups.map((plan) => ({ id: plan.groupId, emoji: plan.emoji, label: plan.name, meta: `Scheduled ${new Date(`${plan.dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}${plan.dateKey < new Intl.DateTimeFormat('en-CA', { timeZone: settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) ? ' · Past scheduled date' : ''}`, badge: 'Planned, not cooked' }))];
   const filtered = choices.filter((choice) => !normalized || `${choice.label} ${choice.meta}`.toLowerCase().includes(normalized));
   return <div className="source-results" role="listbox" aria-label={`${type} choices`}>
     {filtered.map((choice) => <button key={choice.id} type="button" role="option" aria-selected={selectedId === choice.id} className={selectedId === choice.id ? 'selected' : ''} onClick={() => onSelect(choice.id)}><span className="source-choice-emoji">{choice.emoji}</span><span className="grow"><strong>{choice.label}</strong><small>{choice.meta}</small></span><em>{choice.badge}</em>{selectedId === choice.id && <Check />}</button>)}
