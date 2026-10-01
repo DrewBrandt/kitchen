@@ -14,7 +14,7 @@ describe('quantity correction editor', () => {
     expect(screen.getByRole('button', { name: 'Save quantity correction' })).toBeDisabled();
     await userEvent.clear(input); await userEvent.type(input, '1');
     expect(screen.getByText(/Return 1 servings to the original lot/)).toBeInTheDocument();
-    expect(screen.getByText(/Corrected totals: 200 cal.*Unknown.*Cost unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/Corrected totals: 200 cal.*Unknown.*Recorded cost unknown/)).toBeInTheDocument();
     expect(screen.getByText('Event exact-event')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save quantity correction' }));
     expect(save).toHaveBeenCalledExactlyOnceWith('exact-event', 2, 1);
@@ -28,7 +28,7 @@ describe('quantity correction editor', () => {
     expect(screen.getByRole('button', { name: 'Save quantity correction' })).toBeDisabled();
     await userEvent.clear(input); await userEvent.type(input, '0.5');
     expect(screen.getByText(/Corrected amount: 4 fl oz.*Return 4 fl oz/)).toBeInTheDocument();
-    expect(screen.getByText(/Cost \$0.00/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded cost \$0.00/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save quantity correction' }));
     expect(save).toHaveBeenCalledExactlyOnceWith('raw-event', 8, 4);
   });

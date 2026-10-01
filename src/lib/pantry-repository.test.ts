@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { correctConsumedQuantity, foodLogNutrition, cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { recordedCorrectionTotals, correctConsumedQuantity, foodLogNutrition, cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
 
 describe('food log display groups', () => {
   const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
@@ -160,5 +160,18 @@ describe('consumption detail uncertainty', () => {
     const rows = [{ kcal: 100, protein_g: null, carbs_g: 0, fat_g: null, fiber_g: null, sodium_mg: null }] as unknown as Parameters<typeof foodLogNutrition>[0];
     expect(foodLogNutrition(rows)).toMatchObject({ Calories: 100, Protein: null, Carbs: 0 });
     expect(foodLogNutrition([...rows, { ...rows[0], kcal: null }])).toMatchObject({ Calories: null, Carbs: 0 });
+  });
+});
+
+
+describe('recorded correction totals', () => {
+  it('keeps recorded unknown cost unknown even when current lot valuation is known', () => {
+    const log = { kcal: 200, protein_g: null, cost: null, nutrition_is_estimated: false, cost_is_estimated: false, currentLotCost: 20 };
+    expect(recordedCorrectionTotals(log)).toEqual({ calories: 200, protein: null, cost: null, estimated: false });
+  });
+  it('uses recorded cost and flags instead of different current valuation, preserving free food', () => {
+    const log = { kcal: 200, protein_g: 0, cost: 4, nutrition_is_estimated: false, cost_is_estimated: true, currentLotCost: 20 };
+    expect(recordedCorrectionTotals(log)).toEqual({ calories: 200, protein: 0, cost: 4, estimated: true });
+    expect(recordedCorrectionTotals({ ...log, cost: 0, cost_is_estimated: false })).toMatchObject({ cost: 0, estimated: false });
   });
 });

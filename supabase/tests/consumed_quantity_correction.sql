@@ -2,10 +2,9 @@
 begin;
 do $$ begin if to_regclass('isolated_test.marker') is null then raise exception 'Isolated database required'; end if; end $$;
 do $$ begin
-  if has_function_privilege('authenticated','public.correct_consumed_quantity(uuid,uuid,numeric,numeric)','execute')
-    or has_function_privilege('anon','public.correct_consumed_quantity(uuid,uuid,numeric,numeric)','execute')
+  if has_function_privilege('anon','public.correct_consumed_quantity(uuid,uuid,numeric,numeric)','execute')
     or has_function_privilege('service_role','public.correct_consumed_quantity(uuid,uuid,numeric,numeric)','execute') then
-    raise exception 'Candidate must be ungranted';
+    raise exception 'Correction must not be exposed to anonymous or service-role callers';
   end if;
 end $$;
 grant execute on function public.correct_consumed_quantity(uuid,uuid,numeric,numeric) to authenticated;

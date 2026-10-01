@@ -229,6 +229,10 @@ const dateKeyInZone = (date: Date, timeZone: string) => {
   }
 };
 
+export function recordedCorrectionTotals(log: Pick<FoodLogRow, 'kcal' | 'protein_g' | 'cost' | 'nutrition_is_estimated' | 'cost_is_estimated'>) {
+  return { calories: log.kcal, protein: log.protein_g, cost: log.cost, estimated: log.nutrition_is_estimated || log.cost_is_estimated };
+}
+
 export function foodLogNutrition(rows: FoodLogRow[]): Record<NutrientName, number | null> {
   return Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, rows.every((row) => row[field] !== null) ? sum(rows, field) : null])) as Record<NutrientName, number | null>;
 }
@@ -629,7 +633,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const safeUnit = !lot.prep && unit && unit.measure_style === food?.measure_style ? unit : undefined;
     const displayPerBase = safeUnit && food ? fromFoodBase(food, 1, safeUnit) : 1;
     if (!Number.isFinite(displayPerBase) || displayPerBase <= 0) return unavailable;
-    return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, calories: log.kcal, protein: log.protein_g, cost: costForLog(log).cost, estimated: log.nutrition_is_estimated || costForLog(log).estimated } };
+    return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, ...recordedCorrectionTotals(log) } };
   };
   const buildFoodLog = (dayLogs: FoodLogRow[]) => groupFoodLogRows(dayLogs).map((group, index) => {
     const log = group[0];
