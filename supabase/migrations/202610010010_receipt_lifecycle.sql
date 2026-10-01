@@ -3,6 +3,8 @@ alter table public.shopping_items
   add column generated_active boolean not null default true,
   add column generated_qty_base numeric,
   add column generated_shortage_base numeric,
+  add column generated_from date,
+  add column generated_through date,
   add column generated_demand_changed boolean not null default false,
   add column received_qty_base numeric not null default 0 check (received_qty_base >= 0);
 
@@ -10,7 +12,7 @@ create function public.receive_shopping_item(p_request_id uuid, p_item uuid, p_r
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   prior jsonb; result jsonb; item public.shopping_items%rowtype;
-  product_row public.products%rowtype; food_row public.base_foods%rowtype;
+  product_row public.products%rowtype; priced_product public.products%rowtype; food_row public.base_foods%rowtype;
   unit_id uuid; quantity numeric; base_qty numeric; price numeric; lot_id uuid;
   bad_key text; acquired timestamptz; after_item public.shopping_items%rowtype;
 begin
@@ -27,7 +29,7 @@ begin
   if not found then raise exception 'Shopping item no longer exists'; end if;
   if item.lot is not null then raise exception 'This row already has a receipt. Undo it first, or add a separate shopping row for another purchase.'; end if;
   if nullif(p_receipt->>'productId','') is not null then
-    select * into product_row from public.products where id=(p_receipt->>'productId')::uuid and archived_at is null;
+    select * into product_row from public.products where id=(p_receipt->>'productId')::uuid and archived_at is null for update;
     if not found then raise exception 'Choose an active product'; end if;
     if item.food is not null and product_row.food <> item.food then raise exception 'Choose a product for this food; add unrelated substitutions as a separate shopping item'; end if;
     select * into food_row from public.base_foods where id=product_row.food and archived_at is null;
@@ -56,13 +58,16 @@ begin
     case when price is not null then (acquired at time zone (select time_zone from public.app_settings where singleton))::date end,
     coalesce(nullif(p_receipt->>'location',''),'pantry'),nullif(p_receipt->>'bestBy','')::date,acquired,'grocery',false,nullif(p_receipt->>'note',''))
   returning id into lot_id;
+  select * into priced_product from public.products where id=product_row.id;
   -- Checking is a shopping preference, not evidence of receipt. Preserve it exactly.
   update public.shopping_items set lot=lot_id, received_qty_base=base_qty,
     generated_shortage_base=greatest(0,generated_shortage_base-base_qty)
   where id=p_item returning * into after_item;
   insert into public.record_edits(resource,record_id,before_state,after_state)
-  values('inventory_lot',lot_id,jsonb_build_object('shoppingItem',to_jsonb(item)),
-    jsonb_build_object('action','receive_shopping_item','shoppingItem',to_jsonb(after_item),'productId',product_row.id));
+  values('inventory_lot',lot_id,jsonb_build_object('shoppingItem',to_jsonb(item),
+      'productPrice',jsonb_build_object('estimated_cost',product_row.estimated_cost,'cost_source',product_row.cost_source,'cost_as_of',product_row.cost_as_of)),
+    jsonb_build_object('action','receive_shopping_item','shoppingItem',to_jsonb(after_item),'productId',product_row.id,
+      'productPrice',jsonb_build_object('estimated_cost',priced_product.estimated_cost,'cost_source',priced_product.cost_source,'cost_as_of',priced_product.cost_as_of)));
   result := jsonb_build_object('lotId',lot_id,'itemId',p_item,'quantityBase',base_qty);
   perform public.gpt_complete_request(p_request_id,result);
   return result;
@@ -75,6 +80,8 @@ returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   prior jsonb; result jsonb; lot_row public.inventory_lots%rowtype; item public.shopping_items%rowtype;
   receipt public.record_edits%rowtype; event_id uuid;
+  product_row public.products%rowtype; restored_product public.products%rowtype; current_price jsonb;
+  needed numeric; available numeric; shortage numeric; current_base numeric; auto_quantity boolean; first_needed date;
 begin
   if not public.is_app_owner() then raise exception 'Unauthorized' using errcode = '42501'; end if;
   prior := public.claim_mutation_payload(p_request_id,'undo_inventory_receipt',jsonb_build_object('lot',p_lot));
@@ -101,8 +108,43 @@ begin
   insert into public.inventory_events(lot,quantity_delta,reason,note)
   values(p_lot,-lot_row.initial_qty,'adjust','Shopping receipt undone') returning id into event_id;
   update public.inventory_lots set acquisition_void_event=event_id where id=p_lot;
+  -- Reverse only the catalog price actually seeded by this receipt, comparing all
+  -- pricing fields so later user prices survive. Other product fields are untouched.
+  select * into product_row from public.products where id=lot_row.product for update;
+  current_price:=jsonb_build_object('estimated_cost',product_row.estimated_cost,'cost_source',product_row.cost_source,'cost_as_of',product_row.cost_as_of);
+  if receipt.before_state->'productPrice' is distinct from receipt.after_state->'productPrice'
+    and current_price=receipt.after_state->'productPrice' then
+    update public.products set
+      estimated_cost=(receipt.before_state#>>'{productPrice,estimated_cost}')::numeric,
+      cost_source=receipt.before_state#>>'{productPrice,cost_source}',
+      cost_as_of=(receipt.before_state#>>'{productPrice,cost_as_of}')::date
+    where id=product_row.id returning * into restored_product;
+    insert into public.record_edits(resource,record_id,before_state,after_state)
+    values('product',product_row.id,to_jsonb(product_row),to_jsonb(restored_product));
+  end if;
   -- Receipt never changes quantity/check/note/product preferences; undo must not overwrite later edits.
-  update public.shopping_items set lot=null,received_qty_base=0,generated_active=true where id=item.id;
+  update public.shopping_items set lot=null,received_qty_base=0 where id=item.id;
+  if item.source='generated' and item.food is not null then
+    select coalesce(sum(public.to_base_quantity(ingredient.ingredient,ingredient.qty*plan.scale_factor,ingredient.unit)),0),min(plan.plan_date)
+    into needed,first_needed from public.meal_plans plan join public.recipe_ingredients ingredient on ingredient.recipe=plan.recipe
+    join public.base_foods food on food.id=ingredient.ingredient
+    where ingredient.ingredient=item.food and not food.always_available and plan.status='planned' and plan.intent='prepare'
+      and plan.plan_date between coalesce(item.generated_from,current_date) and coalesce(item.generated_through,current_date+6);
+    select coalesce(sum(stock.remaining_qty),0) into available from public.inventory_lots stock
+    left join public.products product on product.id=stock.product
+    left join public.preps prep on prep.id=stock.prep and prep.voided_at is null
+    left join public.recipes recipe on recipe.id=prep.recipe
+    where coalesce(product.food,recipe.output_food)=item.food and stock.remaining_qty>0;
+    shortage:=greatest(0,needed-available);
+    current_base:=case when item.qty_needed is not null and item.unit is not null then public.to_base_quantity(item.food,item.qty_needed,item.unit) end;
+    auto_quantity:=item.checked_at is null and item.generated_qty_base is not null and current_base=item.generated_qty_base;
+    update public.shopping_items set generated_shortage_base=shortage,generated_active=shortage>0.0000001,first_needed_date=first_needed,
+      generated_demand_changed=shortage>0.0000001 and not coalesce(auto_quantity,false) and current_base is distinct from shortage,
+      qty_needed=case when auto_quantity and shortage>0.0000001 then public.from_base_quantity(item.food,shortage,item.unit) else qty_needed end,
+      quantity_label=case when auto_quantity and shortage>0.0000001 then null else quantity_label end,
+      generated_qty_base=case when auto_quantity and shortage>0.0000001 then shortage else generated_qty_base end
+    where id=item.id;
+  end if;
   insert into public.record_edits(resource,record_id,before_state,after_state)
   values('inventory_lot',p_lot,to_jsonb(lot_row),jsonb_build_object('action','undo_inventory_receipt','voidEvent',event_id,'shoppingItemId',item.id));
   result := jsonb_build_object('lotId',p_lot,'itemId',item.id,'status','undone');
@@ -120,7 +162,7 @@ begin
   if p_from is null or p_through is null or p_through < p_from then raise exception 'Choose a valid plan range'; end if;
   lock table public.shopping_items in share row exclusive mode;
   -- Retain inactive rows, including checks, notes, pinned products, and manual quantities.
-  update public.shopping_items set generated_active=false,generated_shortage_base=0 where source='generated';
+  update public.shopping_items set generated_active=false,generated_shortage_base=0,generated_from=p_from,generated_through=p_through where source='generated';
   for shortage in
   with planned_ingredients as (
     select
@@ -164,8 +206,8 @@ begin
       select coalesce(food.display_unit,conversion.id) into unit_id from public.base_foods food
         join lateral(select id from public.measure_conversions where measure_style=food.measure_style and base_to_this_ratio=1 order by id limit 1) conversion on true
         where food.id=shortage.food;
-      insert into public.shopping_items(food,qty_needed,unit,source,first_needed_date,generated_qty_base,generated_shortage_base)
-      values(shortage.food,public.from_base_quantity(shortage.food,shortage.shortage_base,unit_id),unit_id,'generated',shortage.first_needed_date,shortage.shortage_base,shortage.shortage_base);
+      insert into public.shopping_items(food,qty_needed,unit,source,first_needed_date,generated_qty_base,generated_shortage_base,generated_from,generated_through)
+      values(shortage.food,public.from_base_quantity(shortage.food,shortage.shortage_base,unit_id),unit_id,'generated',shortage.first_needed_date,shortage.shortage_base,shortage.shortage_base,p_from,p_through);
     else
       current_base := case when item.qty_needed is not null and item.unit is not null then public.to_base_quantity(item.food,item.qty_needed,item.unit) end;
       target_base := shortage.shortage_base+item.received_qty_base;
@@ -181,5 +223,66 @@ begin
     changed_count:=changed_count+1;
   end loop;
   return changed_count;
+end;
+$$;
+
+-- Preserve existing ACL; generic adjustment undo must not resurrect canceled acquisitions.
+create or replace function public.undo_inventory_adjustment(p_event uuid)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  event_row public.inventory_events%rowtype;
+begin
+  if not public.is_app_owner() then
+    raise exception 'Only the app owner may adjust inventory' using errcode = '42501';
+  end if;
+
+  select * into event_row from public.inventory_events where id = p_event for update;
+  if not found then raise exception 'Inventory event does not exist'; end if;
+  if event_row.reason not in ('waste', 'adjust') then
+    raise exception 'Only a discard or adjustment can be undone this way';
+  end if;
+  if exists(select 1 from public.inventory_lots where acquisition_void_event=p_event) then
+    raise exception 'An acquisition reversal cannot be undone as a manual adjustment. Use its original action workflow.';
+  end if;
+  if event_row.voided_at is not null then return; end if;
+
+  update public.inventory_events set voided_at = now() where id = p_event;
+end;
+$$;
+
+-- Canceled acquisitions cannot seed current catalog prices on later metadata edits.
+create or replace function public.seed_missing_product_cost_from_lot()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.product is null or new.total_cost is null or new.initial_qty <= 0 then
+    return new;
+  end if;
+
+  if new.acquisition_void_event is not null and exists(select 1 from public.inventory_events where id=new.acquisition_void_event and voided_at is null) then
+    return new;
+  end if;
+
+  update public.products product
+  set estimated_cost = round(new.total_cost * product.package_qty_base / new.initial_qty, 2),
+      cost_source = concat(
+        'Latest recorded purchase (used as current estimate)',
+        case when nullif(trim(coalesce(new.cost_source, '')), '') is null
+          then '' else ' · ' || trim(new.cost_source) end
+      ),
+      cost_as_of = coalesce(
+        new.price_as_of,
+        (new.acquired_at at time zone (select time_zone from public.app_settings where singleton))::date
+      )
+  where product.id = new.product
+    and product.estimated_cost is null;
+
+  return new;
 end;
 $$;

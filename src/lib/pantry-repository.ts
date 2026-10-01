@@ -13,7 +13,7 @@ type LotRow = Database['public']['Tables']['inventory_lots']['Row'];
 type ProductRow = Database['public']['Tables']['products']['Row'];
 
 type ProductConsumptionLog = Pick<FoodLogRow, 'product' | 'servings' | 'occurred_at'>;
-type ProductCostLot = Pick<LotRow, 'product' | 'initial_qty' | 'total_cost' | 'cost_source' | 'price_as_of' | 'acquired_at' | 'created_at'>;
+type ProductCostLot = Pick<LotRow, 'product' | 'initial_qty' | 'total_cost' | 'cost_source' | 'price_as_of' | 'acquired_at' | 'created_at'> & { acquisitionCanceled?: boolean };
 type ProductPrice = { estimatedCost: number | null; costSource: string; costAsOf: string };
 
 export function summarizeProductConsumption(logs: ProductConsumptionLog[]) {
@@ -40,7 +40,7 @@ export function resolveProductPrice(product: Pick<ProductRow, 'id' | 'package_qt
     };
   }
   const latest = lots
-    .filter((lot) => lot.product === product.id && lot.total_cost !== null && Number(lot.initial_qty) > 0)
+    .filter((lot) => !lot.acquisitionCanceled && lot.product === product.id && lot.total_cost !== null && Number(lot.initial_qty) > 0)
     .sort((left, right) => {
       const leftDate = left.price_as_of ?? left.acquired_at ?? left.created_at;
       const rightDate = right.price_as_of ?? right.acquired_at ?? right.created_at;
@@ -254,7 +254,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     client.from('planned_consumptions').select('*'),
     client.from('food_logs').select('*').is('voided_at', null).order('occurred_at', { ascending: false }),
     client.from('personal_settings').select('*').single(),
-    client.from('inventory_events').select('*').is('voided_at', null).or('food_log.not.is.null,reason.eq.waste'),
+    client.from('inventory_events').select('*').is('voided_at', null).or('food_log.not.is.null,reason.eq.waste,reason.eq.adjust'),
     client.from('inventory_event_costs').select('*'),
   ]);
 
@@ -266,8 +266,9 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const products = new Map((productsResult.data ?? []).map((product) => [product.id, product]));
   const productConsumption = summarizeProductConsumption(logsResult.data ?? []);
   const lotsByProduct = new Map<string, ProductCostLot[]>();
+  const activeEventIds = new Set((eventsResult.data ?? []).map((event) => event.id));
   for (const lot of lotsResult.data ?? []) {
-    if (lot.product) lotsByProduct.set(lot.product, [...(lotsByProduct.get(lot.product) ?? []), lot]);
+    if (lot.product) lotsByProduct.set(lot.product, [...(lotsByProduct.get(lot.product) ?? []), { ...lot, acquisitionCanceled: Boolean(lot.acquisition_void_event && activeEventIds.has(lot.acquisition_void_event)) }]);
   }
   const units = new Map((unitsResult.data ?? []).map((unit) => [unit.id, unit]));
   const categoryOrder = new Map((categoriesResult.data ?? []).map((category, index) => [category.category, index]));

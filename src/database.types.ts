@@ -1381,6 +1381,8 @@ export type Database = {
       }
       shopping_items: {
         Row: {
+          generated_from: string | null
+          generated_through: string | null
           generated_active: boolean
           generated_qty_base: number | null
           generated_shortage_base: number | null
@@ -1402,6 +1404,8 @@ export type Database = {
           unit: string | null
         }
         Insert: {
+          generated_from?: string | null
+          generated_through?: string | null
           generated_active?: boolean
           generated_qty_base?: number | null
           generated_shortage_base?: number | null
@@ -1423,6 +1427,8 @@ export type Database = {
           unit?: string | null
         }
         Update: {
+          generated_from?: string | null
+          generated_through?: string | null
           generated_active?: boolean
           generated_qty_base?: number | null
           generated_shortage_base?: number | null
