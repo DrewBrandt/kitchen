@@ -33,8 +33,8 @@ delete from meal_plans where id='97000000-0000-0000-0000-000000000007';
 insert into meal_plans(id, inventory_lot, plan_date, daypart, scale_factor, intent)
 select '97000000-0000-0000-0000-000000000008',(result->>'lotId')::uuid,current_date+2,'lunch',1,'consume' from leftover_test_batch;
 delete from meal_plans where id='97000000-0000-0000-0000-000000000006';
-select lives_ok($select gpt_preview_daily_nutrition(current_date+2,'{"sourceType":"recipe","sourceId":"97000000-0000-0000-0000-000000000005","servings":1}')$,'AI preview accepts prepared-lot plans');
-select lives_ok($select consume_planned_meals(array['97000000-0000-0000-0000-000000000008'::uuid], array[1::numeric])$$,'Exact prepared lot remains edible after original plan is deleted');
+select lives_ok($$select gpt_preview_daily_nutrition(current_date+2,'{"sourceType":"recipe","sourceId":"97000000-0000-0000-0000-000000000005","servings":1}')$$,'AI preview accepts prepared-lot plans');
+select lives_ok($$select consume_planned_meals(array['97000000-0000-0000-0000-000000000008'::uuid], array[1::numeric])$$,'Exact prepared lot remains edible after original plan is deleted');
 select is((select remaining_qty from inventory_lots where id=(select (result->>'lotId')::uuid from leftover_test_batch)),2::numeric,'Exact-lot plan consumes one actual serving');
 select throws_ok($$select consume_planned_meals(array['97000000-0000-0000-0000-000000000008'::uuid], array[1::numeric])$$,'P0001',null,'Duplicate fulfilled-plan consumption cannot deduct again');
 select * from finish();

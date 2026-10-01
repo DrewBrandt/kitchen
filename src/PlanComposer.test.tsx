@@ -41,6 +41,18 @@ describe('leftover planning', () => {
     expect(within(preview).getByText('~$3.00')).toBeInTheDocument();
   });
 
+  it('distinguishes otherwise identical batches by preparation date and time', async () => {
+    const user = userEvent.setup();
+    const first = { ...previewPantryData.preparedLots[0], id: 'batch-monday', preparedAt: '2026-09-28T18:00:00Z' };
+    const second = { ...first, id: 'batch-tuesday', preparedAt: '2026-09-29T18:00:00Z' };
+    mount({ ...previewPantryData, settings: { ...previewPantryData.settings, timeZone: 'UTC' }, preparedLots: [first, second] });
+    await user.click(screen.getByRole('tab', { name: /Leftovers/ }));
+    expect(screen.getByRole('option', { name: /Made Sep 28, 2026/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Made Sep 29, 2026/ }));
+    const form = screen.getByRole('form', { name: 'Plan' }) as HTMLFormElement;
+    expect(new FormData(form).get('inventory_lot')).toBe('batch-tuesday');
+  });
+
   it('shows unavailable cost rather than free food for an unpriced prepared batch', async () => {
     const user = userEvent.setup();
     mount({ ...previewPantryData, preparedLots: [{ ...previewPantryData.preparedLots[0], costPerServing: null }] });

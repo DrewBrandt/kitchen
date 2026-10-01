@@ -491,6 +491,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         : { cost: null, estimated: true, source: 'Price unavailable' };
     return {
       id: lot.id,
+      preparedAt: prep?.prepped_at,
       nutritionPerServing: preparedNutrition.get(lot.id),
       prepId: prep?.id,
       mealPlanId: prep?.meal_plan ?? undefined,
