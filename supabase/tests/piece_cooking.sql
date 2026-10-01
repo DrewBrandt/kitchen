@@ -22,8 +22,8 @@ begin
   insert into public.base_foods(id,name,measure_style,display_unit) values(food_id,'QA piece chicken','weight',unit_id);
   insert into public.products(id,food,name,package_qty_base,package_unit,serving_qty_base,nutrition_basis_qty,kcal)
     values(product_id,food_id,'QA six-piece pack',900,unit_id,150,100,200);
-  insert into public.inventory_lots(id,product,initial_qty,remaining_qty,location)
-    values(lot_id,product_id,900,900,'fridge');
+  insert into public.inventory_lots(id,product,initial_qty,remaining_qty,location,total_cost,out_of_pocket_cost,paid_by,cost_source,price_as_of,acquisition_type)
+    values(lot_id,product_id,900,900,'fridge',9,9,'self','QA receipt',current_date,'grocery');
   insert into public.recipes(id,name,servings,instructions) values(recipe_id,'QA piece cooking',4,'[]');
   insert into public.recipe_ingredients(id,recipe,ingredient,qty,unit)
     values(ingredient_id,recipe_id,food_id,600,unit_id);
@@ -61,4 +61,5 @@ begin
   if (select qty from public.recipe_ingredients where id=ingredient_id) <> 600 then raise exception 'Piece cooking must not mutate recipe definition'; end if;
 end;
 $$;
+set constraints all immediate;
 rollback;

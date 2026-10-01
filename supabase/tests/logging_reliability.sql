@@ -35,4 +35,5 @@ begin
   end if;
 end;
 $$;
+set constraints all immediate;
 rollback;

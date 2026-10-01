@@ -41,6 +41,7 @@ begin
   if not (select nutrition_is_estimated from public.preps where id=prep_id) then raise exception 'Estimated ingredient provenance lost'; end if;
   if (select nutrition_source from public.preps where id=prep_id) not like '%QA ingredient estimate%' then raise exception 'Ingredient source lost'; end if;
   -- Missing import prices must survive the deferred provenance check, not become free food.
+  update public.products set estimated_cost=null, cost_source=null, cost_as_of=null where id=unknown_product;
   imported := public.bulk_import_inventory(jsonb_build_array(jsonb_build_object('productId',unknown_product,'packages',1)),'pantry');
   imported_id := (imported #>> '{lotIds,0}')::uuid;
   if not exists(select 1 from public.inventory_lots where id=imported_id and total_cost is null and out_of_pocket_cost is null and cost_is_estimated) then raise exception 'Unknown import price became zero or lost estimate flag'; end if;
