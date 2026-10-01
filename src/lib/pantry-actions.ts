@@ -285,7 +285,8 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
         sourceError = fallback.error;
       }
       if (sourceError) throw sourceError;
-      if (!sourceRows?.length) throw new Error('The original meal could not be found.');
+      sourceRows = (sourceRows ?? []).filter((row) => row.intent === 'prepare' && row.recipe);
+      if (!sourceRows?.length) throw new Error('Choose a recipe preparation that will provide the leftovers.');
       const { data: insertedPlans, error } = await client.from('meal_plans').insert(sourceRows.map((row) => ({
         plan_date: text(form, 'plan_date'),
         daypart: text(form, 'daypart') as Database['public']['Enums']['daypart'],
@@ -297,6 +298,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
         emoji: row.emoji,
         group_id: groupId,
         leftover_of_group_id: sourceGroupId,
+        source_meal_plan: row.id,
         intent: 'leftover',
         preparation_tasks: [],
         note: optionalText(form, 'note'),

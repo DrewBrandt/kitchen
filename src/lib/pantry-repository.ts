@@ -469,7 +469,13 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const prepByMealPlan = new Map((prepsResult.data ?? []).filter((prep) => prep.meal_plan).map((prep) => [prep.meal_plan!, prep]));
   const preparedLotByPrep = new Map((lotsResult.data ?? []).filter((lot) => lot.prep).map((lot) => [lot.prep!, lot]));
 
-  const preparedLots = availableLots.filter((lot) => lot.prep).map((lot) => {
+  // Reuse the same quantity/yield nutrition resolver used by consumption SQL.
+  const activePreparedLots = (lotsResult.data ?? []).filter((lot) => lot.prep && (prepsResult.data ?? []).some((prep) => prep.id === lot.prep));
+  const preparedNutrition = new Map(await Promise.all(activePreparedLots.map(async (lot) => {
+    const { data, error } = await client.rpc('lot_nutrition_json', { p_lot: lot.id });
+    return [lot.id, error || !data ? undefined : nutritionValues(data as Parameters<typeof nutritionValues>[0])] as const;
+  })));
+  const allPreparedLots = activePreparedLots.map((lot) => {
     const prep = (prepsResult.data ?? []).find((candidate) => candidate.id === lot.prep);
     const recipe = prep ? recipeRows.find((candidate) => candidate.id === prep.recipe) : undefined;
     const servingsTotal = Number(lot.initial_qty);
@@ -485,6 +491,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         : { cost: null, estimated: true, source: 'Price unavailable' };
     return {
       id: lot.id,
+      nutritionPerServing: preparedNutrition.get(lot.id),
       prepId: prep?.id,
       mealPlanId: prep?.meal_plan ?? undefined,
       emoji: recipe?.emoji ?? '🥘',
@@ -501,6 +508,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       costIsEstimated: batch.estimated,
     };
   });
+
+  const preparedLots = allPreparedLots.filter((lot) => lot.servingsLeft > INVENTORY_QUANTITY_EPSILON);
 
   const groceryGroups = new Map<string, PantryData['grocerySections'][number]['items']>();
   for (const item of shoppingResult.data ?? []) {
@@ -735,41 +744,46 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const plannedMeals: PantryData['plannedMeals'] = (plansResult.data ?? []).map((plan) => {
     const recipe = plan.recipe ? recipeRows.find((row) => row.id === plan.recipe) : undefined;
     const costedRecipe = recipe ? recipeCosts.get(recipe.id) : undefined;
-    const exactLot = plan.inventory_lot ? rawLots.find((lot) => lot.id === plan.inventory_lot) : undefined;
+    const exactLot = plan.inventory_lot ? (lotsResult.data ?? []).find((lot) => lot.id === plan.inventory_lot) : undefined;
     const productId = plan.product ?? exactLot?.product ?? undefined;
     const product = productId ? productViewsById.get(productId) : undefined;
     const lot = exactLot ? product?.availableLots.find((candidate) => candidate.id === exactLot.id) : undefined;
+    const sourcePrep = prepByMealPlan.get(plan.source_meal_plan ?? plan.id);
+    const sourceLot = sourcePrep ? preparedLotByPrep.get(sourcePrep.id) : undefined;
+    const prepared = allPreparedLots.find((batch) => batch.id === (exactLot?.id ?? sourceLot?.id));
     const consumption = plannedConsumptions.get(plan.id);
     const prep = prepByMealPlan.get(plan.id);
     const servings = Number(consumption?.servings ?? 1);
     const sourceKind = plan.inventory_lot ? 'lot' : plan.product ? 'product' : 'recipe';
-    const nutrition = product
+    const nutrition = prepared?.nutritionPerServing
+      ? Object.fromEntries(Object.entries(prepared.nutritionPerServing).map(([label, value]) => [label, value * servings])) as NutritionValues
+      : product
       ? Object.fromEntries(Object.entries(product.nutritionPerServing).map(([label, value]) => [label, value * servings])) as NutritionValues
       : costedRecipe
         ? nutritionForServings(costedRecipe.nutritionValues, costedRecipe.servings, servings)
         : emptyNutrition();
-    const portionCost = product
+    const portionCost = prepared
+      ? prepared.costPerServing === null ? null : prepared.costPerServing * servings
+      : product
       ? (lot?.costPerServing ?? product.costPerServing) === null ? null : Number(lot?.costPerServing ?? product.costPerServing) * servings
-      : plan.intent === 'leftover'
-        ? 0
-        : costedRecipe?.estimatedCost === null || costedRecipe?.estimatedCost === undefined
-          ? null
-          : costedRecipe.estimatedCost * Number(plan.scale_factor);
+      : costedRecipe?.costPerServing === null || costedRecipe?.costPerServing === undefined
+        ? null
+        : costedRecipe.costPerServing * servings;
     return {
       id: plan.id,
       groupId: plan.group_id ?? plan.id,
       sourceGroupId: plan.leftover_of_group_id ?? undefined,
       dateKey: plan.plan_date,
       slot: plan.daypart.toUpperCase(),
-      name: plan.name ?? recipe?.name ?? product?.label ?? 'Planned item',
-      emoji: plan.emoji ?? recipe?.emoji ?? product?.emoji ?? '🍽️',
+      name: plan.name ?? prepared?.name ?? recipe?.name ?? product?.label ?? 'Planned item',
+      emoji: plan.emoji ?? prepared?.emoji ?? recipe?.emoji ?? product?.emoji ?? '🍽️',
       recipeId: recipe?.id,
       productId,
       inventoryLotId: plan.inventory_lot ?? undefined,
       sourceKind,
       consumeFromInventory: plan.consume_from_inventory ?? undefined,
       status: plan.status,
-      isLeftover: plan.intent === 'leftover',
+      isLeftover: plan.intent === 'leftover' || Boolean(exactLot?.prep),
       scaleFactor: Number(plan.scale_factor),
       plannedServings: servings,
       actualServings: consumption?.food_log ? Number(foodLogsById.get(consumption.food_log)?.servings ?? 0) : undefined,
@@ -777,7 +791,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       prepId: prep?.id,
       preparedLotId: prep ? preparedLotByPrep.get(prep.id)?.id : undefined,
       cost: portionCost,
-      costIsEstimated: product ? (lot?.costIsEstimated ?? true) : plan.intent !== 'leftover' && Boolean(costedRecipe?.costIsEstimated),
+      costIsEstimated: prepared?.costIsEstimated ?? (product ? (lot?.costIsEstimated ?? true) : Boolean(costedRecipe?.costIsEstimated)),
       nutrition,
     };
   });

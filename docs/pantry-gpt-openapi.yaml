@@ -752,7 +752,8 @@ paths:
                       consumeFromInventory: {type: boolean, description: Required for product; true deducts pantry stock and false logs the reusable outside-pantry product without a lot. Exact inventoryLot sources are always true.}
                       scheduledTime: {type: string}
                       groupId: {type: string}
-                      leftoverOfGroupId: {type: string}
+                      sourceMealPlanId: {type: string, format: uuid, description: Required for future leftovers; references the exact preparation plan for this recipe. Use inventoryLot for already cooked food.}
+                      leftoverOfGroupId: {type: string, description: Legacy display grouping only.}
                       intent: {type: string, enum: [prepare, leftover, consume]}
                       name: {type: string}
                       emoji: {type: string}
@@ -1000,7 +1001,8 @@ components:
               consumeFromInventory: {type: boolean}
               scheduledTime: {type: string}
               groupId: {type: string}
-              leftoverOfGroupId: {type: string}
+              sourceMealPlanId: {type: string, format: uuid, description: Required for future leftovers; references the exact preparation plan for this recipe. Use inventoryLot for already cooked food.}
+              leftoverOfGroupId: {type: string, description: Legacy display grouping only.}
               intent: {type: string, enum: [prepare, leftover, consume]}
               name: {type: string}
               emoji: {type: string}
