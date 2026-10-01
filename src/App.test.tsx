@@ -27,6 +27,22 @@ const currentDateKey = (timeZone = previewPantryData.settings.timeZone) => {
 };
 
 describe('Pantry web UI', () => {
+  it('corrects only the chosen consumption in a grouped food log', async () => {
+    localStorage.clear();
+    const save = vi.fn().mockResolvedValue('replacement');
+    const snapshot = { quantity: 2, canonicalUnit: 'servings', displayUnit: 'servings', displayPerBase: 1, calories: 400, protein: null, cost: null, estimated: false };
+    const entry = { ...previewPantryData.foodLog[0], eventIds: ['first', 'second'], events: ['first', 'second'].map((id) => ({ id, label: 'Lunch', portion: '2 servings', time: 'Time not specified', cost: null, costIsEstimated: false, quantityCorrection: snapshot })) };
+    render(<PantryDataProvider data={{ ...previewPantryData, foodLog: [entry] }}><App onCorrectQuantity={save} /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Food log' }));
+    await userEvent.click(screen.getByRole('button', { name: `View ${entry.label} consumption event` }));
+    await userEvent.click(screen.getByRole('button', { name: 'Correct quantity for consumption 2' }));
+    const input = screen.getByLabelText('Correct amount eaten (servings)');
+    await waitFor(() => expect(input).toBeEnabled());
+    await userEvent.clear(input); await userEvent.type(input, '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Save quantity correction' }));
+    expect(save).toHaveBeenCalledExactlyOnceWith('second', 2, 1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
   it('opens an individual manual event editor from the food log', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const manual = { label: 'Manual lunch', portionLabel: '2 portions', note: null, nutrition: { calories: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null, sodiumMg: null, estimated: false, source: null } };

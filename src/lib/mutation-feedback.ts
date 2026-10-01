@@ -69,7 +69,7 @@ export async function pendingMutationPayload<P>(operation: string, identity: unk
   return readPending()[await fingerprint(['rpc', operation, identity])]?.payload as P | undefined;
 }
 
-/** Frozen payloads are used only for cooking; they contain IDs and quantities, never log text. */
+/** Frozen payloads are used for cooking and quantity correction; they contain IDs and quantities, never log text. */
 export async function runRetryableMutation<T, P = unknown>(_client: object, operation: string, payload: P, perform: (requestId: string, occurredAt: string, submitted: P) => Promise<T>, identity?: unknown): Promise<T> {
   const key = await fingerprint(['rpc', operation, identity ?? payload]);
   const attempt = pendingAttempt(key, identity === undefined ? undefined : payload);

@@ -1508,6 +1508,10 @@ export type Database = {
       }
     }
     Functions: {
+      correct_consumed_quantity: {
+        Args: { p_request_id: string; p_food_log: string; p_expected_quantity: number; p_quantity: number }
+        Returns: Json
+      }
       consume_inventory_lot: {
         Args: { p_request_id?: string;  p_lot: string; p_occurred_at?: string; p_quantity: number }
         Returns: string

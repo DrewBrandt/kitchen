@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
+import { correctConsumedQuantity, cookRecipe, estimatedProductPortionCost, formatRecipeQuantity, groupFoodLogRows, pluralizeFoodName, resolveProductPrice, summarizeProductConsumption } from './pantry-repository';
 
 describe('food log display groups', () => {
   const log = (id: string, product: string | null, occurredAt: string) => ({ id, product, occurred_at: occurredAt });
@@ -135,5 +135,22 @@ describe('cooking recovery across refreshed inventory and reload', () => {
     await reloaded.cookRecipe(client, 'recipe', refreshed);
     expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[0][1].p_request_id);
     expect(rpc.mock.calls[2][1].p_piece_inputs).toEqual(refreshed.pieceInputs);
+  });
+});
+
+
+describe('quantity correction retry contract', () => {
+  it('freezes the exact original and corrected quantities across changed input and reload', async () => {
+    localStorage.clear();
+    const rpc=vi.fn().mockResolvedValueOnce({ data:null,error:{message:'Connection lost'} }).mockResolvedValue({data:{id:'replacement'},error:null});
+    const client={rpc} as unknown as Parameters<typeof correctConsumedQuantity>[0];
+    await expect(correctConsumedQuantity(client,'original',200,100)).rejects.toMatchObject({message:'Connection lost'});
+    vi.resetModules();
+    const reloaded=await import('./pantry-repository');
+    await reloaded.correctConsumedQuantity(client,'original',150,50);
+    expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
+    expect(rpc.mock.calls[1][1]).toMatchObject({p_food_log:'original',p_expected_quantity:200,p_quantity:100});
+    await reloaded.correctConsumedQuantity(client,'replacement',100,50);
+    expect(rpc.mock.calls[2][1].p_request_id).not.toBe(rpc.mock.calls[0][1].p_request_id);
   });
 });

@@ -610,6 +610,23 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     if (recipe?.costPerServing !== null && recipe?.costPerServing !== undefined) return { cost: recipe.costPerServing * Number(log.servings ?? 1), estimated: true, source: 'Recipe estimate' };
     return { cost: null, estimated: true, source: 'Price unavailable' };
   };
+  const quantityCorrectionForLog = (log: FoodLogRow) => {
+    if (!['inventory', 'prepared'].includes(log.kind)) return {};
+    const events = eventsByLog.get(log.id) ?? [];
+    const unavailable = { quantityCorrectionUnavailable: 'Quantity correction requires one exact source lot and cannot change a purchase-linked entry.' };
+    if (events.length !== 1 || events[0].reason !== 'eaten' || events[0].quantity_delta >= 0 || (lotsResult.data ?? []).some((lot) => lot.acquisition_food_log === log.id)) return unavailable;
+    const lot = (lotsResult.data ?? []).find((lot) => lot.id === events[0].lot);
+    if (!lot) return unavailable;
+    const product = lot.product ? products.get(lot.product) : undefined;
+    const food = product ? foods.get(product.food) : undefined;
+    if (!lot.prep && !food) return unavailable;
+    const canonicalUnit = lot.prep ? 'servings' : food!.measure_style === 'weight' ? 'g' : food!.measure_style === 'volume' ? 'fl oz' : 'count';
+    const unit = food?.display_unit ? units.get(food.display_unit) : undefined;
+    const safeUnit = !lot.prep && unit && unit.measure_style === food?.measure_style ? unit : undefined;
+    const displayPerBase = safeUnit && food ? fromFoodBase(food, 1, safeUnit) : 1;
+    if (!Number.isFinite(displayPerBase) || displayPerBase <= 0) return unavailable;
+    return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, calories: log.kcal, protein: log.protein_g, cost: costForLog(log).cost, estimated: log.nutrition_is_estimated || costForLog(log).estimated } };
+  };
   const buildFoodLog = (dayLogs: FoodLogRow[]) => groupFoodLogRows(dayLogs).map((group, index) => {
     const log = group[0];
     const statuses = group.map((entry) => entry.nutrition_status);
@@ -634,7 +651,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return {
       id: log.id,
       eventIds: group.map((entry) => entry.id),
-      events: group.map((entry) => ({ ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
+      events: group.map((entry) => ({ ...quantityCorrectionForLog(entry), ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
       emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
       label: log.label,
       serving: `${serving}${qualifier}`,
@@ -882,6 +899,16 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 export async function setShoppingItemChecked(client: Client, id: string, checked: boolean) {
   const { error } = await client.from('shopping_items').update({ checked_at: checked ? new Date().toISOString() : null }).eq('id', id);
   if (error) throw error;
+}
+
+export async function correctConsumedQuantity(client: Client, id: string, expectedQuantity: number, quantity: number): Promise<string> {
+  return runRetryableMutation(client, 'correct_consumed_quantity', { id, expectedQuantity, quantity }, async (requestId, _time, submitted) => {
+    const { data, error } = await client.rpc('correct_consumed_quantity', { p_request_id: requestId, p_food_log: submitted.id, p_expected_quantity: submitted.expectedQuantity, p_quantity: submitted.quantity });
+    if (error) throw error;
+    const result = data as { id?: string } | null;
+    if (!result?.id) throw new Error('Correction result could not be confirmed. Retry this correction.');
+    return result.id;
+  }, { id });
 }
 
 export async function updateFoodLog(client: Client, id: string, patch: Json) {

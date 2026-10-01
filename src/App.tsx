@@ -1,3 +1,4 @@
+import { QuantityCorrectionEditor } from './QuantityCorrectionEditor';
 import type { Json } from './database.types';
 import { ManualConsumptionEditor } from './ManualConsumptionEditor';
 import { completeFormAttempt, createFormAttempt, isDefiniteMutationFailure, mutationError, pendingMutationPayload } from './lib/mutation-feedback';
@@ -88,6 +89,7 @@ interface PanelState {
 type ToastState = { message: string; undo?: () => Promise<void> };
 type Notify = (message: string, undo?: () => Promise<void>) => void;
 type Reversals = {
+  correctQuantity?: (id: string, expected: number, quantity: number) => Promise<string>;
   updateFoodLog?: (id: string, patch: Json) => Promise<void>;
   voidFoodLog?: (id: string) => Promise<void>;
   restoreFoodLog?: (id: string) => Promise<void>;
@@ -132,6 +134,7 @@ interface AppProps {
   syncStatus?: 'connecting' | 'synced' | 'error';
   onSignOut?: () => void;
   onToggleGrocery?: (id: string, checked: boolean) => Promise<void>;
+  onCorrectQuantity?: (id: string, expected: number, quantity: number) => Promise<string>;
   onUpdateFoodLog?: (id: string, patch: Json) => Promise<void>;
   onVoidFoodLog?: (id: string) => Promise<void>;
   onSaveAction?: (kind: PanelKind, form: FormData) => Promise<string>;
@@ -151,7 +154,7 @@ interface AppProps {
   onUndoPrep?: (prepId: string) => Promise<void>;
 }
 
-export function App({ ownerName = 'Drew', ownerEmail, ownerAvatarUrl, syncStatus = 'synced', onSignOut, onToggleGrocery, onUpdateFoodLog, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onConsumePlannedMeals, onRebuildShopping, onRemovePlannedMeals, onSetPlannedConsumptionServings, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: AppProps = {}) {
+export function App({ ownerName = 'Drew', ownerEmail, ownerAvatarUrl, syncStatus = 'synced', onSignOut, onToggleGrocery, onCorrectQuantity, onUpdateFoodLog, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onConsumePlannedMeals, onRebuildShopping, onRemovePlannedMeals, onSetPlannedConsumptionServings, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: AppProps = {}) {
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
@@ -285,7 +288,7 @@ export function App({ ownerName = 'Drew', ownerEmail, ownerAvatarUrl, syncStatus
       .catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not undo that.'));
   }
 
-  const reversals: Reversals = { updateFoodLog: onUpdateFoodLog, voidFoodLog: onVoidFoodLog, restoreFoodLog: onRestoreFoodLog, undoInventoryAdjustment: onUndoInventoryAdjustment, undoPrep: onUndoPrep };
+  const reversals: Reversals = { correctQuantity: onCorrectQuantity, updateFoodLog: onUpdateFoodLog, voidFoodLog: onVoidFoodLog, restoreFoodLog: onRestoreFoodLog, undoInventoryAdjustment: onUndoInventoryAdjustment, undoPrep: onUndoPrep };
 
   function toggleGrocery(item: { id?: string; name: string }) {
     const key = groceryKey(item);
@@ -1543,7 +1546,7 @@ function ConsumptionDetailPanel({ entry, onClose, undo, notify }: { entry: FoodL
   }
   const nutrition = entry.nutrition ? Object.entries(entry.nutrition) : [];
   const eventIds = entry.eventIds?.length ? entry.eventIds : entry.id ? [entry.id] : [];
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{error && <div role="alert">{error}</div>}<PanelSection title="Individual events">{eventIds.map((eventId, index) => { const detail = entry.events?.find((event) => event.id === eventId); return <div className="event-reference" key={eventId}><span>{detail ? `${detail.portion} · ${detail.time} · ${costLabel(detail.cost, detail.costIsEstimated)}` : `Consumption ${index + 1}`}</span>{!removed.includes(eventId) && detail?.manual && undo.updateFoodLog && (editingId === eventId ? <ManualConsumptionEditor id={eventId} original={detail.manual} save={async (id, patch) => { await undo.updateFoodLog!(id, patch); notify('Consumption corrected.'); onClose(); }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Edit consumption ${index + 1}`}>Edit this event</button>)}{removed.includes(eventId) ? <span>Removed</span> : undo.voidFoodLog && <button type="button" className="button" disabled={Boolean(busyId) || Boolean(editingId)} onClick={() => void removeEvent(eventId)} aria-label={`Remove consumption ${index + 1}`}>{busyId === eventId ? 'Removing…' : 'Remove this event'}</button>}</div>; })}</PanelSection></div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{Math.round(value).toLocaleString()}{label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{error && <div role="alert">{error}</div>}<PanelSection title="Individual events">{eventIds.map((eventId, index) => { const detail = entry.events?.find((event) => event.id === eventId); return <div className="event-reference" key={eventId}><span>{detail ? `${detail.portion} · ${detail.time} · ${costLabel(detail.cost, detail.costIsEstimated)}` : `Consumption ${index + 1}`}</span>{!removed.includes(eventId) && detail?.quantityCorrection && undo.correctQuantity && (editingId === eventId ? <QuantityCorrectionEditor id={eventId} label={detail.label} snapshot={detail.quantityCorrection} save={async (id, expected, quantity) => { const replacement = await undo.correctQuantity!(id, expected, quantity); notify('Consumed quantity corrected. The old event remains replaced in history.'); onClose(); return replacement; }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Correct quantity for consumption ${index + 1}`}>Correct quantity</button>)}{detail?.quantityCorrectionUnavailable && <p>{detail.quantityCorrectionUnavailable}</p>}{!removed.includes(eventId) && detail?.manual && undo.updateFoodLog && (editingId === eventId ? <ManualConsumptionEditor id={eventId} original={detail.manual} save={async (id, patch) => { await undo.updateFoodLog!(id, patch); notify('Consumption corrected.'); onClose(); }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Edit consumption ${index + 1}`}>Edit this event</button>)}{removed.includes(eventId) ? <span>Removed</span> : undo.voidFoodLog && <button type="button" className="button" disabled={Boolean(busyId) || Boolean(editingId)} onClick={() => void removeEvent(eventId)} aria-label={`Remove consumption ${index + 1}`}>{busyId === eventId ? 'Removing…' : 'Remove this event'}</button>}</div>; })}</PanelSection></div></aside></div>;
 }
 
 type RecipePanelProps = { recipe: Recipe; cooking: boolean; onClose: () => void; notify: Notify; onCook?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals };
