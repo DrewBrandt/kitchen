@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../database.types';
+import type { Database, Json } from '../database.types';
 import type { FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
 import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 import { formatAmount, formatServings } from './format';
@@ -634,7 +634,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return {
       id: log.id,
       eventIds: group.map((entry) => entry.id),
-      events: group.map((entry) => ({ id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
+      events: group.map((entry) => ({ ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
       emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
       label: log.label,
       serving: `${serving}${qualifier}`,
@@ -881,6 +881,11 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
 
 export async function setShoppingItemChecked(client: Client, id: string, checked: boolean) {
   const { error } = await client.from('shopping_items').update({ checked_at: checked ? new Date().toISOString() : null }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateFoodLog(client: Client, id: string, patch: Json) {
+  const { error } = await client.rpc('gpt_update_consumption', { p_food_log: id, p_patch: patch });
   if (error) throw error;
 }
 

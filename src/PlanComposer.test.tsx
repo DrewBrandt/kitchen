@@ -9,6 +9,15 @@ function mount(data: PantryData) {
 }
 
 describe('leftover planning', () => {
+  it('labels an overdue preparation as planned and not cooked, retaining its scheduled date', async () => {
+    mount({ ...previewPantryData, preparedLots: [], plannedMeals: [{ ...previewPantryData.plannedMeals[0], dateKey: '2020-09-04', status: 'planned', isLeftover: false }] });
+    await userEvent.click(screen.getByRole('tab', { name: /Leftovers/ }));
+    const option = screen.getByRole('option', { name: /Planned, not cooked/ });
+    expect(option).toHaveTextContent('Scheduled Sep 4, 2020');
+    expect(option).toHaveTextContent('Past scheduled date');
+    expect(option).not.toHaveTextContent('Future preparation');
+    expect(option).toBeEnabled();
+  });
   it('can plan an exact cooked batch after its original plan is gone, using actual yield nutrition and cost', async () => {
     const user = userEvent.setup();
     mount({ ...previewPantryData, plannedMeals: [], preparedLots: [{ ...previewPantryData.preparedLots[0], name: 'Chicken dinner', mealPlanId: undefined, costPerServing: 4, nutritionPerServing: { Calories: 400, Protein: 30, Carbs: 5, Fat: 10, Fiber: 1, Sodium: 100 } }] });

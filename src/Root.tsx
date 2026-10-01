@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { App } from './App';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
+import { consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, updateFoodLog, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
 import { SignInError, signInError, takeAuthCallback } from './lib/auth-callback';
@@ -109,6 +109,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         syncStatus={syncStatus}
         onSignOut={() => void supabase.auth.signOut()}
         onToggleGrocery={async (id, checked) => { await setShoppingItemChecked(supabase, id, checked); await refresh(); }}
+        onUpdateFoodLog={async (id, patch) => { await updateFoodLog(supabase, id, patch); await refresh(); }}
         onVoidFoodLog={async (id) => { await voidFoodLog(supabase, id); await refresh(); }}
         onSaveAction={async (kind, form) => { const message = await savePanelAction(supabase, kind, form); await refresh(); return message; }}
         onCookRecipe={async (id, options) => { const result = await cookRecipe(supabase, id, options); await refresh(); return result; }}

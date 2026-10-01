@@ -947,7 +947,7 @@ button.soon-row:hover { background: #121715; }
 .consumption-nutrition span { color: var(--muted); font-size: 10px; }
 .consumption-nutrition strong { margin-top: 5px; font: 500 12px 'JetBrains Mono', monospace; }
 .event-reference { margin-top: 20px; display: grid; gap: 6px; }
-.event-reference span { color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; }
+.event-reference > span { color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; }
 .event-reference code { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 
 @media (max-width: 720px) {

@@ -27,6 +27,20 @@ const currentDateKey = (timeZone = previewPantryData.settings.timeZone) => {
 };
 
 describe('Pantry web UI', () => {
+  it('opens an individual manual event editor from the food log', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const manual = { label: 'Manual lunch', portionLabel: '2 portions', note: null, nutrition: { calories: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null, sodiumMg: null, estimated: false, source: null } };
+    const entry = { ...previewPantryData.foodLog[0], label: manual.label, id: 'manual-event', eventIds: ['manual-event'], events: [{ id: 'manual-event', label: manual.label, portion: '2 portions', time: 'Time not specified', cost: null, costIsEstimated: false, manual }] };
+    render(<PantryDataProvider data={{ ...previewPantryData, foodLog: [entry] }}><App onUpdateFoodLog={save} /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Food log' }));
+    await userEvent.click(screen.getByRole('button', { name: 'View Manual lunch consumption event' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit consumption 1' }));
+    await userEvent.clear(screen.getByLabelText('Portion description'));
+    await userEvent.type(screen.getByLabelText('Portion description'), '1 portion');
+    await userEvent.click(screen.getByRole('button', { name: 'Save correction' }));
+    expect(save).toHaveBeenCalledExactlyOnceWith('manual-event', { portionLabel: '1 portion' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
   it('removes only the selected event from a grouped consumption', async () => {
     const onVoidFoodLog = vi.fn().mockResolvedValue(undefined);
     const entry = { ...previewPantryData.foodLog[0], id: 'event-one', eventIds: ['event-one', 'event-two'], events: [
@@ -296,16 +310,40 @@ describe('Pantry web UI', () => {
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getByRole('button', { name: 'Make batch' }));
     const card = screen.getByRole('article', { name: recipe.name });
-    await user.click(within(card).getByRole('checkbox', { name: 'Use pieces for chicken' }));
+    await user.click(within(card).getByRole('button', { name: 'Choose pieces instead for chicken' }));
     expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
     await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
     await user.click(within(card).getByRole('button', { name: 'Half' }));
     expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    expect(within(card).getByText(/Original recipe requirement: 600 g chicken.*replaced by pieces/)).toBeInTheDocument();
+    expect(within(card).getByText(/Adjusted nutrition and cost preview unavailable/)).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Quarter' }));
     expect(within(card).getByLabelText('Pieces to cook')).toHaveValue(0.25);
     await user.click(within(card).getByRole('button', { name: 'Whole' }));
     await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
     await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ pieceInputs: [{ ingredientId: 'ingredient', lotId: 'chicken-lot', pieces: 1, lotPieces: 6, expectedRemaining: 900 }] })));
+  });
+
+  it('scales recipe ingredients separately from actual batch yield', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    const recipe = { ...previewPantryData.recipes[0], ingredients: [{ id: 'flour', label: '200 g flour', name: 'flour', quantity: 200, unit: 'g', stock: 'In stock' }] };
+    const onCook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', servingsMade: 3, servingsRemaining: 3, location: 'fridge', foodLogId: null });
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: [] }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Make batch' }));
+    const card = screen.getByRole('article', { name: recipe.name });
+    const multiplier = within(card).getByLabelText('Recipe multiplier for ' + recipe.name);
+    await user.clear(multiplier);
+    expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
+    await user.type(multiplier, '2');
+    expect(within(card).getByText('400 g flour')).toBeInTheDocument();
+    const yieldInput = within(card).getByLabelText('Servings of ' + recipe.name + ' made');
+    await user.clear(yieldInput);
+    await user.type(yieldInput, '3');
+    expect(within(card).getByText('400 g flour')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
+    await waitFor(() => expect(onCook).toHaveBeenCalledWith(recipe.id, expect.objectContaining({ scale: 2, servingsMade: 3 })));
   });
 
   it('finishes a planned recipe as one linked batch and removes it from on deck', async () => {

@@ -1,3 +1,4 @@
+import type { ManualConsumptionSnapshot } from './ManualConsumptionEditor';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
   FOOD_LOG,
@@ -31,7 +32,7 @@ export type NutritionValues = Record<NutrientName, number>;
 export interface FoodLogEntry {
   id?: string;
   eventIds?: string[];
-  events?: Array<{ id: string; label: string; portion: string; time: string; cost: number | null; costIsEstimated: boolean }>;
+  events?: Array<{ manual?: ManualConsumptionSnapshot; id: string; label: string; portion: string; time: string; cost: number | null; costIsEstimated: boolean }>;
   emoji: string;
   label: string;
   serving: string;
