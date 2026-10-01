@@ -229,6 +229,10 @@ const dateKeyInZone = (date: Date, timeZone: string) => {
   }
 };
 
+export function foodLogNutrition(rows: FoodLogRow[]): Record<NutrientName, number | null> {
+  return Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, rows.every((row) => row[field] !== null) ? sum(rows, field) : null])) as Record<NutrientName, number | null>;
+}
+
 export async function loadPantryData(client: Client): Promise<PantryData> {
   const [foodsResult, productsResult, lotsResult, unitsResult, categoriesResult, locationsResult, recipesResult, ingredientsResult, prepsResult, shoppingResult, plansResult, plannedConsumptionsResult, logsResult, settingsResult, eventsResult, eventCostsResult] = await Promise.all([
     client.from('base_foods').select('*'),
@@ -643,7 +647,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const oldest = group.at(-1)!;
     const formatTime = (entry: FoodLogRow) => entry.time_precision === 'dateOnly' ? 'Time not specified' : new Date(entry.occurred_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: settings.time_zone });
     const time = oldest.occurred_at === log.occurred_at ? formatTime(log) : `${formatTime(oldest)}–${formatTime(log)}`;
-    const summedNutrition = Object.fromEntries(Object.entries(nutrientFields).map(([label, field]) => [label, sum(group, field)])) as NutritionValues;
+    const summedNutrition = foodLogNutrition(group);
     const serving = group.length === 1
       ? log.portion_label ?? (log.servings === null ? 'Portion not specified' : formatServings(Number(log.servings)))
       : `${totalServings === null ? 'Combined portions' : formatServings(totalServings)} · ${group.length} events`;

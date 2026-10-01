@@ -43,6 +43,30 @@ describe('Pantry web UI', () => {
     expect(save).toHaveBeenCalledExactlyOnceWith('second', 2, 1);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+  it('shows unknown detail nutrients distinctly from known zero', async () => {
+    const entry = { ...previewPantryData.foodLog[0], nutrition: { Calories: 100, Protein: null, Carbs: 0, Fat: null, Fiber: null, Sodium: null }, nutritionStatus: 'partial' as const };
+    render(<PantryDataProvider data={{ ...previewPantryData, foodLog: [entry] }}><App /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Food log' }));
+    await userEvent.click(screen.getByRole('button', { name: `View ${entry.label} consumption event` }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Protein').parentElement).toHaveTextContent('Unknown');
+    expect(within(dialog).getByText('Carbs').parentElement).toHaveTextContent('0 g');
+    expect(within(dialog).getByText('Calories').parentElement).toHaveTextContent('100 cal');
+  });
+
+  it('stages Today recipe-detail Make batch in the workspace without cooking', async () => {
+    localStorage.clear();
+    const onCook = vi.fn();
+    const recipe = previewPantryData.recipes[0];
+    render(<PantryDataProvider data={{ ...previewPantryData, recipes: [recipe], plannedMeals: [] }}><App onCookRecipe={onCook} /></PantryDataProvider>);
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(recipe.name) }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Make batch' }));
+    expect(onCook).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const card = screen.getByRole('article', { name: recipe.name });
+    expect(within(card).getByLabelText(`Recipe multiplier for ${recipe.name}`)).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeInTheDocument();
+  });
   it('opens an individual manual event editor from the food log', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const manual = { label: 'Manual lunch', portionLabel: '2 portions', note: null, nutrition: { calories: null, proteinG: null, carbsG: null, fatG: null, fiberG: null, sugarG: null, sodiumMg: null, estimated: false, source: null } };
