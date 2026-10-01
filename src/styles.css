@@ -922,6 +922,7 @@ button.soon-row:hover { background: #121715; }
 .button.danger { border: 1px solid #593036; background: #281719; color: #f0a0aa; }
 .button.danger:hover { background: #351d20; }
 .inventory-total .cost-inline { display: block; margin-top: 3px; color: var(--mint); font: 9px 'JetBrains Mono', monospace; }
+.inventory-total small { display: block; max-width: 170px; margin-top: 3px; white-space: normal; font: 9px/1.4 'JetBrains Mono', monospace; }
 .log-cost { min-width: 58px; color: var(--mint); font: 11px 'JetBrains Mono', monospace; text-align: right; }
 .progress.over-budget span { background: var(--urgent) !important; }
 .spend-metric:has(.over-budget) em { color: var(--urgent); }

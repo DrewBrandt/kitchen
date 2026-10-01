@@ -35,3 +35,10 @@ export function usd(value: number | null | undefined, estimated = false): string
   if (value === null || value === undefined) return 'Price unavailable';
   return `${estimated ? '~' : ''}$${value.toFixed(2)}`;
 }
+
+/** A stock valuation is distinct from the actual amount paid for its purchase. */
+export function inventoryValueLabel(value: number | null | undefined, estimated: boolean): string {
+  if (value === null || value === undefined) return 'Inventory value unavailable';
+  const amount = value > 0 && value < 0.01 ? '<$0.01' : usd(value);
+  return `${estimated ? 'Estimated inventory value' : 'Inventory value'}: ${amount}`;
+}

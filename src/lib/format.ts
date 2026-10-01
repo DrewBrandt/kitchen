@@ -20,6 +20,16 @@ export function formatPreparedAt(value: string, timeZone: string) {
   return new Date(value).toLocaleString([], { timeZone, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+/** Stock should never look empty solely because the display unit is large. */
+export function formatStockQuantity(value: number, unit?: string | null) {
+  if (!Number.isFinite(value)) return '—';
+  const absolute = Math.abs(value);
+  const quantity = absolute > 0 && absolute < 0.001
+    ? `${value < 0 ? '-' : ''}<0.001`
+    : String(Number(value.toFixed(absolute < 1 ? 3 : 1)));
+  return `${quantity} ${unit ?? ''}`.trim();
+}
+
 export function formatServings(value: number) {
   return `${formatAmount(value)} serving${Math.abs(value - 1) < 0.001 ? '' : 's'}`;
 }

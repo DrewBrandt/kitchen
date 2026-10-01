@@ -24,7 +24,8 @@ export interface InventoryFood {
   lots: string[];
   cost: number | null;
   costIsEstimated: boolean;
-  lotDetails?: Array<{ id: string; quantity: string; location: string; dateLabel: string; tone: string; remainingBase: number; remainingDisplay: number; displayUnit: string; displayPerBase: number; cost: number | null; costIsEstimated: boolean; costSource: string }>;
+  purchasePriceUnknown?: boolean;
+  lotDetails?: Array<{ id: string; quantity: string; location: string; dateLabel: string; tone: string; remainingBase: number; remainingDisplay: number; displayUnit: string; displayPerBase: number; cost: number | null; costIsEstimated: boolean; costSource: string; purchasePriceUnknown?: boolean }>;
 }
 
 export type NutrientName = 'Calories' | 'Protein' | 'Carbs' | 'Fat' | 'Fiber' | 'Sodium';

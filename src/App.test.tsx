@@ -186,7 +186,7 @@ describe('Pantry web UI', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Inventory' }));
-    expect(screen.getAllByText('~$3.18').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Estimated inventory value: $3.18').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     // Per-serving is derived from the batch, not stored: $4.72 over 4 servings.

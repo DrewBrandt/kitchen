@@ -2,8 +2,8 @@ import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
 import type { ShoppingReceipt, FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
-import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
-import { formatAmount, formatServings } from './format';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue, inventoryValueLabel } from './cost';
+import { formatAmount, formatServings, formatStockQuantity } from './format';
 import { runRetryableMutation } from './mutation-feedback';
 import { nutritionForServings } from './nutrition';
 
@@ -78,10 +78,7 @@ const categoryEmoji = (category: string) => {
   return '🛒';
 };
 
-const formatQuantity = (value: number, unit?: string | null) => {
-  const rounded = Math.abs(value - Math.round(value)) < 0.01 ? Math.round(value) : Number(value.toFixed(1));
-  return `${rounded} ${unit ?? ''}`.trim();
-};
+const formatQuantity = formatStockQuantity;
 
 const recipeFractions: Array<[number, string]> = [
   [1 / 8, '⅛'], [1 / 4, '¼'], [1 / 3, '⅓'], [3 / 8, '⅜'],
@@ -105,6 +102,8 @@ export const formatRecipeQuantity = (value: number, unit?: string | null) => {
 };
 
 const formatCost = (value: CostValue) => value.cost === null ? 'price unavailable' : `${value.estimated ? '~' : ''}$${value.cost.toFixed(2)}`;
+
+const formatInventoryCost = (value: CostValue) => inventoryValueLabel(value.cost, value.estimated);
 
 const formatUsStock = (baseValue: number, unit?: Database['public']['Tables']['measure_conversions']['Row']) => {
   const converted = baseValue * Number(unit?.base_to_this_ratio ?? 1);
@@ -315,16 +314,17 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         total: formatUsStock(total, displayUnit),
         due: due.label,
         tone: due.tone,
-        lots: stockLots.map((lot) => `${formatUsStock(Number(lot.remaining_qty), displayUnit)} ${lot.location ?? 'unassigned'} · ${formatCost(lotCost(lot, Number(lot.remaining_qty), products.get(lot.product ?? '')))}`),
+        lots: stockLots.map((lot) => `${formatUsStock(Number(lot.remaining_qty), displayUnit)} ${lot.location ?? 'unassigned'} · ${formatInventoryCost(lotCost(lot, Number(lot.remaining_qty), products.get(lot.product ?? '')))}`),
         cost: knownCosts.length === stockLots.length ? knownCosts.reduce((total, value) => total + value, 0) : null,
         costIsEstimated: costValues.some((value) => value.estimated),
+        purchasePriceUnknown: stockLots.some((lot) => lot.total_cost === null),
         lotDetails: stockLots.map((lot) => {
           const lotDue = daysUntil(lot.use_by);
           const value = lotCost(lot, Number(lot.remaining_qty), products.get(lot.product ?? ''));
           const remainingBase = Number(lot.remaining_qty);
           const remainingDisplay = displayUnit ? fromFoodBase(food, remainingBase, displayUnit) : remainingBase;
           const displayPerBase = displayUnit ? fromFoodBase(food, 1, displayUnit) : 1;
-          return { id: lot.id, quantity: formatUsStock(remainingBase, displayUnit), location: lot.location ?? 'unassigned', dateLabel: lotDue.label, tone: lotDue.tone, remainingBase, remainingDisplay, displayUnit: displayUnit?.short_name ?? '', displayPerBase, cost: value.cost, costIsEstimated: value.estimated, costSource: value.source };
+          return { id: lot.id, quantity: formatUsStock(remainingBase, displayUnit), location: lot.location ?? 'unassigned', dateLabel: lotDue.label, tone: lotDue.tone, remainingBase, remainingDisplay, displayUnit: displayUnit?.short_name ?? '', displayPerBase, cost: value.cost, costIsEstimated: value.estimated, costSource: value.source, purchasePriceUnknown: lot.total_cost === null };
         }),
       };
     }),

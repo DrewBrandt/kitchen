@@ -1,0 +1,49 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { expect, it, vi } from 'vitest';
+import { App } from './App';
+import { PantryDataProvider, previewPantryData } from './pantry-data';
+import { ShoppingReceiptEditor } from './ShoppingReceiptEditor';
+import { inventoryValueLabel } from './lib/cost';
+import { formatStockQuantity } from './lib/format';
+
+it('keeps real small amounts distinct from empty stock', () => {
+  expect(formatStockQuantity(1 / 28.349523125, 'oz')).toBe('0.035 oz');
+  expect(formatStockQuantity(0.006, 'oz')).toBe('0.006 oz');
+  expect(formatStockQuantity(0.00004, 'oz')).toBe('<0.001 oz');
+  expect(formatStockQuantity(0, 'oz')).toBe('0 oz');
+  expect(formatStockQuantity(27.231498718, 'oz')).toBe('27.2 oz');
+});
+
+it('distinguishes unknown, free, and positive sub-cent inventory values', () => {
+  expect(inventoryValueLabel(null, true)).toBe('Inventory value unavailable');
+  expect(inventoryValueLabel(0, false)).toBe('Inventory value: $0.00');
+  expect(inventoryValueLabel(1.89 / 907, true)).toBe('Estimated inventory value: <$0.01');
+  expect(inventoryValueLabel(2.49, false)).toBe('Inventory value: $2.49');
+});
+
+it('shows derived value and unknown purchase price together in inventory and lot details', async () => {
+  const food = { emoji: '', name: 'QA rice', sub: 'Pantry', total: '0.035 oz', due: 'No date', tone: '', lots: ['0.035 oz pantry'], cost: 1.89 / 907, costIsEstimated: true, purchasePriceUnknown: true, lotDetails: [{ id: 'qa', quantity: '0.035 oz', location: 'pantry', dateLabel: 'No date', tone: '', remainingBase: 1, remainingDisplay: 1 / 28.349523125, displayUnit: 'oz', displayPerBase: 1 / 28.349523125, cost: 1.89 / 907, costIsEstimated: true, costSource: 'Catalog estimate', purchasePriceUnknown: true }] };
+  render(<PantryDataProvider data={{ ...previewPantryData, inventorySections: [{ emoji: '', label: 'Pantry', foods: [food] }] }}><App /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'Inventory' }));
+  expect(screen.getByText('Estimated inventory value: <$0.01')).toBeVisible();
+  expect(screen.getByText('Purchase price unavailable for some stock')).toBeVisible();
+  await userEvent.click(screen.getByText('QA rice').closest('button')!);
+  const dialog = within(screen.getByRole('dialog'));
+  expect(dialog.getByText('Estimated inventory value: <$0.01')).toBeVisible();
+  expect(dialog.getByText('Purchase price unavailable')).toBeVisible();
+  expect(screen.queryByText('~$0.00')).not.toBeInTheDocument();
+});
+
+it('associates receipt labels explicitly and sorts foods without mutating shared data', () => {
+  const foods = ['Zucchini', 'Apple', 'Rice'].map((name) => ({ id: name, name, emoji: '', measureStyle: 'weight' as const }));
+  render(<PantryDataProvider data={{ ...previewPantryData, foods }}><ShoppingReceiptEditor item={{ id: 'qa', name: 'QA', quantity: '' }} onSave={vi.fn()} onClose={vi.fn()} /></PantryDataProvider>);
+  const select = screen.getByLabelText('Food acquired') as HTMLSelectElement;
+  expect(Array.from(select.options).map((option) => option.text)).toEqual(['Choose food', 'Apple', 'Rice', 'Zucchini']);
+  expect(foods.map((food) => food.name)).toEqual(['Zucchini', 'Apple', 'Rice']);
+  for (const label of ['Food acquired', 'Product', 'Unit', 'Actual acquired quantity', 'Total price paid (optional)']) {
+    const control = screen.getByLabelText(label) as HTMLInputElement | HTMLSelectElement;
+    expect(control.id).not.toBe('');
+    expect(Array.from(control.labels ?? []).some((node) => node.htmlFor === control.id)).toBe(true);
+  }
+});
