@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AccountAvatar } from './AccountAvatar';
 import type { IScannerControls } from '@zxing/browser';
 import {
   Archive,
@@ -121,6 +122,8 @@ const servingLabel = formatServings;
 
 interface AppProps {
   ownerName?: string;
+  ownerEmail?: string;
+  ownerAvatarUrl?: string;
   syncStatus?: 'connecting' | 'synced' | 'error';
   onSignOut?: () => void;
   onToggleGrocery?: (id: string, checked: boolean) => Promise<void>;
@@ -142,7 +145,7 @@ interface AppProps {
   onUndoPrep?: (prepId: string) => Promise<void>;
 }
 
-export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onConsumePlannedMeals, onRebuildShopping, onRemovePlannedMeals, onSetPlannedConsumptionServings, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: AppProps = {}) {
+export function App({ ownerName = 'Drew', ownerEmail, ownerAvatarUrl, syncStatus = 'synced', onSignOut, onToggleGrocery, onVoidFoodLog, onSaveAction, onCookRecipe, onSavePrepFeedback, onCookRecipes, onConsumePrepared, onConsumePlannedMeals, onRebuildShopping, onRemovePlannedMeals, onSetPlannedConsumptionServings, onRemoveGrocery, onConsumeInventoryLot, onSetInventoryLotQuantity, onRestoreFoodLog, onUndoInventoryAdjustment, onUndoPrep }: AppProps = {}) {
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
@@ -310,6 +313,8 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
       <Sidebar
         page={page}
         ownerName={ownerName}
+        ownerEmail={ownerEmail}
+        ownerAvatarUrl={ownerAvatarUrl}
         syncStatus={syncStatus}
         groceryLeft={groceryTotal - groceryDone}
         badges={{ inventory: inventoryFoodCount, 'on-deck': pinnedRecipes.length, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
@@ -381,8 +386,7 @@ export function App({ ownerName = 'Drew', syncStatus = 'synced', onSignOut, onTo
   );
 }
 
-function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, pinnedRecipes, onPinnedRecipe, onNavigate, onProfile, onSignOut }: { page: PageId; ownerName: string; syncStatus: 'connecting' | 'synced' | 'error'; groceryLeft: number; badges: Partial<Record<PageId, number>>; pinnedRecipes: Recipe[]; onPinnedRecipe: (recipe: Recipe) => void; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
-  const initials = ownerName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+function Sidebar({ page, ownerName, ownerEmail, ownerAvatarUrl, syncStatus, groceryLeft, badges, pinnedRecipes, onPinnedRecipe, onNavigate, onProfile, onSignOut }: { page: PageId; ownerName: string; ownerEmail?: string; ownerAvatarUrl?: string; syncStatus: 'connecting' | 'synced' | 'error'; groceryLeft: number; badges: Partial<Record<PageId, number>>; pinnedRecipes: Recipe[]; onPinnedRecipe: (recipe: Recipe) => void; onNavigate: (page: PageId) => void; onProfile: () => void; onSignOut?: () => void }) {
   return (
     <aside className="sidebar">
       <button className="brand brand-button" onClick={() => onNavigate('today')} aria-label="Mise home"><span className="brand-mark">🫙</span><strong>Mise</strong><span className={cx('sync-dot', syncStatus)} title={syncStatus === 'synced' ? 'Live data connected' : syncStatus === 'connecting' ? 'Connecting to live updates' : 'Live updates disconnected'} /></button>
@@ -402,8 +406,8 @@ function Sidebar({ page, ownerName, syncStatus, groceryLeft, badges, pinnedRecip
       ))}
       {pinnedRecipes.length > 0 && <nav className="nav-group pinned-recipes" aria-label="Pinned cooking"><div className="nav-label">On deck</div>{pinnedRecipes.slice(0, 4).map((recipe) => <button className="nav-item" key={recipe.id} title={recipe.name} onClick={() => onPinnedRecipe(recipe)}><span className="pin-emoji">{recipe.emoji}</span><span className="nav-item-label">{recipe.name}</span><small>Open</small></button>)}</nav>}
       <div className="sidebar-spacer" />
-      <button className="profile-row" aria-label={`${ownerName} — Routine & food profile`} onClick={onProfile}>
-        <span className="avatar">{initials}</span><span><strong>{ownerName}</strong><small>Routine & food profile</small></span><Settings2 />
+      <button className="profile-row" aria-label={`${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''} — Routine & food profile`} title={ownerEmail ? `Signed in as ${ownerEmail}` : undefined} onClick={onProfile}>
+        <AccountAvatar name={ownerName} url={ownerAvatarUrl} /><span><strong>{ownerName}</strong>{ownerEmail && <small className="account-email">{ownerEmail}</small>}<small>Routine & food profile</small></span><Settings2 />
       </button>
       {onSignOut && <button className="text-button sign-out" onClick={onSignOut}>Sign out</button>}
     </aside>

@@ -5,20 +5,21 @@ import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { consumeInventoryLot, consumePlannedMeals, consumePreparedLot, cookRecipe, cookRecipes, loadPantryData, rebuildShoppingFromPlan, removePlannedMeals, removeShoppingItem, restoreFoodLog, savePrepFeedback, setInventoryLotQuantity, setPlannedConsumptionServings, setShoppingItemChecked, undoInventoryAdjustment, undoPrep, voidFoodLog } from './lib/pantry-repository';
 import { savePanelAction } from './lib/pantry-actions';
 import { PantryDataProvider, previewPantryData, type PantryData } from './pantry-data';
+import { SignInError, signInError, takeAuthCallback } from './lib/auth-callback';
 
 let authBootstrap: Promise<Session | null> | undefined;
 
 function getInitialSession() {
   authBootstrap ??= (async () => {
-    const code = new URL(window.location.href).searchParams.get('code');
+    const { code, error: callbackError } = takeAuthCallback();
+    if (callbackError) throw new SignInError(callbackError);
     if (code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) throw error;
-      window.history.replaceState({}, document.title, window.location.pathname);
+      if (error) throw new SignInError(signInError(error.code));
       return data.session;
     }
     const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
+    if (error) throw new SignInError(signInError(error.code));
     return data.session;
   })();
   return authBootstrap;
@@ -31,13 +32,14 @@ export function Root() {
   const preview = import.meta.env.DEV && new URL(window.location.href).searchParams.has('preview');
 
   useEffect(() => {
-    if (preview) { setAuthReady(true); return; }
+    if (preview || !isSupabaseConfigured) { setAuthReady(true); return; }
     void getInitialSession()
       .then(setSession)
-      .catch((cause) => setAuthError(cause instanceof Error ? cause.message : 'Could not complete Google sign-in.'))
+      .catch((cause) => setAuthError(cause instanceof SignInError ? cause.message : signInError()))
       .finally(() => setAuthReady(true));
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) setAuthError('');
       setAuthReady(true);
     });
     return () => data.subscription.unsubscribe();
@@ -46,8 +48,7 @@ export function Root() {
   if (preview) return <PantryDataProvider data={previewPantryData}><App /></PantryDataProvider>;
   if (!isSupabaseConfigured) return <ConfigurationRequired />;
   if (!authReady) return <FullPageStatus message="Opening Mise…" />;
-  if (authError) return <FullPageStatus message={authError} action="Return to sign in" onAction={() => { window.history.replaceState({}, document.title, '/'); window.location.reload(); }} />;
-  if (!session) return <Login />;
+  if (authError || !session) return <Login initialMessage={authError} />;
   return <AuthenticatedApp session={session} />;
 }
 
@@ -96,6 +97,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
     <PantryDataProvider data={data}>
       <App
         ownerName={String(session.user.user_metadata.full_name ?? session.user.user_metadata.name ?? session.user.email?.split('@')[0] ?? 'Drew').split(' ')[0]}
+        ownerEmail={session.user.email}
+        ownerAvatarUrl={session.user.user_metadata.avatar_url ?? session.user.user_metadata.picture}
         syncStatus={syncStatus}
         onSignOut={() => void supabase.auth.signOut()}
         onToggleGrocery={async (id, checked) => { await setShoppingItemChecked(supabase, id, checked); await refresh(); }}
@@ -120,19 +123,28 @@ function AuthenticatedApp({ session }: { session: Session }) {
   );
 }
 
-function Login() {
-  const [message, setMessage] = useState('');
+function Login({ initialMessage = '' }: { initialMessage?: string }) {
+  const [message, setMessage] = useState(initialMessage);
   const [busy, setBusy] = useState(false);
+  useEffect(() => setMessage(initialMessage), [initialMessage]);
 
   async function signInWithGoogle() {
     setBusy(true);
     setMessage('');
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href.split(/[?#]/)[0] },
-    });
-    setBusy(false);
-    if (error) setMessage(error.message);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.href.split(/[?#]/)[0],
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (error) setMessage(signInError(error.code));
+    } catch {
+      setMessage(signInError());
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -143,7 +155,7 @@ function Login() {
         {message && <div className="auth-error" role="alert">{message}</div>}
         <button className="button google-button" disabled={busy} onClick={() => void signInWithGoogle()}>
           <span className="google-mark" aria-hidden="true">G</span>
-          {busy ? 'Opening Google…' : 'Continue with Google'}
+          {busy ? 'Opening Google…' : message ? 'Choose a Google account' : 'Continue with Google'}
         </button>
         <small>This private app accepts only its configured owner account.</small>
       </section>
