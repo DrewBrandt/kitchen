@@ -13,12 +13,12 @@ it('carries the food and quantity, searches suitable products, and preserves unk
     { ...previewPantryData.products[0], id: 'rice', foodId: 'rice', label: 'Unrelated rice' },
   ] };
   render(<PantryDataProvider data={data}><ShoppingReceiptEditor item={{ id: 'row', name: 'Chicken', quantity: '500 g', foodId: 'chicken', unitId: 'g', quantityNeeded: 500 }} onSave={save} onClose={close} /></PantryDataProvider>);
-  expect(screen.getByLabelText('Actual acquired quantity')).toHaveValue(500);
+  expect(screen.getByLabelText('Quantity bought')).toHaveValue(500);
   expect(screen.queryByRole('option', { name: 'Unrelated rice' })).not.toBeInTheDocument();
-  await userEvent.type(screen.getByLabelText('Find a suitable product'), 'breast');
+  await userEvent.type(screen.getByLabelText('Search products'), 'breast');
   await userEvent.selectOptions(screen.getByLabelText('Product'), 'breast');
-  await userEvent.clear(screen.getByLabelText('Actual acquired quantity'));
-  await userEvent.type(screen.getByLabelText('Actual acquired quantity'), '200');
+  await userEvent.clear(screen.getByLabelText('Quantity bought'));
+  await userEvent.type(screen.getByLabelText('Quantity bought'), '200');
   await userEvent.click(screen.getByRole('button', { name: 'Add to inventory' }));
   await waitFor(() => expect(save).toHaveBeenCalledWith('row', expect.objectContaining({ foodId: 'chicken', productId: 'breast', quantity: 200, unit: 'g', totalPrice: null })));
   expect(close).toHaveBeenCalledOnce();
@@ -59,7 +59,8 @@ it('prevents duplicate undo clicks while an action is pending', async () => {
   const action = vi.fn(() => new Promise<void>(() => {}));
   render(<DurableUndo label="Undo receipt" action={action} />);
   await userEvent.click(screen.getByRole('button', { name: 'Undo receipt' }));
-  expect(screen.getByRole('button', { name: 'Undoing…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Undo receipt' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Undo receipt' })).toHaveTextContent('Undoing');
   expect(action).toHaveBeenCalledOnce();
 });
 

@@ -38,11 +38,11 @@ export function ManualConsumptionEditor({ id, original, save, close }: { id: str
     catch (cause) { setError(mutationError(cause, 'Could not save this correction.')); }
     finally { setBusy(false); }
   }}>
-    <p>Correct this event only. A portion description does not automatically scale nutrition or cost. Enter corrected nutrition totals below if needed. Date, time precision, price, and source details stay as recorded.</p>
+    <p>Changing the portion text won’t update nutrition or cost.</p>
     <label className="field"><span>Food name</span><input name="label" required defaultValue={original.label} /></label>
     <label className="field"><span>Portion description</span><input name="portionLabel" defaultValue={original.portionLabel ?? ''} /></label>
     <label className="field"><span>Note</span><input name="note" defaultValue={original.note ?? ''} /></label>
-    <p>Nutrition totals for this event. Blank means unknown.</p>
+    <p>Nutrition totals · blank = unknown</p>
     {Object.entries(nutrients).map(([key, label]) => <label className="field" key={key}><span>{label}</span><input name={key} type="number" min="0" step="any" defaultValue={original.nutrition[key] === null ? '' : String(original.nutrition[key] ?? '')} /></label>)}
     {error && <p role="alert">{error}</p>}
     <button type="submit" className="button primary" disabled={busy}>{busy ? 'Saving…' : 'Save correction'}</button>

@@ -37,8 +37,9 @@ export function usd(value: number | null | undefined, estimated = false): string
 }
 
 /** A stock valuation is distinct from the actual amount paid for its purchase. */
-export function inventoryValueLabel(value: number | null | undefined, estimated: boolean): string {
-  if (value === null || value === undefined) return 'Inventory value unavailable';
+export function inventoryValueLabel(value: number | null | undefined, estimated: boolean, compact = false): string {
+  if (value === null || value === undefined) return compact ? 'Value unavailable' : 'Inventory value unavailable';
   const amount = value > 0 && value < 0.01 ? '<$0.01' : usd(value);
+  if (compact) return `${estimated ? '~' : ''}${amount}`;
   return `${estimated ? 'Estimated inventory value' : 'Inventory value'}: ${amount}`;
 }

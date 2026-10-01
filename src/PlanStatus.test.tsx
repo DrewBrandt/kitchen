@@ -69,7 +69,7 @@ describe('plan status from live preparation and consumption', () => {
     rerender(view(plans([{ ...sourcePrep, voided_at: '2026-10-01T20:00:00Z' }], 0)));
     for (const name of ['Tomorrow rice', 'Later rice']) {
       expectStatus(name, 'Waiting for preparation', 'planned', false);
-      expect(within(card(name)).getByRole('status')).toHaveTextContent('waiting for its planned preparation');
+      expect(within(card(name)).getByRole('status')).toHaveTextContent('not cooked yet');
     }
     expectStatus('Other rice', 'Ready · not eaten', 'ready', true);
   });
@@ -78,7 +78,7 @@ describe('plan status from live preparation and consumption', () => {
     render(view([linked('Exhausted rice', 'source', [sourcePrep], 0), linked('Unmade rice', 'source', [], 0)]));
     await userEvent.click(screen.getByRole('button', { name: /This week/ }));
     expectStatus('Exhausted rice', 'No servings remaining', 'planned', false);
-    expect(within(card('Exhausted rice')).getByRole('status')).toHaveTextContent('no servings remain in its source batch');
+    expect(within(card('Exhausted rice')).getByRole('status')).toHaveTextContent('no servings left');
     expectStatus('Unmade rice', 'Waiting for preparation', 'planned', false);
   });
 

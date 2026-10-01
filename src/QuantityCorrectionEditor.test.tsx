@@ -15,7 +15,8 @@ describe('quantity correction editor', () => {
     await userEvent.clear(input); await userEvent.type(input, '1');
     expect(screen.getByText(/Return 1 servings to the original lot/)).toBeInTheDocument();
     expect(screen.getByText(/Corrected totals: 200 cal.*Unknown.*Recorded cost unknown/)).toBeInTheDocument();
-    expect(screen.getByText('Event exact-event')).toBeInTheDocument();
+    expect(screen.queryByText('Event exact-event')).not.toBeInTheDocument();
+    expect(screen.getByText(/cannot be undone/)).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: 'Save quantity correction' }));
     expect(save).toHaveBeenCalledExactlyOnceWith('exact-event', 2, 1);
   });
