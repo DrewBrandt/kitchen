@@ -44,7 +44,7 @@ then raise exception 'Existing GPT/owner function or ACL changed'; end if;
 end $$;
 SQL
       ;;
-    202610020002_allow_future_food_log_undo.sql)
+    202610010014_allow_future_food_log_undo.sql)
       sql <<'SQL'
 create table isolated_test.undo_constraints_before as
 select oid,pg_get_constraintdef(oid) definition from pg_constraint
