@@ -1,3 +1,4 @@
+import type { StagedDish } from './lib/cooking-stage';
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import type { PanelKind } from './data';
@@ -10,7 +11,7 @@ import { mealBuilderIdentity, mealBuilderOperation, type GroupedPlanPayload } fr
 
 type Dish = { recipe: string; make: string; eat: string };
 export function CombinedMealPanel({ onClose, onStage, onSave, notify }: {
-  onClose: () => void; onStage: (ids: string[]) => void;
+  onClose: () => void; onStage: (dishes: StagedDish[]) => void;
   onSave?: (kind: PanelKind, form: FormData) => Promise<string>; notify: (message: string) => void;
 }) {
   const { recipes, settings } = usePantryData();
@@ -74,6 +75,6 @@ export function CombinedMealPanel({ onClose, onStage, onSave, notify }: {
       {dishes.length > 0 && <ImpactStrip nutrition={nutrition} cost={cost} estimated={dishes.some((dish) => recipes.find((recipe) => recipe.id === dish.recipe)?.costIsEstimated)} />}
       {error && <p role="alert">{error}</p>}
     </div>
-    <div className="panel-footer"><button className="button secondary" disabled={locked || !dishes.length} onClick={() => onStage(dishes.map((dish) => dish.recipe))}>Add to On deck</button><button className="button primary" disabled={saving || !loaded || !onSave || (!pending && !valid)} onClick={() => void save()}>{saving ? 'Saving…' : pending ? 'Retry meal' : 'Plan meal'}</button></div>
+    <div className="panel-footer"><button className="button secondary" disabled={locked || !valid || dishes.some((dish) => Number(dish.eat) > Number(dish.make))} onClick={() => onStage(dishes.map((dish) => ({ recipeId: dish.recipe, servingsMade: Number(dish.make), servingsEaten: Number(dish.eat) })))}>Add to On deck</button><button className="button primary" disabled={saving || !loaded || !onSave || (!pending && !valid)} onClick={() => void save()}>{saving ? 'Saving…' : pending ? 'Retry meal' : 'Plan meal'}</button></div>
   </aside></div>;
 }

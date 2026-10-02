@@ -252,7 +252,7 @@ describe('Pantry web UI', () => {
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
 
     expect(screen.getByRole('heading', { name: 'On deck' })).toBeInTheDocument();
-    const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
+    const workspace = screen.getAllByRole('article', { name: 'Simple Pancakes' }).find((card) => within(card).queryByText('Unplanned'))!;
     expect(within(workspace).getByText('Ingredients', { selector: 'summary' })).toBeInTheDocument();
     expect(within(workspace).getByText('Method', { selector: 'summary' })).toBeInTheDocument();
     expect(within(workspace).getByText('0 of 8 complete')).toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('Pantry web UI', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
 
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
-    await user.click(within(screen.getByRole('article', { name: 'Simple Pancakes' })).getByRole('button', { name: /all-purpose flour/i }));
+    await user.click(within(screen.getAllByRole('article', { name: 'Simple Pancakes' }).find((card) => within(card).queryByText('Unplanned'))!).getByRole('button', { name: /all-purpose flour/i }));
     await user.click(within(screen.getByRole('navigation', { name: 'Kitchen' })).getByRole('button', { name: 'Today' }));
     expect(within(screen.getByRole('navigation', { name: 'Pinned cooking' })).getByRole('button', { name: /Simple Pancakes/ })).toBeInTheDocument();
   });
@@ -341,7 +341,7 @@ describe('Pantry web UI', () => {
       render(<App />);
       await userEvent.click(screen.getByRole('button', { name: 'Recipes' }));
       await userEvent.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
-      const card = screen.getByRole('article', { name: previewPantryData.recipes[0].name });
+      const card = screen.getAllByRole('article', { name: previewPantryData.recipes[0].name }).find((card) => within(card).queryByText('Unplanned'))!;
       const method = card.querySelectorAll('details')[1];
       method.open = false;
       await userEvent.click(within(card).getByRole('button', { name: 'Method' }));
@@ -368,8 +368,8 @@ describe('Pantry web UI', () => {
     await user.click(within(dialog).getByRole('button', { name: /Soft Scrambled Eggs/ }));
     await user.click(within(dialog).getByRole('button', { name: 'Add to On deck' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('article', { name: 'Simple Pancakes' })).toBeInTheDocument();
-    expect(screen.getByRole('article', { name: 'Soft Scrambled Eggs' })).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: 'Simple Pancakes' }).find((card) => within(card).queryByText('Unplanned'))!).toBeInTheDocument();
+    expect(screen.getAllByRole('article', { name: 'Soft Scrambled Eggs' }).find((card) => within(card).queryByText('Unplanned'))!).toBeInTheDocument();
     expect(onCookRecipes).not.toHaveBeenCalled();
     expect(onCookRecipe).not.toHaveBeenCalled();
   });
@@ -780,7 +780,7 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     await user.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
-    const workspace = screen.getByRole('article', { name: 'Simple Pancakes' });
+    const workspace = screen.getAllByRole('article', { name: 'Simple Pancakes' }).find((card) => within(card).queryByText('Unplanned'))!;
     await user.click(within(workspace).getByRole('button', { name: /all-purpose flour/i }));
 
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { cookingAttemptIdentity } from './cooking-stage';
 import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
@@ -984,7 +985,7 @@ export async function cookRecipe(client: Client, recipeId: string, options: Prep
       servingsMade: Number(result.servingsMade), servingsRemaining: Number(result.servingsRemaining),
       location: String(result.location), foodLogId: result.foodLogId ? String(result.foodLogId) : null,
     };
-  }, { recipeId, mealPlanId: options.mealPlanId ?? null });
+  }, cookingAttemptIdentity(recipeId, options));
 }
 
 export async function savePrepFeedback(client: Client, prepId: string, ease: number, taste: number, actualMinutes: number) {

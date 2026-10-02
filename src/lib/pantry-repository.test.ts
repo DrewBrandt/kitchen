@@ -175,3 +175,19 @@ describe('recorded correction totals', () => {
     expect(recordedCorrectionTotals({ ...log, cost: 0, cost_is_estimated: false })).toMatchObject({ cost: 0, estimated: false });
   });
 });
+
+
+it('keeps retries of independent unplanned cooking drafts separate and never attaches a plan', async () => {
+  localStorage.clear();
+  const rpc = vi.fn().mockResolvedValueOnce({ data: null, error: { message: 'Response lost' } }).mockResolvedValue({ data: { prepId: 'prep', lotId: 'lot', servingsMade: 4, servingsRemaining: 2.5, location: 'fridge' }, error: null });
+  const client = { rpc } as unknown as Parameters<typeof cookRecipe>[0];
+  await expect(cookRecipe(client, 'recipe', { cookingDraftId: 'draft-one', scale: 2, servingsMade: 4, servingsEaten: 1.5 })).rejects.toMatchObject({ message: 'Response lost' });
+  await cookRecipe(client, 'recipe', { cookingDraftId: 'draft-two', scale: 1, servingsMade: 2, servingsEaten: .5 });
+  await cookRecipe(client, 'recipe', { cookingDraftId: 'draft-one', scale: 9, servingsMade: 18, servingsEaten: 9 });
+  expect(rpc.mock.calls[1][1].p_request_id).not.toBe(rpc.mock.calls[0][1].p_request_id);
+  expect(rpc.mock.calls[2]).toEqual(rpc.mock.calls[0]);
+  for (const [, args] of rpc.mock.calls) {
+    expect(args).not.toHaveProperty('p_meal_plan');
+    expect(args).not.toHaveProperty('cookingDraftId');
+  }
+});

@@ -107,6 +107,9 @@ it('Cook meal stages exact unfinished plan IDs, including repeated recipes, with
   await waitFor(() => expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(1));
   expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveValue(.5);
   expect(JSON.parse(localStorage.getItem('mise.on-deck-plan-focus')!)).toEqual(['dish-one', 'dish-two']);
+  await user.click(screen.getByRole('button', { name: 'Show all on deck' }));
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(2);
+  expect(screen.getAllByLabelText('Recipe multiplier for Chicken').map((input) => (input as HTMLInputElement).value).sort()).toEqual(['0.5', '3']);
 });
 
 it('logs each grouped dish with its own portion and exact plan ID through the actual consumption caller', async () => {
@@ -124,4 +127,69 @@ it('logs each grouped dish with its own portion and exact plan ID through the ac
   expect(within(group).queryByLabelText('Servings of Eaten dish eaten now')).not.toBeInTheDocument();
   await user.click(within(group).getByRole('button', { name: 'Log eaten' }));
   await waitFor(() => expect(rpc).toHaveBeenCalledExactlyOnceWith('consume_planned_meals', expect.objectContaining({ p_meal_plans: ['first', 'second'], p_servings: [1.5, .5] })));
+});
+
+
+it('stages configured unplanned dishes alongside matching plans, deduplicates repeat staging and finishes only the selected draft', async () => {
+  const user = userEvent.setup();
+  const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: data.settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const plan = { ...previewPantryData.plannedMeals[0], id: 'matching-plan', recipeId: dishes[0].id, dateKey, status: 'planned' as const, isLeftover: false, consumptionStatus: 'planned', scaleFactor: 3 };
+  const cook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', servingsMade: 4, servingsRemaining: 2.5, location: 'fridge' });
+  const view = () => <PantryDataProvider data={{ ...data, plannedMeals: [plan] }}><App onCookRecipe={cook} /></PantryDataProvider>;
+  const stage = async (make: number, rice: boolean) => {
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Choose recipes' }));
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Chicken/ })).toBeEnabled());
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Chicken/ }));
+    fireEvent.change(screen.getByLabelText('Make servings of Chicken'), { target: { value: String(make) } });
+    fireEvent.change(screen.getByLabelText('Eat servings of Chicken'), { target: { value: '1.5' } });
+    if (rice) {
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Rice/ }));
+      fireEvent.change(screen.getByLabelText('Make servings of Rice'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Eat servings of Rice'), { target: { value: '.5' } });
+    }
+    await user.click(screen.getByRole('button', { name: 'Add to On deck' }));
+  };
+  const first = render(view());
+  await stage(4, true); await stage(4, true);
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(2);
+  expect(screen.getAllByRole('article', { name: 'Rice' })).toHaveLength(1);
+  await stage(2, false);
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(3);
+  first.unmount(); render(view());
+  await user.click(screen.getByRole('button', { name: 'On deck' }));
+  const chicken = screen.getAllByRole('article', { name: 'Chicken' }).find((card) => (within(card).getByLabelText('Recipe multiplier for Chicken') as HTMLInputElement).value === '2')!;
+  expect(within(chicken).getByText('Unplanned')).toBeInTheDocument();
+  expect(within(chicken).getByLabelText('Servings of Chicken made')).toHaveValue(4);
+  expect(within(chicken).getByLabelText('Servings of Chicken eaten now')).toHaveValue(1.5);
+  const rice = screen.getByRole('article', { name: 'Rice' });
+  expect(within(rice).getByLabelText('Recipe multiplier for Rice')).toHaveValue(.5);
+  expect(within(rice).getByLabelText('Servings of Rice made')).toHaveValue(2);
+  expect(within(rice).getByLabelText('Servings of Rice eaten now')).toHaveValue(.5);
+  await user.click(within(chicken).getByRole('button', { name: 'Finish cooking' }));
+  await waitFor(() => expect(cook).toHaveBeenCalledExactlyOnceWith(dishes[0].id, expect.objectContaining({ scale: 2, servingsMade: 4, servingsEaten: 1.5, mealPlanId: undefined, cookingDraftId: expect.any(String) })));
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(2);
+  expect(screen.getAllByLabelText('Recipe multiplier for Chicken').map((input) => (input as HTMLInputElement).value).sort()).toEqual(['1', '3']);
+  expect(screen.getByRole('article', { name: 'Rice' })).toBeInTheDocument();
+});
+
+it('generic Make batch stays unplanned, reuses its draft on repeated clicks and leaves a matching plan untouched', async () => {
+  const user = userEvent.setup();
+  const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: data.settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const plan = { ...previewPantryData.plannedMeals[0], id: 'unrelated-plan', recipeId: dishes[0].id, dateKey, status: 'planned' as const, isLeftover: false, consumptionStatus: 'planned', scaleFactor: 3 };
+  const cook = vi.fn().mockResolvedValue({ prepId: 'prep', lotId: 'lot', servingsMade: 2, servingsRemaining: 2, location: 'fridge' });
+  render(<PantryDataProvider data={{ ...data, recipes: [dishes[0]], plannedMeals: [plan] }}><App onCookRecipe={cook} /></PantryDataProvider>);
+  for (let i = 0; i < 2; i++) {
+    await user.click(screen.getByRole('button', { name: 'Recipes' }));
+    await user.click(screen.getByRole('button', { name: 'Make batch' }));
+  }
+  const cards = screen.getAllByRole('article', { name: 'Chicken' });
+  expect(cards).toHaveLength(2);
+  const unplanned = cards.find((card) => within(card).queryByText('Unplanned'))!;
+  expect(within(unplanned).getByLabelText('Recipe multiplier for Chicken')).toHaveValue(1);
+  await user.click(within(unplanned).getByRole('button', { name: 'Finish cooking' }));
+  await waitFor(() => expect(cook).toHaveBeenCalledExactlyOnceWith(dishes[0].id, expect.objectContaining({ mealPlanId: undefined, scale: 1 })));
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(1);
+  expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveValue(3);
+  expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveAttribute('readonly');
 });

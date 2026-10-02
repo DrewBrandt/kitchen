@@ -1,3 +1,4 @@
+import { isCookablePlan, cookingAttemptIdentity, type StagedDish, type CookingDraft } from './lib/cooking-stage';
 import { CombinedMealPanel } from './CombinedMealPanel';
 import { planDisplayStatus } from './lib/plan-display-status';
 import { RecipeIngredientEditor } from './RecipeIngredientEditor';
@@ -176,8 +177,13 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
   const [activeRecipeIds, setActiveRecipeIds] = useState<Set<string>>(() => new Set(recipes.filter((recipe) => {
     try { return (JSON.parse(localStorage.getItem(`mise.recipe-progress.${recipe.id}`) ?? '[]') as string[]).length > 0; } catch { return false; }
   }).map((recipe) => recipe.id)));
-  const [manualDeckRecipeIds, setManualDeckRecipeIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('mise.on-deck-recipes') ?? '[]') as string[]); } catch { return new Set(); }
+  const [cookingDrafts, setCookingDrafts] = useState<CookingDraft[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('mise.on-deck-drafts') ?? 'null');
+      if (Array.isArray(saved)) return saved.filter((draft) => typeof draft?.id === 'string' && typeof draft.recipeId === 'string' && Number.isFinite(draft.servingsMade) && draft.servingsMade > 0 && Number.isFinite(draft.servingsEaten) && draft.servingsEaten >= 0 && draft.servingsEaten <= draft.servingsMade);
+      const legacy = new Set(JSON.parse(localStorage.getItem('mise.on-deck-recipes') ?? '[]') as string[]);
+      return recipes.filter((recipe) => legacy.has(recipe.id)).map((recipe) => ({ id: recipe.id, recipeId: recipe.id, servingsMade: recipe.servings, servingsEaten: 0 }));
+    } catch { return []; }
   });
   const [manualDeckPlanIds, setManualDeckPlanIds] = useState<Set<string>>(() => {
     try { const saved = JSON.parse(localStorage.getItem('mise.on-deck-plans') ?? '[]'); return new Set(Array.isArray(saved) ? saved : Object.values(saved)); } catch { return new Set(); }
@@ -193,7 +199,7 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
-  useEffect(() => { localStorage.setItem('mise.on-deck-recipes', JSON.stringify([...manualDeckRecipeIds])); }, [manualDeckRecipeIds]);
+  useEffect(() => { localStorage.setItem('mise.on-deck-drafts', JSON.stringify(cookingDrafts)); }, [cookingDrafts]);
   useEffect(() => { localStorage.setItem('mise.on-deck-plans', JSON.stringify([...manualDeckPlanIds])); }, [manualDeckPlanIds]);
 
   useEffect(() => {
@@ -244,7 +250,7 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
 
   useEffect(() => { localStorage.setItem('mise.on-deck-plan-focus', JSON.stringify(deckPlanFocus)); }, [deckPlanFocus]);
   function stagePlans(ids: string[]) {
-    const unfinished = pantryData.plannedMeals.filter((plan) => ids.includes(plan.id) && plan.recipeId && plan.status === 'planned' && !plan.isLeftover && plan.consumptionStatus !== 'fulfilled').map((plan) => plan.id);
+    const unfinished = pantryData.plannedMeals.filter((plan) => ids.includes(plan.id) && isCookablePlan(plan)).map((plan) => plan.id);
     setManualDeckPlanIds((current) => new Set([...current, ...unfinished]));
     setDeckPlanFocus(unfinished);
     setDismissedDeckRecipeIds((current) => { const next = new Set(current); unfinished.forEach((id) => next.delete(id)); return next; });
@@ -254,9 +260,9 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
     if (kind === 'cook' && recipe) {
       if (values?.meal_plan_id) { stagePlans([values.meal_plan_id]); return; }
       setDeckPlanFocus(null);
-      setManualDeckRecipeIds((current) => new Set(current).add(recipe.id));
+      setCookingDrafts((current) => current.some((draft) => draft.id === recipe.id) ? current : [...current, { id: recipe.id, recipeId: recipe.id, servingsMade: recipe.servings, servingsEaten: 0 }]);
 
-      setDismissedDeckRecipeIds((current) => { const next = new Set(current); next.delete(recipe.id); for (const meal of pantryData.plannedMeals) { if (meal.recipeId === recipe.id && (!values?.meal_plan_id || meal.id === values.meal_plan_id)) next.delete(meal.id); } return next; });
+      setDismissedDeckRecipeIds((current) => { const next = new Set(current); next.delete(recipe.id); return next; });
       setPanel(null);
       setPage('on-deck');
       return;
@@ -273,31 +279,24 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
   }
 
   const todayKey = dateKeyInTimeZone(new Date(), pantryData.settings.timeZone);
-  const todayPins = pantryData.plannedMeals.filter((meal) => (meal.dateKey === todayKey || manualDeckPlanIds.has(meal.id)) && meal.status === 'planned' && !meal.isLeftover && meal.consumptionStatus !== 'fulfilled').flatMap((meal) => recipes.filter((recipe) => recipe.id === meal.recipeId));
-  const pinnedRecipes = [...new Map([...todayPins, ...recipes.filter((recipe) => manualDeckRecipeIds.has(recipe.id) || activeRecipeIds.has(recipe.id))].filter((recipe) => !dismissedDeckRecipeIds.has(recipe.id)).map((recipe) => [recipe.id, recipe])).values()];
-  const deckEntries: DeckEntry[] = (deckPlanFocus !== null
-    ? pantryData.plannedMeals.filter((plan) => deckPlanFocus.includes(plan.id) && plan.status === 'planned' && !plan.isLeftover && plan.consumptionStatus !== 'fulfilled').flatMap((plan) => {
-        const recipe = recipes.find((item) => item.id === plan.recipeId); return recipe ? [{ id: plan.id, recipe, plan }] : [];
-      })
-    : pinnedRecipes.flatMap((recipe) => {
-    const plans = pantryData.plannedMeals.filter((meal) => meal.recipeId === recipe.id && meal.status === 'planned' && !meal.isLeftover && (meal.dateKey === todayKey || manualDeckPlanIds.has(meal.id)));
-    return plans.length ? plans.map((plan) => ({ id: plan.id, recipe, plan })) : [{ id: recipe.id, recipe }];
-  })).filter((entry) => !dismissedDeckRecipeIds.has(entry.id));
-  const stageRecipes = (ids: string[]) => {
+  const plannedEntries: DeckEntry[] = pantryData.plannedMeals.filter((plan) => isCookablePlan(plan) && (deckPlanFocus !== null ? deckPlanFocus.includes(plan.id) : plan.dateKey === todayKey || manualDeckPlanIds.has(plan.id))).flatMap((plan) => {
+    const recipe = recipes.find((item) => item.id === plan.recipeId); return recipe ? [{ id: plan.id, recipe, plan }] : [];
+  });
+  const unplannedEntries: DeckEntry[] = cookingDrafts.flatMap((draft) => {
+    const recipe = recipes.find((item) => item.id === draft.recipeId); return recipe ? [{ id: draft.id, recipe, draft }] : [];
+  });
+  for (const recipe of recipes) if (activeRecipeIds.has(recipe.id) && !unplannedEntries.some((entry) => entry.id === recipe.id)) unplannedEntries.push({ id: recipe.id, recipe });
+  const deckEntries = [...plannedEntries, ...(deckPlanFocus === null ? unplannedEntries : [])].filter((entry) => !dismissedDeckRecipeIds.has(entry.id));
+  const pinnedRecipes = [...new Map(deckEntries.map((entry) => [entry.recipe.id, entry.recipe])).values()];
+  const stageRecipes = (dishes: StagedDish[]) => {
+    const drafts = dishes.map((dish) => ({ ...dish, id: 'dish:' + JSON.stringify([dish.recipeId, dish.servingsMade, dish.servingsEaten]) }));
     setDeckPlanFocus(null);
-    setManualDeckRecipeIds((current) => new Set([...current, ...ids]));
-    setDismissedDeckRecipeIds((current) => {
-      const next = new Set(current);
-      for (const id of ids) next.delete(id);
-      for (const plan of pantryData.plannedMeals) if (plan.recipeId && ids.includes(plan.recipeId)) next.delete(plan.id);
-      return next;
-    });
-    setPanel(null);
-    setPage('on-deck');
+    setCookingDrafts((current) => [...current, ...drafts.filter((draft) => !current.some((entry) => entry.id === draft.id))]);
+    setDismissedDeckRecipeIds((current) => { const next = new Set(current); drafts.forEach((draft) => next.delete(draft.id)); return next; });
+    setPanel(null); setPage('on-deck');
   };
   const removeFromDeck = (id: string) => {
-    const recipeId = deckEntries.find((entry) => entry.id === id)?.recipe.id ?? id;
-    setManualDeckRecipeIds((current) => { const next = new Set(current); next.delete(recipeId); return next; });
+    setCookingDrafts((current) => current.filter((draft) => draft.id !== id));
     setManualDeckPlanIds((current) => { const next = new Set(current); next.delete(id); return next; });
     setDismissedDeckRecipeIds((current) => new Set(current).add(id));
   };
@@ -360,11 +359,11 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
         ownerAvatarUrl={ownerAvatarUrl}
         syncStatus={syncStatus}
         groceryLeft={groceryTotal - groceryDone}
-        badges={{ inventory: inventoryFoodCount, 'on-deck': pinnedRecipes.length, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
+        badges={{ inventory: inventoryFoodCount, 'on-deck': deckEntries.length, recipes: recipes.length, products: pantryData.products.length, week: plannedMealCount }}
         onNavigate={setPage}
         onProfile={() => open('profile')}
         pinnedRecipes={pinnedRecipes}
-        onPinnedRecipe={(recipe) => open('cook', recipe)}
+        onPinnedRecipe={() => { setDeckPlanFocus(null); setPage('on-deck'); }}
         onSignOut={onSignOut}
       />
 
@@ -818,7 +817,7 @@ function WeekPage({ onCookMeal, onOpen, notify, onRemove, onConsume, onSetServin
                 const ids = meals.flatMap((meal) => meal.id ? [meal.id] : []);
                 const mealsLeftToEat = meals.filter((meal) => meal.consumptionStatus !== 'fulfilled');
                 const groupCost = completeCost(meals.map((meal) => meal.cost));
-                const nextMeal = meals.find((meal) => meal.status === 'planned' && !meal.isLeftover && meal.consumptionStatus !== 'fulfilled');
+                const nextMeal = meals.find(isCookablePlan);
                 const recipe = recipes.find((candidate) => candidate.id === (nextMeal?.recipeId ?? meals[0].recipeId));
                 const waitingMeals = mealsLeftToEat.filter((meal) => meal.isLeftover && !(Number(meal.preparedServingsAvailable) > 0));
                 const canEat = !eaten && mealsLeftToEat.every((meal) => meal.isLeftover
@@ -837,7 +836,7 @@ function WeekPage({ onCookMeal, onOpen, notify, onRemove, onConsume, onSetServin
                     <span className={cx('plan-status', displayStatus.tone)}>{displayStatus.label}</span>
                     <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}<small>planned portions</small></strong>
                     <div className="week-meal-actions">
-                      {recipe && nextMeal ? <button className="button compact" onClick={() => onCookMeal(meals.filter((meal) => meal.status === 'planned' && !meal.isLeftover && meal.consumptionStatus !== 'fulfilled').flatMap((meal) => meal.id ? [meal.id] : []))}><CookingPot />Cook {meals.length > 1 ? 'meal' : recipe.name}</button> : null}
+                      {recipe && nextMeal ? <button className="button compact" onClick={() => onCookMeal(meals.filter(isCookablePlan).flatMap((meal) => meal.id ? [meal.id] : []))}><CookingPot />Cook {meals.length > 1 ? 'meal' : recipe.name}</button> : null}
                       <button className="row-icon-button" aria-label={`Remove ${meals.map((meal) => meal.name).join(', ')}`} disabled={!onRemove || !ids.length} onClick={() => { if (onRemove) void onRemove(ids).then(() => notify('Item removed from the plan.')).catch(() => notify('Could not remove the planned item.')); }}><Trash2 /></button>
                     </div>
                     {waitingMeals.length > 0 && <p className="meal-waiting" role="status">{waitingMeals.map((meal) => `${meal.name}: ${meal.waitingForPreparation !== false ? 'not cooked yet' : 'no servings left'}`).join(' · ')}</p>}
@@ -1325,7 +1324,7 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
 };
 
 
-function ActionPanel({ onStageRecipes, onStartCooking, state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { onStageRecipes: (ids: string[]) => void; onStartCooking: (recipe: Recipe) => void; state: PanelState; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
+function ActionPanel({ onStageRecipes, onStartCooking, state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { onStageRecipes: (dishes: StagedDish[]) => void; onStartCooking: (recipe: Recipe) => void; state: PanelState; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
   const { foodLog, grocerySections, history, nutrients, recipes, settings } = usePantryData();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1609,7 +1608,7 @@ function scaledIngredientStock(item: Recipe['ingredients'][number], scale: numbe
   return `${formatAmount(item.availableQuantity)}${item.unit ? ` ${item.unit}` : ''} in stock${item.availableQuantity + 0.0000001 < item.quantity * scale ? ' · short' : ''}`;
 }
 
-type DeckEntry = { id: string; recipe: Recipe; plan?: PlannedMealView };
+type DeckEntry = { id: string; recipe: Recipe; plan?: PlannedMealView; draft?: CookingDraft };
 
 type DeckLayout = 'stack' | 'split' | 'three' | 'quad';
 
@@ -1653,7 +1652,7 @@ function OnDeckPage({ onShowAll, entries, locations, onAddRecipe, onRemoveRecipe
       <div><strong>Workspace layout</strong><span>Drag panels by their handles. Your arrangement is saved on this device.</span></div>
       <div className="layout-switcher" role="group" aria-label="Workspace layout">{layouts.map((option) => { const Icon = option.icon; return <button key={option.id} className={layout === option.id ? 'active' : ''} aria-label={option.label} aria-pressed={layout === option.id} onClick={() => setLayout(option.id)} title={option.label}>{Icon ? <Icon /> : <b>3</b>}<span>{option.label}</span></button>; })}</div>
     </div>
-    {orderedRecipes.length ? <div className={cx('on-deck-board', `layout-${layout}`)}>{orderedRecipes.map(({ id, recipe, plan }, index) => <OnDeckRecipeCard key={id} recipe={recipe} plan={plan} locations={locations} dragging={draggingId === id} onDragStart={(event) => { setDraggingId(id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', id); }} onDragEnd={() => setDraggingId('')} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); moveRecipe(event.dataTransfer.getData('text/plain') || draggingId, id); setDraggingId(''); }} onNudge={(delta) => nudgeRecipe(id, delta)} canMoveEarlier={index > 0} canMoveLater={index < orderedRecipes.length - 1} onRemove={() => onRemoveRecipe(id)} notify={notify} onCook={onCook} onProgressChange={onProgressChange} undo={undo} />)}</div> : <div className="empty-deck"><CookingPot /><h2>Nothing is on deck</h2><button className="button primary" onClick={onAddRecipe}><Plus /> Add a recipe</button></div>}
+    {orderedRecipes.length ? <div className={cx('on-deck-board', `layout-${layout}`)}>{orderedRecipes.map(({ id, recipe, plan, draft }, index) => <OnDeckRecipeCard key={id} recipe={recipe} plan={plan} draft={draft} locations={locations} dragging={draggingId === id} onDragStart={(event) => { setDraggingId(id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', id); }} onDragEnd={() => setDraggingId('')} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }} onDrop={(event) => { event.preventDefault(); moveRecipe(event.dataTransfer.getData('text/plain') || draggingId, id); setDraggingId(''); }} onNudge={(delta) => nudgeRecipe(id, delta)} canMoveEarlier={index > 0} canMoveLater={index < orderedRecipes.length - 1} onRemove={() => onRemoveRecipe(id)} notify={notify} onCook={onCook} onProgressChange={onProgressChange} undo={undo} />)}</div> : <div className="empty-deck"><CookingPot /><h2>Nothing is on deck</h2><button className="button primary" onClick={onAddRecipe}><Plus /> Add a recipe</button></div>}
   </div>;
 }
 
@@ -1680,16 +1679,17 @@ function PieceIngredientSetup({ ingredients, onChange }: { ingredients: Recipe['
   return <details className="piece-setup"><summary>Adjust ingredient quantities</summary><label className="field"><span>Ingredient to adjust</span><select value="" onChange={(event) => setSelected((current) => new Set([...current, event.target.value]))}><option value="">Choose ingredient</option>{candidates.filter((item) => !selected.has(item.id!)).map((item) => <option key={item.id} value={item.id}>{item.name ?? item.label}</option>)}</select></label>{candidates.filter((item) => selected.has(item.id!)).map((item) => <PieceIngredientControl key={item.id} ingredient={item} initiallyEnabled onChange={(value) => onChange(item.id!, value)} />)}</details>;
 }
 
-function OnDeckRecipeCard({ recipe, plan, locations, dragging, onDragStart, onDragEnd, onDragOver, onDrop, onNudge, canMoveEarlier, canMoveLater, onRemove, notify, onCook, onProgressChange, undo }: { recipe: Recipe; plan?: PlannedMealView; locations: string[]; dragging: boolean; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void; onDragOver: (event: React.DragEvent<HTMLElement>) => void; onDrop: (event: React.DragEvent<HTMLElement>) => void; onNudge: (delta: number) => void; canMoveEarlier: boolean; canMoveLater: boolean; onRemove: () => void; notify: Notify; onCook?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals }) {
-  const storageKey = `mise.recipe-progress.${plan?.id ?? recipe.id}`;
+function OnDeckRecipeCard({ recipe, plan, draft, locations, dragging, onDragStart, onDragEnd, onDragOver, onDrop, onNudge, canMoveEarlier, canMoveLater, onRemove, notify, onCook, onProgressChange, undo }: { recipe: Recipe; plan?: PlannedMealView; draft?: CookingDraft; locations: string[]; dragging: boolean; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void; onDragOver: (event: React.DragEvent<HTMLElement>) => void; onDrop: (event: React.DragEvent<HTMLElement>) => void; onNudge: (delta: number) => void; canMoveEarlier: boolean; canMoveLater: boolean; onRemove: () => void; notify: Notify; onCook?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals }) {
+  const storageKey = `mise.recipe-progress.${plan?.id ?? draft?.id ?? recipe.id}`;
+  const cookingDraftId = draft && draft.id !== recipe.id ? draft.id : undefined;
   const [checks, setChecks] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]); } catch { return new Set(); } });
   const [saving, setSaving] = useState(false);
   const [pendingCookOptions, setPendingCookOptions] = useState<PreparationOptions | null>(null);
   useEffect(() => {
     let active = true;
-    void pendingMutationPayload<{ recipeId: string; options: PreparationOptions }>('prepare_recipe', { recipeId: recipe.id, mealPlanId: plan?.id ?? null }).then((saved) => { if (active && saved) setPendingCookOptions(saved.options); }).catch(() => {});
+    void pendingMutationPayload<{ recipeId: string; options: PreparationOptions }>('prepare_recipe', cookingAttemptIdentity(recipe.id, { mealPlanId: plan?.id, cookingDraftId })).then((saved) => { if (active && saved) setPendingCookOptions(saved.options); }).catch(() => {});
     return () => { active = false; };
-  }, [recipe.id, plan?.id]);
+  }, [recipe.id, plan?.id, cookingDraftId]);
   const [pieceInputs, setPieceInputs] = useState<Record<string, PieceInput | null>>({});
   const invalidPieces = Object.values(pieceInputs).some((input) => input === null);
   const ingredientsRef = useRef<HTMLDetailsElement>(null);
@@ -1699,22 +1699,22 @@ function OnDeckRecipeCard({ recipe, plan, locations, dragging, onDragStart, onDr
     if (section instanceof HTMLDetailsElement) section.open = true;
     section?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  const [customBatchScale, setBatchScale] = useState(1);
+  const [customBatchScale, setBatchScale] = useState(() => draft ? draft.servingsMade / recipe.servings : 1);
   const batchScale = plan ? plan.scaleFactor ?? 1 : customBatchScale;
   const defaultServings = recipe.servings * batchScale;
   const [servingsMade, setServingsMade] = useState(defaultServings);
-  const [servingsEaten, setServingsEaten] = useState(0);
+  const [servingsEaten, setServingsEaten] = useState(draft?.servingsEaten ?? 0);
   const [location, setLocation] = useState(locations.includes('fridge') ? 'fridge' : locations[0] ?? 'fridge');
   const total = recipe.ingredients.length + recipe.steps.length;
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); onProgressChange(recipe.id, checks.size > 0); }, [checks, recipe.id, storageKey]);
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify([...checks])); onProgressChange(plan?.id ?? draft?.id ?? recipe.id, checks.size > 0); }, [checks, recipe.id, storageKey]);
   const toggle = (key: string) => setChecks((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   useEffect(() => setServingsMade(defaultServings), [defaultServings]);
-  const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); onProgressChange(recipe.id, false); };
+  const clearProgress = () => { setChecks(new Set()); localStorage.removeItem(storageKey); onProgressChange(plan?.id ?? draft?.id ?? recipe.id, false); };
   return <article className={cx('on-deck-card', dragging && 'dragging')} aria-label={recipe.name} onDragOver={onDragOver} onDrop={onDrop}>
     <div className="deck-card-header"><button className="deck-drag-handle" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); onNudge(-1); } if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); onNudge(1); } }} aria-label={`Drag ${recipe.name} panel. Use arrow keys to reorder.`}><GripVertical /></button><span className="deck-recipe-emoji">{recipe.emoji}</span><div><h2>{recipe.name}</h2><p>{servingLabel(recipe.servings)} · {recipe.minutes} minutes</p></div><div className="deck-card-actions"><button className="icon-button" disabled={!canMoveEarlier} onClick={() => onNudge(-1)} aria-label={`Move ${recipe.name} earlier`}>←</button><button className="icon-button" disabled={!canMoveLater} onClick={() => onNudge(1)} aria-label={`Move ${recipe.name} later`}>→</button><button className="icon-button" onClick={onRemove} aria-label={`Remove ${recipe.name} from on deck`}><X /></button></div></div>
     <nav className="deck-section-nav" aria-label={`${recipe.name} cooking sections`}><button type="button" onClick={() => jumpToSection(ingredientsRef.current)}>Ingredients</button><button type="button" onClick={() => jumpToSection(methodRef.current)}>Method</button><button type="button" onClick={() => jumpToSection(batchRef.current)}>Batch</button></nav>
-    <div className="deck-card-body"><small className="deck-nutrition">{Object.keys(pieceInputs).length || batchScale !== 1 || servingsMade !== recipe.servings ? 'Adjusted nutrition & cost unavailable' : `Original recipe: ${recipe.nutrition}`}</small><label className="field"><span>{plan ? 'Batch size (from plan)' : 'Batch size'}</span><input aria-label={`Recipe multiplier for ${recipe.name}`} type="number" min="0.25" step="0.25" value={batchScale} readOnly={Boolean(plan)} onChange={(event) => setBatchScale(Number(event.target.value))} /></label>{plan && <div className="deck-plan-link"><CalendarDays /><span><strong>Planned {plan.slot.toLowerCase()}</strong><small>{formatServings(plan.plannedServings)} planned to eat · {formatAmount(plan.scaleFactor ?? 1)}× recipe</small></span></div>}<div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><details className="deck-section" open ref={ingredientsRef}><summary>Ingredients</summary>{recipe.ingredients.map((item, index) => <div key={item.id ?? item.label}><CheckRow checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.id && Object.hasOwn(pieceInputs, item.id) ? `Original recipe requirement: ${scaledIngredient(item, batchScale)} — replaced by pieces below` : scaledIngredient(item, batchScale)} meta={item.id && Object.hasOwn(pieceInputs, item.id) ? 'Using the selected lot below' : scaledIngredientStock(item, batchScale)} />{item.id && item.pieceLots?.some((lot) => lot.remainingPieces !== undefined) && <PieceIngredientControl ingredient={item} onChange={(value) => setPieceInputs((current) => { const next = { ...current }; if (value === undefined) delete next[item.id!]; else next[item.id!] = value; return next; })} />}</div>)}<PieceIngredientSetup ingredients={recipe.ingredients} onChange={(id, value) => setPieceInputs((current) => { const next = { ...current }; if (value === undefined) delete next[id]; else next[id] = value; return next; })} /></details><details className="deck-section" open ref={methodRef}><summary>Method</summary>{batchScale !== 1 && <p className="muted">Ingredients scaled · Original method</p>}{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</details><div ref={batchRef} className="deck-section"><h3>FINISH THE BATCH</h3><div className="deck-batch-fields"><label className="field"><span>Servings made</span><input aria-label={`Servings of ${recipe.name} made`} type="number" min="0.25" step="0.25" value={servingsMade} onChange={(event) => setServingsMade(Number(event.target.value))} /></label><label className="field"><span>Store remaining in</span><select aria-label={`Storage location for ${recipe.name}`} value={location} onChange={(event) => setLocation(event.target.value)}>{locations.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Servings eaten now</span><input aria-label={`Servings of ${recipe.name} eaten now`} type="number" min="0" max={servingsMade} step="0.25" value={servingsEaten} onChange={(event) => setServingsEaten(Number(event.target.value))} /></label></div></div></div>
-    <div className="deck-card-footer">{pendingCookOptions && <p role="status">Retrying the same batch.</p>}<button className="button primary" disabled={!onCook || saving || (!pendingCookOptions && (invalidPieces || !Number.isFinite(batchScale) || batchScale <= 0 || !Number.isFinite(servingsMade) || servingsMade <= 0 || !Number.isFinite(servingsEaten) || servingsEaten < 0 || servingsEaten > servingsMade))} onClick={() => { if (!onCook) return; setSaving(true); const submittedOptions = pendingCookOptions ?? { scale: batchScale, ...(Object.keys(pieceInputs).length ? { pieceInputs: Object.values(pieceInputs).filter((input): input is PieceInput => input !== null) } : {}), servingsMade, location, mealPlanId: plan?.id, servingsEaten }; setPendingCookOptions(submittedOptions); void onCook(recipe.id, submittedOptions).then((result) => { clearProgress(); onRemove(); const eaten = result.servingsMade - result.servingsRemaining; notify(`Made ${formatServings(result.servingsMade)} of ${recipe.name}; ${formatAmount(result.servingsRemaining)} stored in ${result.location}${eaten ? ` and ${formatAmount(eaten)} logged as eaten` : ''}.`, undo.undoPrep ? async () => { if (result.foodLogId && undo.voidFoodLog) await undo.voidFoodLog(result.foodLogId); await undo.undoPrep!(result.prepId); } : undefined); }).catch((error: unknown) => { if (isDefiniteMutationFailure(error)) setPendingCookOptions(null); notify(mutationError(error, `Could not cook ${recipe.name}.`)); }).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : pendingCookOptions ? 'Retry saved batch' : 'Finish cooking'}</button></div>
+    <div className="deck-card-body"><small className="deck-nutrition">{Object.keys(pieceInputs).length || batchScale !== 1 || servingsMade !== recipe.servings ? 'Adjusted nutrition & cost unavailable' : `Original recipe: ${recipe.nutrition}`}</small><label className="field"><span>{plan ? 'Batch size (from plan)' : 'Batch size'}</span><input aria-label={`Recipe multiplier for ${recipe.name}`} type="number" min="0.25" step="0.25" value={batchScale} readOnly={Boolean(plan)} onChange={(event) => setBatchScale(Number(event.target.value))} /></label>{!plan && <small>Unplanned</small>}{plan && <div className="deck-plan-link"><CalendarDays /><span><strong>Planned {plan.slot.toLowerCase()}</strong><small>{formatServings(plan.plannedServings)} planned to eat · {formatAmount(plan.scaleFactor ?? 1)}× recipe</small></span></div>}<div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><details className="deck-section" open ref={ingredientsRef}><summary>Ingredients</summary>{recipe.ingredients.map((item, index) => <div key={item.id ?? item.label}><CheckRow checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.id && Object.hasOwn(pieceInputs, item.id) ? `Original recipe requirement: ${scaledIngredient(item, batchScale)} — replaced by pieces below` : scaledIngredient(item, batchScale)} meta={item.id && Object.hasOwn(pieceInputs, item.id) ? 'Using the selected lot below' : scaledIngredientStock(item, batchScale)} />{item.id && item.pieceLots?.some((lot) => lot.remainingPieces !== undefined) && <PieceIngredientControl ingredient={item} onChange={(value) => setPieceInputs((current) => { const next = { ...current }; if (value === undefined) delete next[item.id!]; else next[item.id!] = value; return next; })} />}</div>)}<PieceIngredientSetup ingredients={recipe.ingredients} onChange={(id, value) => setPieceInputs((current) => { const next = { ...current }; if (value === undefined) delete next[id]; else next[id] = value; return next; })} /></details><details className="deck-section" open ref={methodRef}><summary>Method</summary>{batchScale !== 1 && <p className="muted">Ingredients scaled · Original method</p>}{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</details><div ref={batchRef} className="deck-section"><h3>FINISH THE BATCH</h3><div className="deck-batch-fields"><label className="field"><span>Servings made</span><input aria-label={`Servings of ${recipe.name} made`} type="number" min="0.25" step="0.25" value={servingsMade} onChange={(event) => setServingsMade(Number(event.target.value))} /></label><label className="field"><span>Store remaining in</span><select aria-label={`Storage location for ${recipe.name}`} value={location} onChange={(event) => setLocation(event.target.value)}>{locations.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Servings eaten now</span><input aria-label={`Servings of ${recipe.name} eaten now`} type="number" min="0" max={servingsMade} step="0.25" value={servingsEaten} onChange={(event) => setServingsEaten(Number(event.target.value))} /></label></div></div></div>
+    <div className="deck-card-footer">{pendingCookOptions && <p role="status">Retrying the same batch.</p>}<button className="button primary" disabled={!onCook || saving || (!pendingCookOptions && (invalidPieces || !Number.isFinite(batchScale) || batchScale <= 0 || !Number.isFinite(servingsMade) || servingsMade <= 0 || !Number.isFinite(servingsEaten) || servingsEaten < 0 || servingsEaten > servingsMade))} onClick={() => { if (!onCook) return; setSaving(true); const submittedOptions = pendingCookOptions ?? { scale: batchScale, ...(cookingDraftId ? { cookingDraftId } : {}), ...(Object.keys(pieceInputs).length ? { pieceInputs: Object.values(pieceInputs).filter((input): input is PieceInput => input !== null) } : {}), servingsMade, location, mealPlanId: plan?.id, servingsEaten }; setPendingCookOptions(submittedOptions); void onCook(recipe.id, submittedOptions).then((result) => { clearProgress(); onRemove(); const eaten = result.servingsMade - result.servingsRemaining; notify(`Made ${formatServings(result.servingsMade)} of ${recipe.name}; ${formatAmount(result.servingsRemaining)} stored in ${result.location}${eaten ? ` and ${formatAmount(eaten)} logged as eaten` : ''}.`, undo.undoPrep ? async () => { if (result.foodLogId && undo.voidFoodLog) await undo.voidFoodLog(result.foodLogId); await undo.undoPrep!(result.prepId); } : undefined); }).catch((error: unknown) => { if (isDefiniteMutationFailure(error)) setPendingCookOptions(null); notify(mutationError(error, `Could not cook ${recipe.name}.`)); }).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : pendingCookOptions ? 'Retry saved batch' : 'Finish cooking'}</button></div>
   </article>;
 }
 
