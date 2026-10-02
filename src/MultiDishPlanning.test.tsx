@@ -6,7 +6,7 @@ import type { Database } from './database.types';
 import { App } from './App';
 import { PantryDataProvider, previewPantryData, type PlannedMealView } from './pantry-data';
 import { savePanelAction } from './lib/pantry-actions';
-import { consumePlannedMeals } from './lib/pantry-repository';
+import { cookRecipe, consumePlannedMeals } from './lib/pantry-repository';
 
 beforeEach(() => localStorage.clear());
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -192,4 +192,48 @@ it('generic Make batch stays unplanned, reuses its draft on repeated clicks and 
   expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(1);
   expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveValue(3);
   expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveAttribute('readonly');
+});
+
+
+it('remounts a staged card after an uncertain cooking response and replays only its original unplanned batch', async () => {
+  const user = userEvent.setup();
+  const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: data.settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const plan = { ...previewPantryData.plannedMeals[0], id: 'matching-plan', recipeId: dishes[0].id, dateKey, status: 'planned' as const, isLeftover: false, consumptionStatus: 'planned', scaleFactor: 3 };
+  const committed = new Map<string, unknown>();
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+    if (!committed.has(String(args.p_request_id))) committed.set(String(args.p_request_id), args);
+    return { data: { prepId: 'saved-prep', lotId: 'saved-lot', servingsMade: 4, servingsRemaining: 2.5, location: 'fridge' }, error: rpc.mock.calls.length === 1 ? new Error('Response lost') : null };
+  });
+  const client = { rpc } as unknown as SupabaseClient<Database>;
+  const view = () => <PantryDataProvider data={{ ...data, recipes: [dishes[0]], plannedMeals: [plan] }}><App onCookRecipe={(id, options) => cookRecipe(client, id, options)} /></PantryDataProvider>;
+  const first = render(view());
+  await user.click(screen.getByRole('button', { name: 'Recipes' }));
+  await user.click(screen.getByRole('button', { name: 'Choose recipes' }));
+  await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Chicken/ })).toBeEnabled());
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Chicken/ }));
+  fireEvent.change(screen.getByLabelText('Make servings of Chicken'), { target: { value: '4' } });
+  fireEvent.change(screen.getByLabelText('Eat servings of Chicken'), { target: { value: '1.5' } });
+  await user.click(screen.getByRole('button', { name: 'Add to On deck' }));
+  const draft = () => screen.getAllByRole('article', { name: 'Chicken' }).find((card) => within(card).queryByText('Unplanned'))!;
+  await user.click(within(draft()).getByRole('button', { name: 'Finish cooking' }));
+  await waitFor(() => expect(within(draft()).getByRole('button', { name: 'Retry saved batch' })).toBeEnabled());
+  const persistedDrafts = localStorage.getItem('mise.on-deck-drafts');
+  first.unmount(); render(view());
+  await user.click(screen.getByRole('button', { name: 'On deck' }));
+  await waitFor(() => expect(within(draft()).getByRole('button', { name: 'Retry saved batch' })).toBeEnabled());
+  expect(localStorage.getItem('mise.on-deck-drafts')).toBe(persistedDrafts);
+  expect(within(draft()).getByLabelText('Servings of Chicken made')).toHaveValue(4);
+  expect(within(draft()).getByLabelText('Servings of Chicken eaten now')).toHaveValue(1.5);
+  fireEvent.change(within(draft()).getByLabelText('Servings of Chicken made'), { target: { value: '8' } });
+  fireEvent.change(within(draft()).getByLabelText('Servings of Chicken eaten now'), { target: { value: '.25' } });
+  await user.click(within(draft()).getByRole('button', { name: 'Retry saved batch' }));
+  await waitFor(() => expect(screen.queryByText('Unplanned')).not.toBeInTheDocument());
+  expect(rpc).toHaveBeenCalledTimes(2);
+  expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
+  expect(rpc.mock.calls[0][1]).toMatchObject({ p_recipe: dishes[0].id, p_scale: 2, p_servings: 4, p_eaten_servings: 1.5 });
+  expect(rpc.mock.calls[0][1]).not.toHaveProperty('p_meal_plan');
+  expect(committed.size).toBe(1);
+  expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(1);
+  expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveValue(3);
+  expect(localStorage.getItem('mise.pending-mutations.v1')).toBe('{}');
 });
