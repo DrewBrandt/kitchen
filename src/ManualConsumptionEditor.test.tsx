@@ -18,6 +18,7 @@ describe('manual correction', () => {
   it('preserves unknown nutrients, known zero, and source when a nutrition total is corrected', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     render(<ManualConsumptionEditor id="exact-event" original={original} save={save} close={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: 'Nutrition is estimated' })).toBeChecked();
     await userEvent.clear(screen.getByLabelText('Calories'));
     await userEvent.type(screen.getByLabelText('Calories'), '200');
     await userEvent.click(screen.getByRole('button', { name: 'Save correction' }));

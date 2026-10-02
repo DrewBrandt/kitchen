@@ -31,6 +31,8 @@ export function ManualConsumptionEditor({ id, original, save, close }: { id: str
       if (value !== null && (!Number.isFinite(value) || value < 0)) { setError('Nutrition must be nonnegative, or blank for unknown.'); return; }
       if (value !== original.nutrition[key]) { nutrition[key] = value; changed = true; }
     }
+    const estimated = form.get('estimated') === 'on';
+    if (estimated !== Boolean(original.nutrition.estimated)) { nutrition.estimated = estimated; changed = true; }
     if (changed) patch.nutrition = nutrition;
     if (!Object.keys(patch).length) { close(); return; }
     setBusy(true); setError('');
@@ -44,6 +46,8 @@ export function ManualConsumptionEditor({ id, original, save, close }: { id: str
     <label className="field"><span>Note</span><input name="note" defaultValue={original.note ?? ''} /></label>
     <p>Nutrition totals · blank = unknown</p>
     {Object.entries(nutrients).map(([key, label]) => <label className="field" key={key}><span>{label}</span><input name={key} type="number" min="0" step="any" defaultValue={original.nutrition[key] === null ? '' : String(original.nutrition[key] ?? '')} /></label>)}
+    <label className="toggle-row"><input name="estimated" type="checkbox" defaultChecked={Boolean(original.nutrition.estimated)} /><span>Nutrition is estimated</span></label>
+    {original.nutrition.source && <small>Source: {String(original.nutrition.source)}</small>}
     {error && <p role="alert">{error}</p>}
     <button type="submit" className="button primary" disabled={busy}>{busy ? 'Saving…' : 'Save correction'}</button>
     <button type="button" className="button" disabled={busy} onClick={close}>Cancel edit</button>

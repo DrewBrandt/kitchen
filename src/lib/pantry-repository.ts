@@ -684,6 +684,13 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     if (!Number.isFinite(displayPerBase) || displayPerBase <= 0) return unavailable;
     return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, ...recordedCorrectionTotals(log), cost: costForLog(log).cost } };
   };
+  const estimateMetadata = (entry: FoodLogRow) => {
+    const raw = entry.nutrition_estimate;
+    const estimate = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return { nutritionIsEstimated: entry.nutrition_is_estimated, nutritionSource: entry.nutrition_source,
+      nutritionConfidence: typeof estimate.confidence === 'string' ? estimate.confidence : undefined,
+      nutritionRationale: typeof estimate.rationale === 'string' ? estimate.rationale : undefined };
+  };
   const buildFoodLog = (dayLogs: FoodLogRow[]) => groupFoodLogRows(dayLogs).map((group, index) => {
     const log = group[0];
     const statuses = group.map((entry) => entry.nutrition_status);
@@ -704,11 +711,11 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const serving = group.length === 1
       ? log.portion_label ?? (log.servings === null ? 'Portion not specified' : formatServings(Number(log.servings)))
       : `${totalServings === null ? 'Combined portions' : formatServings(totalServings)} · ${group.length} events`;
-    const qualifier = nutritionStatus === 'unknown' ? ' · nutrition unknown' : nutritionStatus === 'partial' ? ' · partial nutrition' : group.some((entry) => entry.nutrition_is_estimated) ? ' · estimated' : '';
+    const qualifier = nutritionStatus === 'unknown' ? ' · nutrition unknown' : nutritionStatus === 'partial' ? ' · partial nutrition' : '';
     return {
       id: log.id,
       eventIds: group.map((entry) => entry.id),
-      events: group.map((entry) => ({ ...quantityCorrectionForLog(entry), ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated, foodValue: valueForLog(entry).cost, foodValueIsEstimated: valueForLog(entry).estimated })),
+      events: group.map((entry) => ({ ...estimateMetadata(entry), ...quantityCorrectionForLog(entry), ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated, foodValue: valueForLog(entry).cost, foodValueIsEstimated: valueForLog(entry).estimated })),
       emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
       label: log.label,
       serving: `${serving}${qualifier}`,
@@ -718,6 +725,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       color: palette[index % palette.length],
       nutrition: nutritionStatus === 'unknown' ? undefined : summedNutrition,
       nutritionStatus,
+      nutritionIsEstimated: group.some((entry) => entry.nutrition_is_estimated),
       cost,
       costIsEstimated: costs.some((value) => value.estimated),
       foodValue: completeCost(group.map((entry) => valueForLog(entry).cost)),

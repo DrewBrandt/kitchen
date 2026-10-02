@@ -17,7 +17,7 @@ function fixture(meal: Row) {
 it('shows free outside food as actual zero paid with unknown food value and estimated nutrition', async () => {
   const data = await fixture(log(0, null)).load();
   expect(data.foodLog[0]).toMatchObject({ cost: 0, foodValue: null, costIsEstimated: false });
-  expect(data.foodLog[0].serving).toContain('estimated');
+  expect(data.foodLog[0].nutritionIsEstimated).toBe(true);
   expect(data.spendHistory[0]).toMatchObject({ spend: 0, spendMissingCost: 0, away: 0 });
   render(<PantryDataProvider data={data}><App /></PantryDataProvider>);
   const metric = screen.getByText('Food cost').closest('.headline-metric')!;
@@ -69,4 +69,25 @@ it('removes undone consumption from paid totals without creating purchase-day sp
   const data = await f.load();
   expect(data.foodLog).toEqual([]);
   expect(data.spendHistory).toEqual([]);
+});
+
+
+it('keeps partial nutrition separate from its estimated flag, provenance and editable snapshot', async () => {
+  const meal = { ...log(0, null), kcal: 100, protein_g: null, nutrition_status: 'partial', nutrition_source: 'Visual portion estimate', nutrition_estimate: { confidence: 'low', rationale: 'Small slice, recipe unknown' } };
+  const data = await fixture(meal).load();
+  expect(data.foodLog[0]).toMatchObject({ nutritionStatus: 'partial', nutritionIsEstimated: true });
+  expect(data.foodLog[0].events![0]).toMatchObject({ nutritionSource: meal.nutrition_source, nutritionConfidence: 'low', nutritionRationale: 'Small slice, recipe unknown', manual: { nutrition: { estimated: true, source: meal.nutrition_source } } });
+  render(<PantryDataProvider data={data}><App onUpdateFoodLog={async () => {}} /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'Food log' }));
+  const row = screen.getByRole('button', { name: 'View Dessert consumption event' });
+  expect(within(row).getByText('Estimated nutrition')).toBeVisible();
+  expect(within(row).getByText(/partial nutrition/)).toBeVisible();
+  await userEvent.click(row);
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getAllByText('Estimated nutrition').length).toBeGreaterThan(0);
+  expect(within(dialog).getByText('Source: Visual portion estimate')).toBeVisible();
+  expect(within(dialog).getByText('Confidence: low')).toBeVisible();
+  expect(within(dialog).getByText('Small slice, recipe unknown')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Edit consumption 1' }));
+  expect(within(dialog).getByRole('checkbox', { name: 'Nutrition is estimated' })).toBeChecked();
 });
