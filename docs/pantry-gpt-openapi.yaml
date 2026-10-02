@@ -291,12 +291,24 @@ paths:
     get:
       operationId: findRecipes
       summary: Find recipes with resolved ingredients and units
+      description: >-
+        Returns ingredients with stable row id, ingredient (food UUID), qty,
+        sort_order, nullable note and pinned_product, and a resolved unit object.
+        For PATCH map ingredient to foodId, qty to quantity, sort_order to
+        sortOrder, and unit.id to unit; retain each existing row id.
+        pinned_product is read-only here and retained on matched rows.
       parameters:
         - {in: query, name: q, required: false, schema: {type: string}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: saveRecipe
-      summary: Atomically create or update a recipe and all ingredients
+      summary: Save a recipe; use editRecipe for existing recipes
+      description: >-
+        Prefer this operation for creation. Legacy behavior with an existing recipe
+        id remains a destructive upsert: ingredients are deleted and recreated,
+        losing row identity and product pins; omitted metadata may be reset.
+        Use editRecipe (PATCH) for existing-recipe changes. This contract does
+        not change or fix the legacy POST behavior.
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -350,6 +362,18 @@ paths:
     patch:
       operationId: editRecipe
       summary: Correct selected recipe fields and optionally replace all ingredients
+      description: >-
+        Use for existing recipes. Omitted fields are preserved. Omit ingredients
+        for metadata-only edits; when supplied, send the complete desired list.
+        Read findRecipes first: map ingredient to foodId, qty to quantity,
+        sort_order to sortOrder, and unit.id to unit. Include each existing row id
+        to preserve identity, notes and product pins, especially for duplicate
+        foods or reordering. Explicit id: null creates a new row; omitted id uses
+        legacy matching and may reject ambiguous duplicates. Omitted note is
+        retained; null or an empty string clears it. Product pins cannot be edited
+        here. Omitted nutrition preserves stored values and basis; null clears
+        the override. Supplied nutrition contains whole-recipe totals using the
+        resulting servings as basis; basisQuantity is ignored.
       x-openai-isConsequential: true
       parameters:
         - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
@@ -369,7 +393,7 @@ paths:
                 sourceNote: {type: [string, 'null']}
                 promptForFeedback: {type: boolean}
                 nutrition:
-                  type: object
+                  type: [object, 'null']
                   additionalProperties: false
                   required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
                   properties:
@@ -394,11 +418,12 @@ paths:
                     additionalProperties: false
                     required: [foodId, quantity, unit]
                     properties:
+                      id: {type: [string, 'null'], format: uuid, description: 'Existing ingredient row UUID; explicit null creates a new row.'}
                       foodId: {type: string, format: uuid}
                       quantity: {type: number, exclusiveMinimum: 0}
                       unit: {type: string}
                       sortOrder: {type: integer, minimum: 0}
-                      note: {type: string}
+                      note: {type: [string, 'null']}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/lots/{id}:
     patch:
