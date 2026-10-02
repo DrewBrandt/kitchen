@@ -44,6 +44,31 @@ then raise exception 'Existing GPT/owner function or ACL changed'; end if;
 end $$;
 SQL
       ;;
+    202610020002_allow_future_food_log_undo.sql)
+      sql <<'SQL'
+create table isolated_test.undo_constraints_before as
+select oid,pg_get_constraintdef(oid) definition from pg_constraint
+where conrelid='public.food_logs'::regclass and conname<>'food_logs_check';
+create table isolated_test.undo_functions_before as
+select oid,pg_get_functiondef(oid) definition,proacl from pg_proc
+where pronamespace='public'::regnamespace and prokind='f';
+create table isolated_test.undo_table_acl_before as
+select oid,relacl from pg_class where relnamespace='public'::regnamespace;
+SQL
+      sql < "$migration" >/dev/null
+      sql <<'SQL'
+do $$ begin
+if exists(select 1 from pg_constraint where conrelid='public.food_logs'::regclass and conname='food_logs_check')
+  or exists(select 1 from isolated_test.undo_constraints_before b left join pg_constraint c using(oid)
+    where b.definition is distinct from pg_get_constraintdef(c.oid))
+  or exists(select 1 from isolated_test.undo_functions_before b left join pg_proc p using(oid)
+    where b.definition is distinct from pg_get_functiondef(p.oid) or b.proacl is distinct from p.proacl)
+  or exists(select 1 from isolated_test.undo_table_acl_before b left join pg_class c using(oid)
+    where c.oid is null or b.relacl is distinct from c.relacl)
+then raise exception 'Undo migration changed more than the single chronology constraint'; end if;
+end $$;
+SQL
+      ;;
     *) sql < "$migration" >/dev/null ;;
   esac
 done
@@ -55,5 +80,7 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/owner_creation.sql"
 docker exec -i "$name" sh < "$repo/supabase/tests/owner_creation_concurrency.sh"
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/grouped_workflow.sql"
+
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/future_food_log_undo.sql"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'
