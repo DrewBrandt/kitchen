@@ -33,3 +33,16 @@ it('discards the selected batch portion with a reason and exposes normal undo', 
   await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
   await waitFor(() => expect(undo).toHaveBeenCalledWith('waste-event'));
 });
+
+
+it('offers discard undo from History after reload without a toast', async () => {
+  const undo = vi.fn().mockResolvedValue(undefined);
+  const now = new Date().toISOString();
+  render(<PantryDataProvider data={{ ...previewPantryData, discardHistory: [{ eventId: 'old-discard', name: 'Rice', occurredAt: now, dateKey: now.slice(0, 10), quantity: '0.25 servings', reason: 'Dropped', cost: null }] }}><App onUndoInventoryAdjustment={undo} /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'History' }));
+  expect(screen.getByText('Discarded food')).toBeVisible();
+  expect(screen.getByText('Dropped')).toBeVisible();
+  expect(screen.getByText(/0.25 servings.*[Pp]rice unavailable.*wasted/)).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: 'Undo discard Rice' }));
+  await waitFor(() => expect(undo).toHaveBeenCalledWith('old-discard'));
+});

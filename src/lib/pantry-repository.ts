@@ -753,6 +753,22 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   // view prices each one from the lot it came off. Nothing here is estimated into
   // existence — an unpriced discard contributes 0 rather than a guess.
   const wasteEvents = (eventsResult.data ?? []).filter((event) => event.reason === 'waste');
+  const discardHistory = wasteEvents.map((event) => {
+    const lot = lotsResult.data?.find((candidate) => candidate.id === event.lot);
+    const prepared = allPreparedLots.find((batch) => batch.id === event.lot);
+    const product = lot?.product ? products.get(lot.product) : undefined;
+    const food = product ? foods.get(product.food) : undefined;
+    const unit = food?.display_unit ? units.get(food.display_unit) : undefined;
+    return {
+      eventId: event.id,
+      name: prepared?.name ?? product?.name ?? food?.name ?? 'Discarded food',
+      occurredAt: event.occurred_at,
+      dateKey: dateKeyInZone(new Date(event.occurred_at), settings.time_zone),
+      quantity: lot?.prep ? formatServings(Math.abs(Number(event.quantity_delta))) : formatUsStock(Math.abs(Number(event.quantity_delta)), unit),
+      reason: event.note,
+      cost: eventCostById.get(event.id) ?? null,
+    };
+  }).sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
   const spendByDay = new Map<string, number>();
   for (const [date, dayLogs] of byDay) {
     spendByDay.set(date, dayLogs.reduce((total, log) => total + (costForLog(log).cost ?? 0), 0));
@@ -910,6 +926,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     grocerySections,
     groceryGeneration,
     receiptHistory,
+    discardHistory,
     nutrients,
     weekDays,
     plannedMeals,

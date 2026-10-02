@@ -162,6 +162,7 @@ export interface PantryData {
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: GroceryItem[] }>;
   groceryGeneration: { ranges: PlanningRange[]; unknownRange: boolean };
+  discardHistory?: Array<{ eventId: string; name: string; occurredAt: string; dateKey: string; quantity: string; reason: string | null; cost: number | null }>;
   receiptHistory?: Array<{ lotId: string; name: string; acquiredAt: string; quantity: string; cost: number | null }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<Partial<PlannedMealView> & Pick<PlannedMealView, 'slot' | 'name' | 'emoji'>> }>;

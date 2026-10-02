@@ -419,7 +419,7 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
           {page === 'recipes' && <RecipesPage filter={recipeFilter} onFilter={setRecipeFilter} onOpen={open} />}
           {page === 'products' && <ProductsPage onOpen={open} notify={notify} />}
           {page === 'food-log' && <FoodLogPage onOpen={open} onOpenConsumption={openConsumption} notify={notify} onVoid={onVoidFoodLog} onPlan={onSaveAction ? (form) => onSaveAction('meal', form) : undefined} onConsumeLot={onConsumeInventoryLot} undo={reversals} />}
-          {page === 'history' && <HistoryPage onOpen={open} onOpenConsumption={openConsumption} onUndoPrep={onUndoPrep} onUndoReceipt={onUndoReceipt} />}
+          {page === 'history' && <HistoryPage onOpen={open} onOpenConsumption={openConsumption} onUndoPrep={onUndoPrep} onUndoReceipt={onUndoReceipt} onUndoDiscard={onUndoInventoryAdjustment} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
           {page === 'week' && <WeekPage range={selectedWeek} onChangeWeek={changeWeek} onCookMeal={stagePlans} onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onConsume={onConsumePlannedMeals} onSetServings={onSetPlannedConsumptionServings} />}
           {page === 'grocery' && (
@@ -933,8 +933,8 @@ function FoodLogPage({ onOpen, onOpenConsumption, notify, onVoid, onPlan, onCons
   );
 }
 
-function HistoryPage({ onUndoPrep, onUndoReceipt, onOpen, onOpenConsumption }: { onUndoPrep?: (id: string) => Promise<void>; onUndoReceipt?: (id: string) => Promise<void>; onOpen: (kind: PanelKind) => void; onOpenConsumption: (entry: FoodLogEntry) => void }) {
-  const { foodLogByDate, history, preparationHistory, receiptHistory = [], settings } = usePantryData();
+function HistoryPage({ onUndoPrep, onUndoReceipt, onUndoDiscard, onOpen, onOpenConsumption }: { onUndoPrep?: (id: string) => Promise<void>; onUndoReceipt?: (id: string) => Promise<void>; onUndoDiscard?: (id: string) => Promise<void>; onOpen: (kind: PanelKind) => void; onOpenConsumption: (entry: FoodLogEntry) => void }) {
+  const { foodLogByDate, history, preparationHistory, receiptHistory = [], discardHistory = [], settings } = usePantryData();
   const [range, setRange] = useState(30);
 
   const cutoff = new Date();
@@ -943,6 +943,7 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onOpen, onOpenConsumption }: {
   const cutoffKey = cutoff.toLocaleDateString('en-CA');
   const days = history.filter((day) => !day.dateKey || day.dateKey >= cutoffKey);
   const preparations = preparationHistory.filter((prep) => prep.dateKey >= cutoffKey);
+  const discards = discardHistory.filter((entry) => entry.dateKey >= cutoffKey);
 
   const proteinTarget = settings.proteinG || 1;
   const dailyBudget = dailyFoodBudget(settings.weeklyFoodBudget);
@@ -1012,6 +1013,11 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onOpen, onOpenConsumption }: {
         {!preparations.length && <div className="empty-inline">No recipes prepared in the last {range} days.</div>}
       </Card>
 
+      <Card>
+        <SectionTitle title="Discarded food" />
+        {discards.map((entry) => <div className="prep-history-row" key={entry.eventId}><div className="grow"><strong>{entry.name}</strong><small>{formatPreparedAt(entry.occurredAt, settings.timeZone)} · {entry.quantity} · {costLabel(entry.cost)} wasted</small>{entry.reason && <small>{entry.reason}</small>}</div><DurableUndo label={`Undo discard ${entry.name}`} action={onUndoDiscard ? () => onUndoDiscard(entry.eventId) : undefined} /></div>)}
+        {!discards.length && <div className="empty-inline">Nothing discarded in the last {range} days.</div>}
+      </Card>
       <Card>
         <SectionTitle title="Shopping receipts" />
         {receiptHistory.map((receipt) => <div className="prep-history-row" key={receipt.lotId}><div className="grow"><strong>{receipt.name}</strong><small>{formatPreparedAt(receipt.acquiredAt, settings.timeZone)} · {receipt.quantity} · {costLabel(receipt.cost)}</small></div><DurableUndo label={`Undo receipt ${receipt.name}`} action={onUndoReceipt ? () => onUndoReceipt(receipt.lotId) : undefined} /></div>)}
