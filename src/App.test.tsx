@@ -363,8 +363,8 @@ describe('Pantry web UI', () => {
     expect(within(dialog).getByRole('button', { name: 'Add to On deck' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: /Simple Pancakes/ }));
     expect(within(dialog).getByRole('button', { name: 'Add to On deck' })).toBeEnabled();
-    expect(within(dialog).getByRole('button', { name: /Simple Pancakes/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(dialog).getByRole('button', { name: /Simple Pancakes/ })).not.toHaveClass('checked');
+    expect(within(dialog).getByRole('spinbutton', { name: 'Make servings of Simple Pancakes' })).toBeInTheDocument();
+
     await user.click(within(dialog).getByRole('button', { name: /Soft Scrambled Eggs/ }));
     await user.click(within(dialog).getByRole('button', { name: 'Add to On deck' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -1152,3 +1152,4 @@ button.soon-row:hover { background: #121715; }
 .recipe-ingredient-editor { border: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
 .recipe-ingredient-edit-row { display: grid; gap: 6px; }
 .recipe-ingredient-edit-row > div { display: flex; gap: 6px; }
+.meal-dish-row { padding: 12px 0; border-bottom: 1px solid var(--line); }

@@ -12,7 +12,7 @@ type Notify = (message: string) => void;
 
 const EMPTY_NUTRITION: NutritionValues = { Calories: 0, Protein: 0, Carbs: 0, Fat: 0, Fiber: 0, Sodium: 0 };
 
-function recipePerServing(recipe: Recipe): NutritionValues {
+export function recipePerServing(recipe: Recipe): NutritionValues {
   if (recipe.nutritionValues) return nutritionForServings(recipe.nutritionValues, recipe.servings, 1);
   const calories = Number(recipe.nutrition.match(/([\d,.]+)\s*cal/i)?.[1]?.replace(',', '') ?? 0);
   const protein = Number(recipe.nutrition.match(/([\d,.]+)\s*g\s*protein/i)?.[1]?.replace(',', '') ?? 0);
@@ -64,7 +64,7 @@ function LotChoice({ product, value, onChange }: { product: ProductView; value: 
   </div>;
 }
 
-function ImpactStrip({ nutrition, cost, estimated, nutritionUnavailable }: { nutrition: NutritionValues; cost: number | null; estimated?: boolean; nutritionUnavailable?: boolean }) {
+export function ImpactStrip({ nutrition, cost, estimated, nutritionUnavailable }: { nutrition: NutritionValues; cost: number | null; estimated?: boolean; nutritionUnavailable?: boolean }) {
   const stats: Array<[string, string]> = [
     ['Calories', `${Math.round(nutrition.Calories).toLocaleString()} cal`],
     ['Protein', `${formatNutritionAmount(nutrition.Protein, 'Protein')} g`],

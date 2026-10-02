@@ -1,9 +1,12 @@
-import { formTimestamp } from './mutation-feedback';
+import { formTimestamp, runRetryableMutation } from './mutation-feedback';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { PanelKind } from '../data';
 
 type Client = SupabaseClient<Database>;
+export type GroupedPlanPayload = { plan_date: string; daypart: string; dishes: Array<{ recipe: string; scale_factor: number; planned_servings: number }> };
+export const mealBuilderOperation = 'meal_builder';
+export const mealBuilderIdentity = 'draft';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 const optionalText = (form: FormData, key: string) => text(form, key) || null;
@@ -309,6 +312,15 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
     return 'Food logged without changing inventory.';
   }
 
+  if (kind === 'meal' && form.has('dishes')) {
+    const payload: GroupedPlanPayload = { plan_date: text(form, 'plan_date'), daypart: text(form, 'daypart'), dishes: JSON.parse(text(form, 'dishes')) };
+    if (!Array.isArray(payload.dishes) || !payload.dishes.length || payload.dishes.some((dish) => !dish.recipe || !Number.isFinite(dish.scale_factor) || dish.scale_factor <= 0 || !Number.isFinite(dish.planned_servings) || dish.planned_servings <= 0)) throw new Error('Choose dishes with positive Make and Eat servings.');
+    await runRetryableMutation(client, mealBuilderOperation, payload, async (requestId, _at, submitted) => {
+      const { error } = await client.rpc('owner_append_plan', { p_request_id: requestId, p_payload: submitted });
+      if (error) throw error;
+    }, mealBuilderIdentity);
+    return 'Meal planned.';
+  }
   if (kind === 'meal') {
     const intent = text(form, 'intent') || 'prepare';
     const plannedServings = number(form, 'planned_servings', 1);

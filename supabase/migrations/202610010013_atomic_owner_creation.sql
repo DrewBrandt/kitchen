@@ -42,18 +42,40 @@ returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   prior jsonb; result jsonb; intent text; portions numeric; scale numeric;
   source_group text; group_id text := gen_random_uuid()::text;
-  source_row public.meal_plans%rowtype; plan_id uuid; plan_ids uuid[] := '{}';
+  source_row public.meal_plans%rowtype; plan_id uuid; plan_ids uuid[] := '{}'; dish jsonb;
 begin
   if auth.role() is distinct from 'authenticated' or not public.is_app_owner() then
     raise exception 'Unauthorized' using errcode = '42501';
   end if;
   if jsonb_typeof(p_payload) is distinct from 'object' or exists (
     select 1 from jsonb_object_keys(p_payload) k where k <> all(array[
-      'intent','plan_date','daypart','planned_servings','scale_factor','recipe','product','inventory_lot','source_group_id','note'])
+      'intent','plan_date','daypart','planned_servings','scale_factor','recipe','product','inventory_lot','source_group_id','note','dishes'])
   ) then raise exception 'Invalid plan fields'; end if;
   prior := public.claim_mutation_payload(p_request_id,'owner_append_plan',p_payload);
   if prior is not null then return prior; end if;
   intent := coalesce(nullif(p_payload->>'intent',''),'prepare');
+  if p_payload ? 'dishes' then
+    if intent <> 'prepare' or jsonb_typeof(p_payload->'dishes') is distinct from 'array' then raise exception 'Choose recipe dishes'; end if;
+    if jsonb_array_length(p_payload->'dishes')=0 then raise exception 'Choose at least one dish'; end if;
+    if exists(select 1 from jsonb_object_keys(p_payload) k where k not in('intent','plan_date','daypart','note','dishes')) then raise exception 'Use per-dish quantities and sources'; end if;
+    for dish in select value from jsonb_array_elements(p_payload->'dishes') loop
+      if jsonb_typeof(dish) is distinct from 'object' then raise exception 'Invalid dish'; end if;
+      if exists(select 1 from jsonb_object_keys(dish) k where k not in('recipe','scale_factor','planned_servings'))
+        or nullif(dish->>'recipe','') is null then raise exception 'Choose one recipe per dish'; end if;
+      scale:=(dish->>'scale_factor')::numeric; portions:=(dish->>'planned_servings')::numeric;
+      if scale is null or portions is null or scale<=0 or portions<=0
+        or scale::text in('NaN','Infinity','-Infinity') or portions::text in('NaN','Infinity','-Infinity') then raise exception 'Servings and scale must be positive'; end if;
+      insert into public.meal_plans(recipe,plan_date,daypart,scale_factor,status,group_id,intent,note)
+      values((dish->>'recipe')::uuid,(p_payload->>'plan_date')::date,(p_payload->>'daypart')::public.daypart,
+        scale,'planned',group_id,'prepare',p_payload->>'note') returning id into plan_id;
+      update public.planned_consumptions set servings=portions where meal_plan=plan_id;
+      if not found then raise exception 'Missing planned portions'; end if;
+      plan_ids:=array_append(plan_ids,plan_id);
+    end loop;
+    result:=jsonb_build_object('planIds',to_jsonb(plan_ids));
+    perform public.gpt_complete_request(p_request_id,result); return result;
+  end if;
+
   portions := coalesce((p_payload->>'planned_servings')::numeric,1);
   scale := coalesce((p_payload->>'scale_factor')::numeric,1);
   if portions <= 0 or scale <= 0 or portions::text in ('NaN','Infinity','-Infinity')

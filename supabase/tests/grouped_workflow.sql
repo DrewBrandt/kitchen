@@ -34,13 +34,10 @@ begin
     raise exception 'Other-week demand should be 240 minus 100'; end if;
   select jsonb_agg(to_jsonb(s) order by id) into snapshot from public.shopping_items s;
 
-  source_a:=(public.owner_append_plan(gen_random_uuid(),jsonb_build_object('recipe',a,'scale_factor',0.5,
-    'plan_date','2026-10-02','daypart','dinner','planned_servings',1))#>>'{planIds,0}')::uuid;
-  source_b:=(public.owner_append_plan(gen_random_uuid(),jsonb_build_object('recipe',b,'scale_factor',1,
-    'plan_date','2026-10-02','daypart','dinner','planned_servings',1))#>>'{planIds,0}')::uuid;
-  -- Seed an existing grouped dinner via existing owner CRUD. The browser's
-  -- append form creates individual groups, not a new multi-dish composer.
-  update public.meal_plans set group_id=group_key where id in(source_a,source_b);
+  result:=public.owner_append_plan(gen_random_uuid(),jsonb_build_object('plan_date','2026-10-02','daypart','dinner','dishes',jsonb_build_array(
+    jsonb_build_object('recipe',a,'scale_factor',0.5,'planned_servings',1),jsonb_build_object('recipe',b,'scale_factor',1,'planned_servings',1))));
+  source_a:=(result#>>'{planIds,0}')::uuid; source_b:=(result#>>'{planIds,1}')::uuid;
+  select group_id into group_key from public.meal_plans where id=source_a;
   result:=public.owner_append_plan(gen_random_uuid(),jsonb_build_object('intent','leftover','source_group_id',group_key,
     'plan_date','2026-10-03','daypart','lunch','planned_servings',1));
   select p.id into strict left_a from public.meal_plans p where p.source_meal_plan=source_a;

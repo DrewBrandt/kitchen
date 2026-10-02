@@ -62,4 +62,13 @@ do $$ begin
   end if;
 end $$;
 SQL
+pair "select public.owner_append_plan('99510000-0000-0000-0000-000000000031','{\"plan_date\":\"2026-10-02\",\"daypart\":\"lunch\",\"dishes\":[{\"recipe\":\"99510000-0000-0000-0000-000000000040\",\"scale_factor\":1,\"planned_servings\":1.5},{\"recipe\":\"99510000-0000-0000-0000-000000000040\",\"scale_factor\":2,\"planned_servings\":0.5}]}');"
+psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+do $$ begin
+ if (select count(*) from public.meal_plans where recipe='99510000-0000-0000-0000-000000000040' and daypart='lunch')<>2
+   or (select count(distinct group_id) from public.meal_plans where recipe='99510000-0000-0000-0000-000000000040' and daypart='lunch')<>1
+ then raise exception 'Concurrent grouped request duplicated or split the meal'; end if;
+end $$;
+SQL
+
 echo 'PASS: concurrent owner recipe/plan requests serialize and return identical IDs'
