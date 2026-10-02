@@ -60,3 +60,24 @@ it('shows recorded grocery quantity and keeps the old label in collapsed details
   await userEvent.click(screen.getByText('Details'));
   expect(saved.closest('details')).toHaveAttribute('open');
 });
+
+
+it('lets past-date stock be inspected without recommending cooking it', async () => {
+  const food = { emoji: '', name: 'Past-date milk', sub: 'Fridge', total: '1 cup', due: '12 days past date', tone: 'urgent', lots: ['1 cup fridge'], cost: null, costIsEstimated: false,
+    lotDetails: [{ id: 'dated-lot', quantity: '1 cup', location: 'fridge', dateLabel: '12 days past date', tone: 'urgent', remainingBase: 1, remainingDisplay: 1, displayUnit: 'cup', displayPerBase: 1, cost: null, costIsEstimated: false, costSource: '' }] };
+  render(<PantryDataProvider data={{ ...previewPantryData, inventorySections: [{ emoji: '', label: 'Dairy', foods: [food] }] }}><App /></PantryDataProvider>);
+  expect(screen.getByText('Check dates')).toBeVisible();
+  expect(screen.getByText('12 days past date')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /Cook these before they spoil/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Past-date milk/ }));
+  expect(within(screen.getByRole('dialog')).getByText('12 days past date')).toBeVisible();
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+  await userEvent.click(screen.getByRole('button', { name: /Review inventory/ }));
+  expect(screen.getByRole('heading', { name: 'Inventory', level: 1 })).toBeVisible();
+  expect(screen.getByText('Past-date milk')).toBeVisible();
+});
+
+it('uses a neutral empty state when no inventory dates are flagged', () => {
+  render(<PantryDataProvider data={{ ...previewPantryData, inventorySections: [] }}><App /></PantryDataProvider>);
+  expect(screen.getByText('No dates flagged')).toBeVisible();
+});

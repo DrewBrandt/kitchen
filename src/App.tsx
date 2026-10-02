@@ -555,10 +555,10 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
           <div className="split-actions"><button className="button primary" onClick={() => onOpen('meal', undefined, { plan_date: selectedKey })}>{dayPlans.length ? 'Plan another' : 'Add to day'}</button></div>
         </Card>
         <Card>
-          <div className="card-kicker"><span>USE SOON</span><small className="spend">{atRisk === null ? `${useSoon.length}` : `${usd(atRisk)} at risk`}</small></div>
+          <div className="card-kicker"><span>Check dates</span><small className="spend">{atRisk === null ? `${useSoon.length}` : `${usd(atRisk)} at risk`}</small></div>
           {useSoon.map((food) => <button className={cx('soon-row', food.tone)} key={food.name} onClick={() => onOpenFood(food)}><div><strong>{food.name}</strong><small>{food.total} · {food.lots[0]?.split(' ').at(-1)}</small></div><div className="soon-value"><em>{food.due}</em><small className="spend">{costLabel(food.cost, food.costIsEstimated)}</small></div></button>)}
-          {!useSoon.length && <div className="soon-row"><div><strong>Nothing urgent</strong><small>No dated lots need attention.</small></div></div>}
-          <button className="text-button align-left" onClick={() => onNavigate('recipes')}>Cook these before they spoil →</button>
+          {!useSoon.length && <div className="soon-row"><div><strong>No dates flagged</strong></div></div>}
+          <button className="text-button align-left" onClick={() => onNavigate('inventory')}>Review inventory →</button>
         </Card>
       </div>
 
