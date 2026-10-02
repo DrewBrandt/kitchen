@@ -102,6 +102,8 @@ export interface PlannedMealView {
   prepId?: string;
   preparedLotId?: string;
   preparedServingsAvailable?: number;
+  sourceServingsAvailable?: number;
+  sourceShortfall?: string;
   waitingForPreparation?: boolean;
   cost: number | null;
   costIsEstimated: boolean;
@@ -148,7 +150,7 @@ export interface ShoppingReceipt {
 }
 export interface GroceryItem {
   id?: string; name: string; quantity: string; checked?: boolean; cost?: number | null;
-  foodId?: string; pinnedProductId?: string; quantityNeeded?: number; unitId?: string;
+  foodId?: string; requiredProductId?: string; requiredProductName?: string; pinnedProductId?: string; quantityNeeded?: number; unitId?: string;
   receiptLotId?: string; demandNotice?: string; savedQuantityLabel?: string;
 }
 export interface PantryData {

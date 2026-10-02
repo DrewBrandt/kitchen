@@ -86,6 +86,25 @@ then raise exception 'POST migration altered other functions, permissions or sec
 end $$;
 SQL
       ;;
+    202610010016_planned_pantry_groceries.sql)
+      sql <<'SQL'
+create table isolated_test.grocery_functions_before as
+select oid,pg_get_functiondef(oid) definition,proacl,prosecdef,proconfig from pg_proc
+where pronamespace='public'::regnamespace and prokind='f';
+create table isolated_test.grocery_rows_before as select id,to_jsonb(s) value from public.shopping_items s;
+SQL
+      sql < "$migration" >/dev/null
+      sql <<'SQL'
+do $$ begin
+if exists(select 1 from isolated_test.grocery_functions_before b left join pg_proc p using(oid)
+ where p.oid is null or b.proacl is distinct from p.proacl or b.prosecdef is distinct from p.prosecdef or b.proconfig is distinct from p.proconfig
+ or (p.oid not in ('public.rebuild_shopping_from_plan(date,date)'::regprocedure,'public.receive_shopping_item(uuid,uuid,jsonb)'::regprocedure,'public.undo_inventory_receipt(uuid,uuid)'::regprocedure) and b.definition is distinct from pg_get_functiondef(p.oid)))
+ then raise exception 'Grocery migration changed unrelated functions or existing permissions'; end if;
+if exists(select 1 from isolated_test.grocery_rows_before b left join public.shopping_items s using(id) where b.value is distinct from (to_jsonb(s)-'generated_product') or s.generated_product is not null)
+ then raise exception 'Grocery migration rewrote historical shopping rows'; end if;
+end $$;
+SQL
+      ;;
     *) sql < "$migration" >/dev/null ;;
   esac
 done
@@ -105,5 +124,9 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 docker exec -i "$name" sh < "$repo/supabase/tests/recipe_post_concurrency.sh"
 
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/grouped_post_metadata.sql"
+
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/grocery_demand.sql"
+
+docker exec -i "$name" sh < "$repo/supabase/tests/grocery_demand_concurrency.sh"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'

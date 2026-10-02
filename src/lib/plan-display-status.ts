@@ -1,12 +1,13 @@
 import type { PlannedMealView } from '../pantry-data';
 
-type DisplayMeal = Pick<PlannedMealView, 'status' | 'consumptionStatus' | 'isLeftover' | 'sourceKind' | 'consumeFromInventory' | 'waitingForPreparation' | 'preparedServingsAvailable'>;
+type DisplayMeal = Pick<PlannedMealView, 'status' | 'consumptionStatus' | 'isLeftover' | 'sourceKind' | 'consumeFromInventory' | 'waitingForPreparation' | 'preparedServingsAvailable' | 'sourceShortfall'>;
 
 /** Leftover preparation state belongs to its live source, not its stored made flag. */
 export function planDisplayStatus(meals: DisplayMeal[], past: boolean) {
   const result = (label: string, tone: string, made = false, eaten = false) => ({ label, tone, made, eaten });
   if (meals.every((meal) => meal.consumptionStatus === 'fulfilled')) return result('Eaten', 'eaten', false, true);
   const pending = meals.filter((meal) => meal.consumptionStatus !== 'fulfilled');
+  if (pending.some((meal) => meal.sourceShortfall)) return result('Check source', 'planned');
   const blockedLeftovers = pending.filter((meal) => meal.isLeftover && !(Number(meal.preparedServingsAvailable) > 0));
   if (blockedLeftovers.some((meal) => meal.waitingForPreparation !== false)) return result('Waiting for preparation', 'planned');
   if (blockedLeftovers.length) return result('No servings remaining', 'planned');

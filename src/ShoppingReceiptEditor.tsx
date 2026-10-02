@@ -8,7 +8,7 @@ export function ShoppingReceiptEditor({ item, onSave, onClose }: { item: Grocery
   const sortedFoods = [...foods].sort((a, b) => a.name.localeCompare(b.name));
   const [foodId, setFoodId] = useState(item.foodId ?? '');
   const [search, setSearch] = useState('');
-  const [productId, setProductId] = useState(item.pinnedProductId ?? '');
+  const [productId, setProductId] = useState(item.requiredProductId ?? item.pinnedProductId ?? '');
   const [quantity, setQuantity] = useState(String(item.quantityNeeded ?? ''));
   const [unit, setUnit] = useState(item.unitId ?? '');
   const [price, setPrice] = useState('');
@@ -30,6 +30,7 @@ export function ShoppingReceiptEditor({ item, onSave, onClose }: { item: Grocery
     {!item.foodId && <label htmlFor={`${formId}-food`}>Food acquired<select id={`${formId}-food`} required value={foodId} onChange={(event) => { setFoodId(event.target.value); setProductId(''); setUnit(''); }}><option value="">Choose food</option>{sortedFoods.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>}
     <label htmlFor={`${formId}-search`}>Search products<input id={`${formId}-search`} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this food’s products" /></label>
     <label htmlFor={`${formId}-product`}>Product<select id={`${formId}-product`} value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Plain / unbranded {food?.name ?? 'food'}</option>{suitableProducts.filter((product) => product.id === productId || product.label.toLowerCase().includes(search.toLowerCase())).map((product) => <option key={product.id} value={product.id}>{product.label}</option>)}</select></label>
+    {item.requiredProductId && productId !== item.requiredProductId && <p role="status">Plan still needs {item.requiredProductName ?? item.name}.</p>}
     <div className="form-grid two"><label htmlFor={`${formId}-quantity`}>Quantity bought<input id={`${formId}-quantity`} required type="number" min="0.000001" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label htmlFor={`${formId}-unit`}>Unit<select id={`${formId}-unit`} required value={unit} onChange={(event) => setUnit(event.target.value)}><option value="">Choose unit</option>{units.filter((value) => value.measureStyle === food?.measureStyle || value.id === unit).map((value) => <option key={value.id} value={value.id}>{value.label}</option>)}</select></label></div>
     <label htmlFor={`${formId}-price`}>Price paid (optional)<input id={`${formId}-price`} type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Unknown" /></label>
     <details><summary>More details</summary><label htmlFor={`${formId}-location`}>Store in<select id={`${formId}-location`} value={location} onChange={(event) => setLocation(event.target.value)}>{locations.map((value) => <option key={value}>{value}</option>)}</select></label><label htmlFor={`${formId}-best-by`}>Best by<input id={`${formId}-best-by`} type="date" value={bestBy} onChange={(event) => setBestBy(event.target.value)} /></label><label htmlFor={`${formId}-note`}>Note<input id={`${formId}-note`} value={note} onChange={(event) => setNote(event.target.value)} /></label></details>

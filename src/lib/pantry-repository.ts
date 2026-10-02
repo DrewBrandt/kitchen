@@ -550,7 +550,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     if (item.source === 'generated' && item.generated_active === false) continue;
     const food = item.food ? foods.get(item.food) : undefined;
     const pinnedProduct = item.pinned_product ? products.get(item.pinned_product) : undefined;
-    const pricedProduct = pinnedProduct ?? [...products.values()].filter((product) => product.food === item.food && product.estimated_cost !== null)
+    const requiredProduct = item.generated_product ? products.get(item.generated_product) : undefined;
+    const pricedProduct = requiredProduct ?? pinnedProduct ?? [...products.values()].filter((product) => product.food === item.food && product.estimated_cost !== null)
       .sort((left, right) => (productUnitCost(left) ?? Infinity) - (productUnitCost(right) ?? Infinity))[0];
     const itemUnit = item.unit ? units.get(item.unit) : undefined;
     const neededBase = food && itemUnit && item.qty_needed !== null ? toFoodBase(food, Number(item.qty_needed), itemUnit) : null;
@@ -564,7 +565,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const items = groceryGroups.get(category) ?? [];
     items.push({
       id: item.id,
-      name: item.free_text ?? food?.name ?? 'Grocery item',
+      name: item.free_text ?? requiredProduct?.name ?? food?.name ?? 'Grocery item',
+      requiredProductId: item.generated_product ?? undefined, requiredProductName: requiredProduct ? [requiredProduct.brand, requiredProduct.name].filter(Boolean).join(' · ') : undefined,
       foodId: item.food ?? undefined, pinnedProductId: item.pinned_product ?? undefined, unitId: item.unit ?? undefined,
       quantityNeeded: remainingDisplay ?? item.qty_needed ?? undefined, receiptLotId: item.lot ?? undefined,
       demandNotice: item.generated_demand_changed && food && itemUnit ? `Plan now needs ${formatQuantity(fromFoodBase(food, shortageBase, itemUnit), itemUnit.short_name)} more. Your check and quantity were kept.` : undefined,
@@ -819,6 +821,12 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const prep = prepByMealPlan.get(plan.id);
     const servings = Number(consumption?.servings ?? 1);
     const sourceKind = plan.inventory_lot ? 'lot' : plan.product ? 'product' : 'recipe';
+    const sourceAvailable = plan.inventory_lot ? (prepared?.servingsLeft ?? lot?.remainingServings ?? 0) : undefined;
+    const monday = new Date(plan.plan_date + 'T12:00:00Z');
+    monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+    const weekStart = monday.toISOString().slice(0, 10); monday.setUTCDate(monday.getUTCDate() + 7);
+    const weekEnd = monday.toISOString().slice(0, 10);
+    const exactDemand = plan.inventory_lot ? (plansResult.data ?? []).filter((row) => row.inventory_lot === plan.inventory_lot && ['planned', 'made'].includes(row.status) && row.plan_date >= weekStart && row.plan_date < weekEnd && plannedConsumptions.get(row.id)?.status === 'planned').reduce((sum, row) => sum + Number(plannedConsumptions.get(row.id)?.servings ?? 0), 0) : 0;
     const nutrition = prepared?.nutritionPerServing
       ? Object.fromEntries(Object.entries(prepared.nutritionPerServing).map(([label, value]) => [label, value * servings])) as NutritionValues
       : product
@@ -844,6 +852,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       recipeId: recipe?.id,
       productId,
       inventoryLotId: plan.inventory_lot ?? undefined,
+      sourceServingsAvailable: sourceAvailable,
+      sourceShortfall: sourceAvailable !== undefined && consumption?.status === 'planned' && exactDemand > sourceAvailable + INVENTORY_QUANTITY_EPSILON ? 'Selected lot is short for this week. Adjust portions or remove a plan.' : undefined,
       sourceKind,
       consumeFromInventory: plan.consume_from_inventory ?? undefined,
       status: plan.status,

@@ -1381,6 +1381,7 @@ export type Database = {
       }
       shopping_items: {
         Row: {
+          generated_product: string | null
           generated_from: string | null
           generated_through: string | null
           generated_active: boolean
@@ -1404,6 +1405,7 @@ export type Database = {
           unit: string | null
         }
         Insert: {
+          generated_product?: string | null
           generated_from?: string | null
           generated_through?: string | null
           generated_active?: boolean
@@ -1427,6 +1429,7 @@ export type Database = {
           unit?: string | null
         }
         Update: {
+          generated_product?: string | null
           generated_from?: string | null
           generated_through?: string | null
           generated_active?: boolean
@@ -1450,6 +1453,7 @@ export type Database = {
           unit?: string | null
         }
         Relationships: [
+          { foreignKeyName: "shopping_items_generated_product_fkey"; columns: ["generated_product"]; isOneToOne: false; referencedRelation: "products"; referencedColumns: ["id"] },
           {
             foreignKeyName: "shopping_items_food_fkey"
             columns: ["food"]
@@ -1822,6 +1826,10 @@ export type Database = {
       recipe_portion_snapshot: {
         Args: { p_recipe: string; p_servings: number }
         Returns: Json
+      }
+      reconcile_shopping_demand: {
+        Args: { p_from: string; p_through: string; p_food?: string }
+        Returns: number
       }
       rebuild_shopping_from_plan: {
         Args: { p_from?: string; p_through?: string }
