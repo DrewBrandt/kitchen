@@ -70,3 +70,20 @@ describe('leftover planning', () => {
     expect(within(screen.getByLabelText('Nutrition and cost preview')).getByText('Cost').parentElement).toHaveTextContent('Unavailable');
   });
 });
+
+it('keeps unequal source portions and allows rice alone while preparation is pending', async () => {
+ const recipes = previewPantryData.recipes.slice(0,2).map((r,i)=>({...r,name:i?'Rice':'Chicken'}));
+ const plannedMeals = recipes.map((r,i)=>({...previewPantryData.plannedMeals[0],id:'source-'+i,groupId:'unequal',recipeId:r.id,name:r.name,plannedServings:i?1:0.5,status:'planned' as const,isLeftover:false}));
+ const view=mount({...previewPantryData,recipes,plannedMeals,preparedLots:[]});
+ await userEvent.click(screen.getByRole('tab',{name:/Leftovers/}));
+ await userEvent.click(screen.getByRole('option',{name:/Chicken \+ Rice/}));
+ expect(screen.getByLabelText('Servings of Chicken to eat')).toHaveValue(.5);
+ expect(screen.getByLabelText('Servings of Rice to eat')).toHaveValue(1);
+ expect(screen.getAllByText('Not cooked yet')).toHaveLength(2);
+ const payload=()=>JSON.parse(String(new FormData(screen.getByRole('form',{name:'Plan'}) as HTMLFormElement).get('leftover_dishes')));
+ expect(payload()).toEqual([{source_meal_plan:'source-0',planned_servings:.5},{source_meal_plan:'source-1',planned_servings:1}]);
+ await userEvent.click(screen.getByRole('checkbox',{name:'Chicken'}));
+ expect(payload()).toEqual([{source_meal_plan:'source-1',planned_servings:1}]);
+ expect(screen.queryByLabelText('Servings of Chicken to eat')).not.toBeInTheDocument();
+ view.unmount();
+});

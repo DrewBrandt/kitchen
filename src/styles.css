@@ -1153,3 +1153,7 @@ button.soon-row:hover { background: #121715; }
 .recipe-ingredient-edit-row { display: grid; gap: 6px; }
 .recipe-ingredient-edit-row > div { display: flex; gap: 6px; }
 .meal-dish-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+
+.leftover-component { padding: 12px; border: 1px solid #2b3430; border-radius: 9px; gap: 8px; }
+.leftover-choice { display: flex; align-items: center; gap: 8px; }
+.leftover-choice input[type="checkbox"] { width: 16px; height: 16px; padding: 0; accent-color: var(--mint); }

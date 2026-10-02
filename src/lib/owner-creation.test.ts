@@ -60,3 +60,13 @@ it.each(['recipe', 'meal'] as const)('retains request identity on uncertain %s r
   await savePanelAction(client, kind, retry);
   expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
 });
+
+it('retries exact unequal leftover sources after recreation with one atomic call', async () => {
+ const {client,rpc}=fixture();
+ const values={intent:'leftover',source_group_id:'dinner',plan_date:'2026-10-03',daypart:'lunch',leftover_dishes:JSON.stringify([{source_meal_plan:'chicken',planned_servings:.5},{source_meal_plan:'rice',planned_servings:1}])};
+ rpc.mockResolvedValueOnce({error:new Error('Response lost')});
+ await expect(savePanelAction(client,'meal',await createFormAttempt()(formOf(values)))).rejects.toThrow('Response lost');
+ await savePanelAction(client,'meal',await createFormAttempt()(formOf(values)));
+ expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
+ expect(rpc.mock.calls[1][1].p_payload.leftover_dishes).toEqual(JSON.parse(values.leftover_dishes));
+});
