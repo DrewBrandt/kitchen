@@ -16,6 +16,7 @@ ajv.addFormat('uri', { type: 'string', validate: (value: string) => { try { new 
 const validate = ajv.compile(patchSchema);
 const uuid = (n: number) => `98600000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const base = { foodId: uuid(3), quantity: 10, unit: uuid(4), sortOrder: 0 };
+const batchNutrition = { calories: 800, proteinG: 30, carbsG: 100, fatG: 30, fiberG: 10, sugarG: 5, sodiumMg: 600 };
 
 function fixture() {
   // Run actual route/serializer source with a stub database. No Deno listener,
@@ -51,6 +52,8 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
     ['clear an existing note', { ingredients: [{ ...base, id: uuid(10), note: null }] }],
     ['explicit new row', { ingredients: [{ ...base, id: null, note: null }] }],
     ['clear nutrition', { nutrition: null }],
+    ['whole-recipe nutrition without legacy basis', { servings: 4, nutrition: batchNutrition }],
+    ['whole-recipe nutrition with ignored legacy basis', { servings: 4, nutrition: { ...batchNutrition, basisQuantity: 99 } }],
     ['metadata-only edit', { name: 'Renamed' }],
   ])('validates and forwards %s without rewriting the payload', async (_label, payload) => {
     expect(validate(payload), JSON.stringify(validate.errors)).toBe(true);
@@ -67,6 +70,8 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
     { ingredients: [{ id: uuid(10) }] },
     { ingredients: [] },
     { nutrition: 'clear' },
+    { nutrition: { ...batchNutrition, basisQuantity: 0 } },
+    { nutrition: { calories: 800 } },
     {},
   ])('rejects invalid or unsupported contract input %#', (payload) => {
     expect(validate(payload)).toBe(false);
@@ -106,6 +111,20 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
     expect(schema.paths['/v1/recipes'].post.description).toContain('does not change or fix the legacy POST behavior');
     expect(schema.paths['/v1/recipes'].post.description).toContain('Use editRecipe (PATCH)');
     expect(schema.paths['/v1/recipes'].post.requestBody.content['application/json'].schema.properties.ingredients.items.properties.id).toBeUndefined();
+  });
+
+  it('deprecates basisQuantity only for recipe PATCH while retaining legacy input', () => {
+    const nutrition = patchSchema.properties.nutrition;
+    expect(nutrition.required).not.toContain('basisQuantity');
+    expect(nutrition.properties.basisQuantity.deprecated).toBe(true);
+    expect(nutrition.properties.basisQuantity.description).toContain('whole-recipe nutrient totals');
+    for (const [path, method] of [['/v1/foods', 'post'], ['/v1/foods/{id}', 'patch'], ['/v1/products', 'post'], ['/v1/products/{id}', 'patch'], ['/v1/recipes', 'post']]) {
+      const other = schema.paths[path][method].requestBody.content['application/json'].schema.properties.nutrition;
+      expect(other.required).toContain('basisQuantity');
+      expect(other.properties.basisQuantity.deprecated).toBeUndefined();
+    }
+    expect(schema.components.schemas.Nutrition.required).toContain('basisQuantity');
+    expect(schema.components.schemas.Nutrition.properties.basisQuantity.deprecated).toBeUndefined();
   });
 
   it('surfaces SQL ambiguity without retrying through destructive POST', async () => {

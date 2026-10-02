@@ -395,9 +395,9 @@ paths:
                 nutrition:
                   type: [object, 'null']
                   additionalProperties: false
-                  required: [basisQuantity, calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
+                  required: [calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
                   properties:
-                    basisQuantity: {type: number, exclusiveMinimum: 0}
+                    basisQuantity: {type: number, exclusiveMinimum: 0, deprecated: true, description: 'Legacy optional field; ignored. Send whole-recipe nutrient totals; the resulting recipe servings set the stored basis.'}
                     calories: {type: number, minimum: 0}
                     proteinG: {type: number, minimum: 0}
                     carbsG: {type: number, minimum: 0}
