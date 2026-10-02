@@ -116,6 +116,8 @@ export interface PieceInput {
   lotId: string;
   pieces: number;
   lotPieces?: number;
+  weightGrams?: number;
+  scaleRecipe?: boolean;
   expectedRemaining: number;
 }
 

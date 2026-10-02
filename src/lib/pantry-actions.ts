@@ -134,6 +134,7 @@ async function saveRecipe(client: Client, form: FormData) {
   };
   if (recipeId) {
     if (!ingredients.length) throw new Error('At least one ingredient is required.');
+    const pieceBases = JSON.parse(text(form, 'ingredient_piece_bases') || 'null') as import('../database.types').Json[] | null;
     const ingredientIds: unknown = JSON.parse(text(form, 'ingredient_ids') || 'null');
     if (!Array.isArray(ingredientIds) || ingredientIds.length !== ingredients.length
       || ingredientIds.some((id) => id !== null && (typeof id !== 'string' || !id))) {
@@ -148,6 +149,7 @@ async function saveRecipe(client: Client, form: FormData) {
         ingredients: ingredients.map((ingredient, index) => ({
           id: ingredientIds[index] as string | null, foodId: ingredient.ingredient, quantity: ingredient.qty,
           unit: ingredient.unit, sortOrder: ingredient.sort_order,
+          ...(pieceBases ? { pieceBasis: pieceBases[index] } : {}),
         })),
       },
     });

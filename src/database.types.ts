@@ -1208,6 +1208,7 @@ export type Database = {
         Row: {
           id: string
           ingredient: string
+          piece_basis: Json | null
           note: string | null
           pinned_product: string | null
           qty: number
@@ -1218,6 +1219,7 @@ export type Database = {
         Insert: {
           id?: string
           ingredient: string
+          piece_basis?: Json | null
           note?: string | null
           pinned_product?: string | null
           qty: number
@@ -1228,6 +1230,7 @@ export type Database = {
         Update: {
           id?: string
           ingredient?: string
+          piece_basis?: Json | null
           note?: string | null
           pinned_product?: string | null
           qty?: number

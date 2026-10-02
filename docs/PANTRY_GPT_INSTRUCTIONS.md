@@ -128,3 +128,10 @@ For “plan my week”:
 5. Show assumptions, leftovers, timing, and prep; confirm.
 6. Store `scaleFactor` and `plannedServings`; call `saveMealPlan` with
    `mode: replaceWeek`, reread, and summarize while preserving manual groceries.
+
+
+### Optional piece-friendly imports
+For naturally countable weighed ingredients, explicitly opt in with ingredient `pieceBasis`:
+`{"count":3,"grams":453.59237,"label":"chicken thighs","sourceQuantity":1,"sourceUnit":"lb","provenance":"Importer estimate: 3 thighs per pound","anchor":false}`.
+Keep canonical `quantity: 453.59237, unit: "g"`; retain original source quantity/unit in the snapshot. Never replace canonical mass with a count. Save the estimate once; do not refresh old recipes when catalog defaults change. Do not bulk infer existing recipes. GET returns `piece_basis`; send it as `pieceBasis` on POST/PATCH. Omission preserves it; explicit null removes it. A changed canonical mass requires an explicitly revised estimate or null.
+At most one ingredient can set `anchor: true` (e.g. one tenderloin). Cooking optionally scales other quantities and estimated yield from its selected weight. Never scale cooking time/temperature or rewrite method prose automatically. Lot averages require a recorded count; never assume a multipiece pack weighs the same as one piece. No mandatory weighing. Avoid fixed recipe nutrition overrides for piece-adjusted recipes: their nutrition follows actual ingredient deductions.

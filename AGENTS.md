@@ -34,3 +34,6 @@
 - While holding the lock, recheck that `main` has not acquired unexpected uncommitted changes. Merge the feature branch, run the full regression suite on the merged result, push `main` to GitHub, and verify the GitHub Pages deployment.
 - Remove only your own `merging.lock`, and remove it in a `finally`/cleanup path even if merge, testing, push, or deployment fails. The lock coordinates workers; it is not a substitute for reporting a failed delivery.
 - After a successful merge, push, deployment, and post-merge verification, remove the completed feature worktree and delete its local feature branch.
+
+- The disposable SQL harness accepts optional test filenames after the script path for focused validation (for example `recipe_piece_estimates.sql piece_cooking.sql`). On this host use `C:\Users\Snoopy\AppData\Local\Python\pythoncore-3.10-64\python.exe` when the Windows Store `python` alias is inaccessible.
+- Keep shell harnesses LF-terminated (`*.sh text eol=lf` in `.gitattributes`); CRLF causes WSL `sh` to reject `set -eu`.

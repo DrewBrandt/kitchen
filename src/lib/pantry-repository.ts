@@ -419,13 +419,13 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
           remainingBase: Number(lot.remaining_qty),
           remainingPieces: lot.piece_count && lot.piece_basis_qty ? Number(lot.remaining_qty) * Number(lot.piece_count) / Number(lot.piece_basis_qty) : undefined,
         })) : [];
-        const pieceFields = { id: ingredient.id, pieceLots };
-        if (food.always_available) return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
+        const pieceFields = { id: ingredient.id, pieceLots, ...(ingredient.piece_basis ? { pieceBasis: ingredient.piece_basis as unknown as import('../data').RecipePieceBasis } : {}) };
+        if (food.always_available) return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, label: pieceFields.pieceBasis ? `${formatAmount(pieceFields.pieceBasis.count)} ${pieceFields.pieceBasis.label} (~${formatAmount(pieceFields.pieceBasis.grams)} g estimated)` : `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
         const enough = availableBase + 0.0000001 >= neededBase;
         const availableInRequestedUnit = fromFoodBase(food, availableBase, unit);
-        return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, availableQuantity: availableInRequestedUnit, label: `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
+        return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, availableQuantity: availableInRequestedUnit, label: pieceFields.pieceBasis ? `${formatAmount(pieceFields.pieceBasis.count)} ${pieceFields.pieceBasis.label} (~${formatAmount(pieceFields.pieceBasis.grams)} g estimated)` : `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: `${formatRecipeQuantity(availableInRequestedUnit, unit.short_name)} in stock${enough ? '' : ' · short'}` };
       }),
       steps,
       ease: easeRatings.length ? Number((easeRatings.reduce((total, value) => total + value, 0) / easeRatings.length).toFixed(1)) : 0,

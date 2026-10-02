@@ -89,6 +89,16 @@ export const INVENTORY_SECTIONS = [
   },
 ];
 
+export interface RecipePieceBasis {
+  count: number;
+  grams: number;
+  label: string;
+  sourceQuantity: number;
+  sourceUnit: string;
+  provenance: string;
+  anchor?: boolean;
+}
+
 export interface Recipe {
   id: string;
   emoji: string;
@@ -96,7 +106,7 @@ export interface Recipe {
   servings: number;
   minutes: number;
   nutrition: string;
-  ingredients: { label: string; stock: string; quantity?: number; unit?: string; name?: string; availableQuantity?: number; id?: string; pieceLots?: Array<{ id: string; label: string; remainingBase: number; remainingPieces?: number }> }[];
+  ingredients: { pieceBasis?: RecipePieceBasis; label: string; stock: string; quantity?: number; unit?: string; name?: string; availableQuantity?: number; id?: string; pieceLots?: Array<{ id: string; label: string; remainingBase: number; remainingPieces?: number }> }[];
   steps: string[];
   ease: number;
   taste: number;

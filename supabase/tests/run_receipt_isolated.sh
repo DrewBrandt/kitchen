@@ -108,6 +108,13 @@ SQL
     *) sql < "$migration" >/dev/null ;;
   esac
 done
+# Optional focused SQL files reuse exactly the same disposable bootstrap.
+if [ "$#" -gt 0 ]; then
+  for test_file in "$@"; do
+    docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/$test_file"
+  done
+  exit 0
+fi
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/receipt_lifecycle.sql"
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/receipt_regressions.sql"
 docker exec -i "$name" sh < "$repo/supabase/tests/receipt_concurrency.sh"

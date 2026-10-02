@@ -49,6 +49,8 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
   it.each([
     ['legacy no-ID matching', { ingredients: [base] }],
     ['stable existing identity', { ingredients: [{ ...base, id: uuid(10) }] }],
+    ['saved piece estimate', { ingredients: [{ ...base, pieceBasis: { count: 1, grams: 10, label: 'piece', sourceQuantity: 10, sourceUnit: 'g', provenance: 'importer estimate', anchor: true } }] }],
+    ['clear piece estimate', { ingredients: [{ ...base, pieceBasis: null }] }],
     ['clear an existing note', { ingredients: [{ ...base, id: uuid(10), note: null }] }],
     ['explicit new row', { ingredients: [{ ...base, id: null, note: null }] }],
     ['clear nutrition', { nutrition: null }],

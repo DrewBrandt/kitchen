@@ -357,6 +357,18 @@ paths:
                       quantity: {type: number, exclusiveMinimum: 0}
                       unit: {type: string}
                       sortOrder: {type: integer, minimum: 0}
+                      pieceBasis:
+                        type: [object, 'null']
+                        description: Recipe-local piece estimate. Canonical quantity/unit must equal grams. Omit to preserve; null clears. At most one anchor per recipe.
+                        required: [count, grams, label, sourceQuantity, sourceUnit, provenance]
+                        properties:
+                          count: {type: number, exclusiveMinimum: 0, multipleOf: 0.25}
+                          grams: {type: number, exclusiveMinimum: 0}
+                          label: {type: string, minLength: 1}
+                          sourceQuantity: {type: number, exclusiveMinimum: 0}
+                          sourceUnit: {type: string, minLength: 1}
+                          provenance: {type: string, minLength: 1}
+                          anchor: {type: boolean}
                       note: {type: string}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/recipes/{id}:
@@ -367,7 +379,7 @@ paths:
         Use for existing recipes. Omitted fields are preserved. Omit ingredients
         for metadata-only edits; when supplied, send the complete desired list.
         Read findRecipes first: map ingredient to foodId, qty to quantity,
-        sort_order to sortOrder, and unit.id to unit. Include each existing row id
+        piece_basis to pieceBasis, sort_order to sortOrder, and unit.id to unit. Include each existing row id
         to preserve identity, notes and product pins, especially for duplicate
         foods or reordering. Explicit id: null creates a new row; omitted id uses
         legacy matching and may reject ambiguous duplicates. Omitted note is
@@ -424,6 +436,18 @@ paths:
                       quantity: {type: number, exclusiveMinimum: 0}
                       unit: {type: string}
                       sortOrder: {type: integer, minimum: 0}
+                      pieceBasis:
+                        type: [object, 'null']
+                        description: Recipe-local piece estimate. Canonical quantity/unit must equal grams. Omit to preserve; null clears. At most one anchor per recipe.
+                        required: [count, grams, label, sourceQuantity, sourceUnit, provenance]
+                        properties:
+                          count: {type: number, exclusiveMinimum: 0, multipleOf: 0.25}
+                          grams: {type: number, exclusiveMinimum: 0}
+                          label: {type: string, minLength: 1}
+                          sourceQuantity: {type: number, exclusiveMinimum: 0}
+                          sourceUnit: {type: string, minLength: 1}
+                          provenance: {type: string, minLength: 1}
+                          anchor: {type: boolean}
                       note: {type: [string, 'null']}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/lots/{id}:
@@ -1255,6 +1279,18 @@ components:
               quantity: {type: number, exclusiveMinimum: 0}
               unit: {type: string}
               sortOrder: {type: integer, minimum: 0}
+              pieceBasis:
+                type: [object, 'null']
+                description: Recipe-local piece estimate. Canonical quantity/unit must equal grams. Omit to preserve; null clears. At most one anchor per recipe.
+                required: [count, grams, label, sourceQuantity, sourceUnit, provenance]
+                properties:
+                  count: {type: number, exclusiveMinimum: 0, multipleOf: 0.25}
+                  grams: {type: number, exclusiveMinimum: 0}
+                  label: {type: string, minLength: 1}
+                  sourceQuantity: {type: number, exclusiveMinimum: 0}
+                  sourceUnit: {type: string, minLength: 1}
+                  provenance: {type: string, minLength: 1}
+                  anchor: {type: boolean}
               note: {type: string}
     WeeklyPlan:
       type: object
