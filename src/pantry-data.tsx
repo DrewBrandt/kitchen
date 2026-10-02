@@ -35,7 +35,7 @@ export type NutritionValues = Record<NutrientName, number>;
 export interface FoodLogEntry {
   id?: string;
   eventIds?: string[];
-  events?: Array<{ quantityCorrection?: QuantityCorrectionSnapshot; quantityCorrectionUnavailable?: string; manual?: ManualConsumptionSnapshot; id: string; label: string; portion: string; time: string; cost: number | null; costIsEstimated: boolean }>;
+  events?: Array<{ quantityCorrection?: QuantityCorrectionSnapshot; quantityCorrectionUnavailable?: string; manual?: ManualConsumptionSnapshot; foodValue?: number | null; foodValueIsEstimated?: boolean; id: string; label: string; portion: string; time: string; cost: number | null; costIsEstimated: boolean }>;
   emoji: string;
   label: string;
   serving: string;
@@ -47,6 +47,8 @@ export interface FoodLogEntry {
   nutritionStatus?: 'complete' | 'partial' | 'unknown';
   cost?: number | null;
   costIsEstimated?: boolean;
+  foodValue?: number | null;
+  foodValueIsEstimated?: boolean;
 }
 
 export interface ProductView {

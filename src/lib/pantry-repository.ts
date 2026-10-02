@@ -4,7 +4,7 @@ import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
 import type { ShoppingReceipt, FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
-import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, completeCost, perServingCost, remainingValue } from './cost';
 import { formatAmount, formatServings, formatStockQuantity, shoppingQuantityPresentation } from './format';
 import { runRetryableMutation } from './mutation-feedback';
 import { nutritionForServings } from './nutrition';
@@ -628,7 +628,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
   const eventCostById = new Map((eventCostsResult.data ?? []).map((row) => [row.inventory_event_id ?? '', row.cost === null ? null : Number(row.cost)]));
   const eventsByLog = new Map<string, NonNullable<typeof eventsResult.data>>();
   for (const event of eventsResult.data ?? []) if (event.food_log) eventsByLog.set(event.food_log, [...(eventsByLog.get(event.food_log) ?? []), event]);
-  const costForLog = (log: FoodLogRow): CostValue => {
+  const valueForLog = (log: FoodLogRow): CostValue => {
     const events = eventsByLog.get(log.id) ?? [];
     if (events.length) {
       let total = 0;
@@ -644,12 +644,28 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       }
       return { cost: total, estimated, source: estimated ? 'Inventory estimate' : 'Inventory event cost' };
     }
+    if (log.kind === 'manual') return { cost: log.total_price == null ? null : Number(log.total_price), estimated: log.cost_is_estimated, source: log.cost_source ?? 'Recorded food value' };
     if (log.cost !== null) return { cost: Number(log.cost), estimated: log.cost_is_estimated, source: log.cost_source ?? 'Directly logged cost' };
     const product = log.product ? products.get(log.product) : undefined;
     if (product?.estimated_cost !== null && product?.estimated_cost !== undefined) return { cost: estimatedProductPortionCost(product, Number(log.servings ?? 1)), estimated: true, source: product.cost_source ?? 'Product price estimate' };
     const recipe = log.recipe ? recipeCosts.get(log.recipe) : undefined;
     if (recipe?.costPerServing !== null && recipe?.costPerServing !== undefined) return { cost: recipe.costPerServing * Number(log.servings ?? 1), estimated: true, source: 'Recipe estimate' };
     return { cost: null, estimated: true, source: 'Price unavailable' };
+  };
+  // Personal food cost follows the portion eaten, not the acquisition date.
+  // Prepared lots already carry paid amounts from their actual ingredient events.
+  // Catalog estimates and economic value are never evidence of what the owner paid.
+  const costForLog = (log: FoodLogRow): CostValue => {
+    const events = (eventsByLog.get(log.id) ?? []).filter((event) => event.reason === 'eaten');
+    if (events.length) {
+      const portions = events.map((event) => {
+        const lot = (lotsResult.data ?? []).find((candidate) => candidate.id === event.lot);
+        return lot?.out_of_pocket_cost == null || !lot.initial_qty ? null
+          : Number(lot.out_of_pocket_cost) * Math.abs(Number(event.quantity_delta)) / Number(lot.initial_qty);
+      });
+      return { cost: completeCost(portions), estimated: events.some((event) => (lotsResult.data ?? []).find((lot) => lot.id === event.lot)?.cost_is_estimated), source: 'Paid cost allocated from source lots' };
+    }
+    return { cost: log.out_of_pocket_cost == null ? null : Number(log.out_of_pocket_cost), estimated: log.cost_is_estimated, source: 'Recorded amount paid' };
   };
   const quantityCorrectionForLog = (log: FoodLogRow) => {
     if (!['inventory', 'prepared'].includes(log.kind)) return {};
@@ -666,7 +682,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const safeUnit = !lot.prep && unit && unit.measure_style === food?.measure_style ? unit : undefined;
     const displayPerBase = safeUnit && food ? fromFoodBase(food, 1, safeUnit) : 1;
     if (!Number.isFinite(displayPerBase) || displayPerBase <= 0) return unavailable;
-    return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, ...recordedCorrectionTotals(log) } };
+    return { quantityCorrection: { quantity: -Number(events[0].quantity_delta), canonicalUnit, displayUnit: safeUnit?.short_name ?? canonicalUnit, displayPerBase, ...recordedCorrectionTotals(log), cost: costForLog(log).cost } };
   };
   const buildFoodLog = (dayLogs: FoodLogRow[]) => groupFoodLogRows(dayLogs).map((group, index) => {
     const log = group[0];
@@ -692,7 +708,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return {
       id: log.id,
       eventIds: group.map((entry) => entry.id),
-      events: group.map((entry) => ({ ...quantityCorrectionForLog(entry), ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated })),
+      events: group.map((entry) => ({ ...quantityCorrectionForLog(entry), ...(entry.kind === 'manual' && !entry.product && !entry.recipe ? { manual: { label: entry.label, portionLabel: entry.portion_label, note: entry.note, nutrition: { calories: entry.kcal, proteinG: entry.protein_g, carbsG: entry.carbs_g, fatG: entry.fat_g, fiberG: entry.fiber_g, sugarG: entry.sugar_g, sodiumMg: entry.sodium_mg, estimated: entry.nutrition_is_estimated, source: entry.nutrition_source } } } : {}), id: entry.id, label: entry.label, portion: entry.portion_label ?? (entry.servings === null ? 'Portion not specified' : formatServings(Number(entry.servings))), time: formatTime(entry), cost: costForLog(entry).cost, costIsEstimated: costForLog(entry).estimated, foodValue: valueForLog(entry).cost, foodValueIsEstimated: valueForLog(entry).estimated })),
       emoji: (log.product ? products.get(log.product)?.emoji ?? foods.get(products.get(log.product)?.food ?? '')?.emoji : undefined) ?? '🍽️',
       label: log.label,
       serving: `${serving}${qualifier}`,
@@ -704,6 +720,8 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       nutritionStatus,
       cost,
       costIsEstimated: costs.some((value) => value.estimated),
+      foodValue: completeCost(group.map((entry) => valueForLog(entry).cost)),
+      foodValueIsEstimated: group.some((entry) => valueForLog(entry).estimated),
     };
   });
   const nutrients = buildNutrients(todayLogs);
@@ -778,13 +796,11 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
     wasteByDay.set(key, (wasteByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
   }
+  const outsideLogs = logs.filter((log) => log.kind === 'manual' || (eventsByLog.get(log.id) ?? []).some((event) => lotsResult.data?.find((lot) => lot.id === event.lot)?.is_external));
   const awayByDay = new Map<string, number>();
-  for (const event of eventsResult.data ?? []) {
-    if (event.reason !== 'eaten') continue;
-    const lot = lotsResult.data?.find((candidate) => candidate.id === event.lot);
-    if (!lot?.is_external) continue;
-    const key = dateKeyInZone(new Date(event.occurred_at), settings.time_zone);
-    awayByDay.set(key, (awayByDay.get(key) ?? 0) + (eventCostById.get(event.id) ?? 0));
+  for (const log of outsideLogs) {
+    const key = dateKeyInZone(new Date(log.occurred_at), settings.time_zone);
+    awayByDay.set(key, (awayByDay.get(key) ?? 0) + (costForLog(log).cost ?? 0));
   }
   const spendHistory = [...new Set([...spendByDay.keys(), ...wasteByDay.keys(), ...awayByDay.keys()])].sort().map((dateKey) => ({
     dateKey,
@@ -792,7 +808,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     spendMissingCost: (byDay.get(dateKey) ?? []).filter((log) => costForLog(log).cost === null).length,
     costIsEstimated: (byDay.get(dateKey) ?? []).some((log) => costForLog(log).estimated),
     wasteMissingCost: wasteEvents.filter((event) => dateKeyInZone(new Date(event.occurred_at), settings.time_zone) === dateKey && eventCostById.get(event.id) == null).length,
-    awayMissingCost: (eventsResult.data ?? []).filter((event) => event.reason === 'eaten' && lotsResult.data?.find((lot) => lot.id === event.lot)?.is_external && dateKeyInZone(new Date(event.occurred_at), settings.time_zone) === dateKey && eventCostById.get(event.id) == null).length,
+    awayMissingCost: outsideLogs.filter((log) => dateKeyInZone(new Date(log.occurred_at), settings.time_zone) === dateKey && costForLog(log).cost === null).length,
     waste: wasteByDay.get(dateKey) ?? 0,
     away: awayByDay.get(dateKey) ?? 0,
   }));

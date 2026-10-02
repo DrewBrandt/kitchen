@@ -1,8 +1,5 @@
-// The single source of truth for money.
-//
-// A prepared batch stores exactly one cost number: what the whole batch cost.
-// Everything else is derived here, so a batch can never report two different
-// per-serving prices depending on which screen you are looking at.
+// Portion allocation helpers work for either recorded paid cost or food value.
+// Callers must keep these distinct; unknown amounts remain unknown.
 
 export const DEFAULT_WEEKLY_FOOD_BUDGET = 150;
 

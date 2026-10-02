@@ -673,6 +673,8 @@ describe('Pantry web UI', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).queryByLabelText('Product')).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText('Meal or food'), "Spaghetti at Mom's");
+    expect(within(dialog).getByLabelText('You paid (USD)')).toHaveValue(null);
+    await user.type(within(dialog).getByLabelText('You paid (USD)'), '0');
     await user.type(within(dialog).getByLabelText('Portion'), '1 large plate');
     await user.type(within(dialog).getByLabelText('Calories'), '750');
     await user.click(within(dialog).getByRole('checkbox', { name: /Nutrition is estimated/ }));
@@ -955,6 +957,6 @@ describe('food cost uncertainty in Trends', () => {
     expect(screen.getAllByText('~$4.75 + unknown').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/discarded items have unknown prices/)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing discarded/)).not.toBeInTheDocument();
-    expect(screen.getByText('Share unavailable: incomplete prices')).toBeInTheDocument();
+    expect(screen.getByText('Food value, separate from paid cost')).toBeInTheDocument();
   });
 });

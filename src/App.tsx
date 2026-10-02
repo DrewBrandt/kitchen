@@ -533,7 +533,7 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
   const spentToday = foodLog.reduce((total, entry) => total + (entry.cost ?? 0), 0);
   const plannedCostToday = dayPlans.filter((plan) => plan.consumptionStatus === 'planned').reduce((total, plan) => total + (plan.cost ?? 0), 0);
   const budgetPct = dailyBudget > 0 ? Math.min(100, spentToday / dailyBudget * 100) : 0;
-  const plannedBudgetPct = dailyBudget > 0 ? plannedCostToday / dailyBudget * 100 : 0;
+  const missingPaidCosts = foodLog.filter((entry) => entry.cost == null).length;
   const amountOver = Math.max(0, spentToday - dailyBudget);
   const popularRecipes = [...recipes].sort((left, right) => (right.prepCount ?? 0) - (left.prepCount ?? 0) || left.name.localeCompare(right.name)).slice(0, 4);
   return (
@@ -549,12 +549,12 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
               <em>{Math.max(0, 100 - (nutrients[0]?.pct ?? 0))}% LEFT</em>
             </div>
             <div className="headline-metric spend-metric">
-              <span>Food cost</span><div className="metric-total"><strong>{usd(spentToday)}</strong><span>/ {usd(dailyBudget)} a day</span></div>
-              <Progress value={budgetPct} projected={plannedBudgetPct} color="var(--spend)" over={amountOver > 0} />
-              <em>{amountOver > 0 ? `${usd(amountOver)} OVER` : `${usd(dailyBudget - spentToday)} LEFT`}</em>
+              <span>Food cost</span><div className="metric-total"><strong>{usd(spentToday)}{missingPaidCosts ? " + unknown" : ""}</strong><span>/ {usd(dailyBudget)} a day</span></div>
+              <Progress value={budgetPct} color="var(--spend)" over={amountOver > 0} />
+              <em>{missingPaidCosts ? 'Paid amounts missing' : amountOver > 0 ? `${usd(amountOver)} OVER` : `${usd(dailyBudget - spentToday)} LEFT`}</em>
             </div>
           </div>
-          {Object.values(projection).some(Boolean) && <div className="plan-projection-key"><i className="projection-swatch" /> Includes items planned for today{plannedCostToday ? ` · ${usd(plannedCostToday)}` : ''}</div>}
+          {Object.values(projection).some(Boolean) && <div className="plan-projection-key"><i className="projection-swatch" /> Includes items planned for today{plannedCostToday ? ` · ${usd(plannedCostToday)} estimated food value` : ''}</div>}
           <div className="macro-list">{nutrients.slice(1, 6).map((row) => <MacroRow key={row.label} {...row} projected={projection[row.label as keyof typeof projection] / Math.max(Number(row.target.replace(/[^\d.]/g, '')), 1) * 100} />)}</div>
         </Card>
         <Card className="next-card">
@@ -608,7 +608,7 @@ function MacroRow({ label, value, target, pct, projected, color }: { label: stri
 
 function PreparedRow({ preparedAt, timeZone, emoji, name, where, servings, servingsLeft, due, progress, costPerServing, costIsEstimated, onEat, onDiscard }: { preparedAt?: string; timeZone: string; emoji: string; name: string; where: string; servings: string; servingsLeft: number; due: string; progress: number; costPerServing: number | null; costIsEstimated: boolean; onEat: (quantity: number) => void; onDiscard?: (quantity: number, reason: string) => Promise<void> }) {
   const preparedLabel = preparedAt ? `Prepared ${formatPreparedAt(preparedAt, timeZone)}` : undefined;
-  const perServing = costPerServing === null ? 'price unavailable' : `${costIsEstimated ? '~' : ''}$${costPerServing.toFixed(2)} a serving`;
+  const perServing = costPerServing === null ? 'price unavailable' : `${costIsEstimated ? '~' : ''}$${costPerServing.toFixed(2)} value per serving`;
   const [quantity, setQuantity] = useState(Math.min(1, servingsLeft));
   const [discarding, setDiscarding] = useState(false);
   const [reason, setReason] = useState('');
@@ -1001,7 +1001,7 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onUndoDiscard, onOpen, onOpenC
           <div><span>Days logged</span><strong>{logged} of {range}</strong></div>
           <div><span>Avg calories</span><strong>{Math.round(avgCalories).toLocaleString()}</strong></div>
           <div><span>Avg protein</span><strong>{Math.round(avgProtein)} g</strong></div>
-          <div><span>Food cost</span><strong className="spend">{usd(totalSpend)}</strong><small>avg {usd(pricedDays.length ? totalSpend / pricedDays.length : 0)} on logged days</small></div>
+          <div><span>Food cost</span><strong className="spend">{usd(totalSpend)}{missingCost ? " + unknown" : ""}</strong><small>avg {usd(pricedDays.length ? totalSpend / pricedDays.length : null)} on logged days</small></div>
           <div><span>Protein target hit</span><strong>{targetHits} of {completeDays.length}</strong></div>
         </div>
         <div className="heat-strip">{cells.map((cell) => <i key={cell.key} style={{ background: heatColor(cell.share) }} title={cell.day ? `${cell.label} · ${Math.round(cell.day.protein ?? 0)} g protein · ${usd(cell.day.cost)}` : `${cell.label} · not logged`} />)}</div>
@@ -1116,13 +1116,12 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
   const lastSeven = spendDays.slice(-7).reduce((total, day) => total + day.spend, 0);
   const caloriesTotal = recent.reduce((total, day) => total + day.values.Calories, 0);
   const per1000Cal = caloriesTotal > 0 && missingCosts === 0 && incompleteEntries === 0 ? spendTotal / caloriesTotal * 1000 : null;
-  const spendMaximum = Math.max(dailyBudget, ...spendDays.map((day) => day.spend + day.waste), 0.01) * 1.1;
+  const spendMaximum = Math.max(dailyBudget, ...spendDays.map((day) => day.spend), 0.01) * 1.1;
 
   const wasteTotal = spendDays.reduce((total, day) => total + day.waste, 0);
   const awayTotal = spendDays.reduce((total, day) => total + day.away, 0);
   const wasteDays = spendDays.filter((day) => day.waste > 0 || day.wasteMissing > 0).length;
   const worstDay = spendDays.reduce((worst, day) => day.waste > worst.waste ? day : worst, { label: '—', waste: 0, spend: 0, away: 0 });
-  const wasteShare = spendTotal > 0 ? wasteTotal / spendTotal * 100 : 0;
   const causeMax = Math.max(...wasteCauses.map((cause) => cause.amount), 0.01);
   return (
     <div className="stack">
@@ -1140,8 +1139,8 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
         </Card>
       ) : (
         <Card className="trend-card">
-          <SectionTitle title="Food cost, day by day" subtitle="Food eaten" action="Edit budget" onAction={() => onOpen('targets')} />
-          {missingCosts > 0 && <div className="notice"><Info /><span>{missingCosts} consumption entries have unknown prices. Amounts below are known subtotals, not complete food costs.</span></div>}
+          <SectionTitle title="Food cost, day by day" subtitle="What you paid for the portions eaten" action="Edit budget" onAction={() => onOpen('targets')} />
+          {missingCosts > 0 && <div className="notice"><Info /><span>{missingCosts} consumption entries have unknown paid amounts. Amounts below are known subtotals, not complete food costs.</span></div>}
           <div className="spend-figures">
             <div><span>Last 7 days</span><strong className="spend">{usd(lastSeven, estimatedCosts)}{lastSevenMissing ? ' + unknown' : ''}</strong></div>
             <div><span>Weekly budget</span><strong>{usd(weekly)}</strong></div>
@@ -1149,14 +1148,13 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
             <div><span>Per 1,000 cal</span><strong>{per1000Cal === null ? '—' : usd(per1000Cal, estimatedCosts)}</strong></div>
           </div>
           <div className="trend-controls">
-            <div className="chart-legend"><span><i style={{ background: 'var(--spend)' }} />Eaten</span><span><i style={{ background: 'var(--urgent)' }} />Wasted</span></div>
+            <div className="chart-legend"><span><i style={{ background: 'var(--spend)' }} />Paid cost of food eaten</span></div>
             <label>Range<select value={range} onChange={(event) => setRange(Number(event.target.value))}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>
           </div>
           <div className="bar-chart">
             <div className="target-line" style={{ bottom: `${dailyBudget / spendMaximum * 100}%` }}><span>{usd(dailyBudget)} a day</span></div>
             {spendDays.map((day, index) => (
               <div className="chart-column" key={index}>
-                {day.waste > 0 && <i className="waste-cap" style={{ height: `${day.waste / spendMaximum * 100}%` }} />}
                 <i style={{ height: `${day.spend / spendMaximum * 100}%`, background: 'var(--spend)' }} />
                 <small>{index % Math.max(1, Math.floor(range / 6)) === 0 ? day.label : ''}</small>
               </div>
@@ -1168,7 +1166,7 @@ function TrendsPage({ onOpen }: { onOpen: (kind: PanelKind) => void }) {
       {view === 'spend' && (
         <Card>
           {wasteMissingCosts > 0 && <div className="notice"><Info /><span>{wasteMissingCosts} discarded items have unknown prices. Waste amounts and categories show known subtotals only.</span></div>}
-          <SectionTitle title="Lost to waste" action={missingCosts || wasteMissingCosts ? 'Share unavailable: incomplete prices' : `${wasteShare.toFixed(1)}% of ${range}-day food cost`} />
+          <SectionTitle title="Lost to waste" action="Food value, separate from paid cost" />
           <div className="stat-strip four">
             <div><span>{range} days</span><strong className="waste">{usd(wasteTotal)}{wasteMissingCosts ? ' + unknown' : ''}</strong></div>
             <div><span>Per week</span><strong className="waste">{usd(wasteTotal / (range / 7))}{wasteMissingCosts ? ' + unknown' : ''}</strong></div>
@@ -1554,7 +1552,7 @@ function PanelFields({ kind, values = {}, recipe, onValidityChange }: { kind: Ex
     </div></PanelSection>
     <PanelSection title="Acquisition and cost"><div className="form-grid">
       <SelectField name="acquisition_type" label="Acquisition type" defaultValue="home" options={['grocery', 'restaurant', 'takeout', 'office', 'gift', 'home', 'other'].map((value) => ({ value, label: value }))} required />
-      <div className="form-grid two"><Field name="total_price" label="Full price/value (USD)" type="number" min="0" step="0.01" /><Field name="out_of_pocket_cost" label="You paid (USD)" type="number" min="0" step="0.01" defaultValue="0" required /></div>
+      <div className="form-grid two"><Field name="total_price" label="Full price/value (USD)" type="number" min="0" step="0.01" /><Field name="out_of_pocket_cost" label="You paid (USD)" type="number" min="0" step="0.01" placeholder="0 if free to you" required /></div>
       <div className="form-grid two"><Field name="paid_by" label="Paid by" defaultValue="self" required /><Field name="price_as_of" label="Price as of" type="date" defaultValue={today} /></div>
       <Field name="cost_source" label="Cost source" defaultValue="User-entered in app; full value may be unknown" placeholder="Receipt, menu, retailer estimate, free meal…" required />
       <label className="toggle-row"><input name="cost_is_estimated" type="checkbox" /><span><strong>Cost is estimated</strong></span></label>
@@ -1618,7 +1616,7 @@ function ConsumptionDetailPanel({ entry, onClose, undo, notify }: { entry: FoodL
   }
   const nutrition = entry.nutrition ? Object.entries(entry.nutrition) : [];
   const eventIds = entry.eventIds?.length ? entry.eventIds : entry.id ? [entry.id] : [];
-  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Cost</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div></div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value === null ? 'Unknown' : `${Math.round(value).toLocaleString()}${label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}`}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{error && <div role="alert">{error}</div>}<PanelSection title="Individual events">{eventIds.map((eventId, index) => { const detail = entry.events?.find((event) => event.id === eventId); return <div className="event-reference" key={eventId}><span>{detail ? `${detail.portion} · ${detail.time} · ${costLabel(detail.cost, detail.costIsEstimated)}` : `Consumption ${index + 1}`}</span>{!removed.includes(eventId) && detail?.quantityCorrection && undo.correctQuantity && (editingId === eventId ? <QuantityCorrectionEditor id={eventId} label={detail.label} snapshot={detail.quantityCorrection} save={async (id, expected, quantity) => { const replacement = await undo.correctQuantity!(id, expected, quantity); notify('Quantity corrected.'); onClose(); return replacement; }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Correct quantity for consumption ${index + 1}`}>Correct quantity</button>)}{detail?.quantityCorrectionUnavailable && <p>{detail.quantityCorrectionUnavailable}</p>}{!removed.includes(eventId) && detail?.manual && undo.updateFoodLog && (editingId === eventId ? <ManualConsumptionEditor id={eventId} original={detail.manual} save={async (id, patch) => { await undo.updateFoodLog!(id, patch); notify('Consumption corrected.'); onClose(); }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Edit consumption ${index + 1}`}>Edit this event</button>)}{removed.includes(eventId) ? <span>Removed</span> : undo.voidFoodLog && <button type="button" className="button" disabled={Boolean(busyId) || Boolean(editingId)} onClick={() => void removeEvent(eventId)} aria-label={`Remove consumption ${index + 1}`}>{busyId === eventId ? 'Removing…' : 'Remove this event'}</button>}</div>; })}</PanelSection></div></aside></div>;
+  return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close consumption event" /><aside className="action-panel consumption-detail-panel" role="dialog" aria-modal="true"><PanelHeader title={`${entry.emoji} ${entry.label}`} subtitle={eventIds.length > 1 ? `${eventIds.length} consumption events` : 'Consumption event'} onClose={onClose} /><div className="panel-body"><div className="consumption-summary"><div><span>Portion</span><strong>{entry.serving}</strong></div><div><span>Logged</span><strong>{entry.time}</strong></div><div><span>Food cost · you paid</span><strong className="spend">{costLabel(entry.cost, entry.costIsEstimated)}</strong></div>{entry.foodValue !== undefined && <div><span>Full food value</span><strong>{costLabel(entry.foodValue, entry.foodValueIsEstimated)}</strong></div>}</div><PanelSection title="Nutrition"><div className="consumption-nutrition">{nutrition.length ? nutrition.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value === null ? 'Unknown' : `${Math.round(value).toLocaleString()}${label === 'Calories' ? ' cal' : label === 'Sodium' ? ' mg' : ' g'}`}</strong></div>) : <div className="empty-inline">Detailed nutrition was not recorded for this event.</div>}</div></PanelSection>{error && <div role="alert">{error}</div>}<PanelSection title="Individual events">{eventIds.map((eventId, index) => { const detail = entry.events?.find((event) => event.id === eventId); return <div className="event-reference" key={eventId}><span>{detail ? `${detail.portion} · ${detail.time} · ${costLabel(detail.cost, detail.costIsEstimated)}` : `Consumption ${index + 1}`}</span>{!removed.includes(eventId) && detail?.quantityCorrection && undo.correctQuantity && (editingId === eventId ? <QuantityCorrectionEditor id={eventId} label={detail.label} snapshot={detail.quantityCorrection} save={async (id, expected, quantity) => { const replacement = await undo.correctQuantity!(id, expected, quantity); notify('Quantity corrected.'); onClose(); return replacement; }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Correct quantity for consumption ${index + 1}`}>Correct quantity</button>)}{detail?.quantityCorrectionUnavailable && <p>{detail.quantityCorrectionUnavailable}</p>}{!removed.includes(eventId) && detail?.manual && undo.updateFoodLog && (editingId === eventId ? <ManualConsumptionEditor id={eventId} original={detail.manual} save={async (id, patch) => { await undo.updateFoodLog!(id, patch); notify('Consumption corrected.'); onClose(); }} close={() => setEditingId('')} /> : <button type="button" className="button" disabled={Boolean(busyId)} onClick={() => setEditingId(eventId)} aria-label={`Edit consumption ${index + 1}`}>Edit this event</button>)}{removed.includes(eventId) ? <span>Removed</span> : undo.voidFoodLog && <button type="button" className="button" disabled={Boolean(busyId) || Boolean(editingId)} onClick={() => void removeEvent(eventId)} aria-label={`Remove consumption ${index + 1}`}>{busyId === eventId ? 'Removing…' : 'Remove this event'}</button>}</div>; })}</PanelSection></div></aside></div>;
 }
 
 type RecipePanelProps = { onStartCooking?: (recipe: Recipe) => void; recipe: Recipe; cooking: boolean; onClose: () => void; notify: Notify; onCook?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onProgressChange: (id: string, active: boolean) => void; undo: Reversals };
