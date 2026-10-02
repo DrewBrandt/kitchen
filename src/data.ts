@@ -61,7 +61,7 @@ export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitl
   'food-log': { eyebrow: 'TODAY', title: 'Food log', subtitle: '', primary: 'Log food', secondary: 'Look up barcode' },
   history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '', primary: 'Export range' },
   trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: '', primary: 'Edit targets' },
-  week: { eyebrow: 'YOUR PLAN', title: 'This week', subtitle: '', primary: 'Add to day', secondary: 'Rebuild grocery list' },
+  week: { eyebrow: 'YOUR PLAN', title: 'Meal plan', subtitle: '', primary: 'Add to day', secondary: 'Rebuild grocery list' },
   grocery: { eyebrow: 'THIS WEEK', title: 'Grocery list', subtitle: '', primary: 'Add item', secondary: 'Rebuild from plan' },
 };
 

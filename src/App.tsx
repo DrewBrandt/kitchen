@@ -3,6 +3,7 @@ import { CombinedMealPanel } from './CombinedMealPanel';
 import { planDisplayStatus } from './lib/plan-display-status';
 import { RecipeIngredientEditor } from './RecipeIngredientEditor';
 import { DurableUndo, ShoppingReceiptEditor } from './ShoppingReceiptEditor';
+import { addCalendarDays, formatPlanningRange, planningWeek, type PlanningRange } from './lib/planning-week';
 import { QuantityCorrectionEditor } from './QuantityCorrectionEditor';
 import type { Json } from './database.types';
 import { ManualConsumptionEditor } from './ManualConsumptionEditor';
@@ -150,7 +151,7 @@ interface AppProps {
   onCookRecipes?: (ids: string[]) => Promise<void>;
   onConsumePrepared?: (id: string, quantity: number) => Promise<string | null>;
   onConsumePlannedMeals?: (consumptions: PlannedMealConsumption[]) => Promise<string[]>;
-  onRebuildShopping?: () => Promise<number>;
+  onRebuildShopping?: (range: PlanningRange) => Promise<number>;
   onRemovePlannedMeals?: (ids: string[]) => Promise<void>;
   onSetPlannedConsumptionServings?: (id: string, servings: number) => Promise<void>;
   onRemoveGrocery?: (id: string) => Promise<void>;
@@ -165,6 +166,8 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [rebuildingShopping, setRebuildingShopping] = useState(false);
   const [panel, setPanel] = useState<PanelState | null>(null);
   const groceryKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const [checkedGroceries, setCheckedGroceries] = useState<Set<string>>(() => new Set(grocerySections.flatMap((section) => section.items).filter((item) => item.checked).map(groceryKey)));
@@ -217,6 +220,8 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
   const groceryDone = checkedGroceries.size;
   const plannedMealCount = new Set(weekDays.flatMap((day) => day.meals.map((meal) => meal.groupId ?? meal.id ?? `${day.dateKey ?? `${day.day}-${day.date}`}-${meal.name}`))).size;
   const now = new Date();
+  const selectedWeek = planningWeek(dateKeyInTimeZone(now, pantryData.settings.timeZone), weekOffset);
+  const changeWeek = (delta: number) => setWeekOffset((current) => current + delta);
   const dateLabel = localDateLabel(now, pantryData.settings.timeZone);
   const greeting = greetingFor(now, pantryData.settings.timeZone);
   const meta = {
@@ -346,7 +351,13 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
     else if (page === 'inventory') open('groceries');
     else if (page === 'week' || page === 'grocery') {
       if (!onRebuildShopping) notify('A live Supabase connection is required to rebuild groceries.');
-      else void onRebuildShopping().then((count) => notify(`Grocery list rebuilt with ${count} planned shortage${count === 1 ? '' : 's'}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not rebuild groceries.'));
+      else if (!rebuildingShopping) {
+        const range = selectedWeek;
+        setRebuildingShopping(true);
+        void onRebuildShopping(range).then((count) => notify(`${formatPlanningRange(range)}: ${count} planned shortage${count === 1 ? '' : 's'}.`))
+          .catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not rebuild groceries.'))
+          .finally(() => setRebuildingShopping(false));
+      }
     }
   }
 
@@ -377,7 +388,7 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
             </div>
             <div className="header-actions">
               {meta.secondary && (
-                <button className="button secondary" onClick={runSecondary}>
+                <button className="button secondary" onClick={runSecondary} disabled={(page === 'week' || page === 'grocery') && rebuildingShopping} aria-label={page === 'week' || page === 'grocery' ? `${meta.secondary} for ${formatPlanningRange(selectedWeek)}` : undefined}>
                   {meta.secondary.includes('barcode') ? <ScanLine /> : <RefreshCw />}
                   <span>{meta.secondary}</span>
                 </button>
@@ -408,9 +419,11 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
           {page === 'food-log' && <FoodLogPage onOpen={open} onOpenConsumption={openConsumption} notify={notify} onVoid={onVoidFoodLog} onPlan={onSaveAction ? (form) => onSaveAction('meal', form) : undefined} onConsumeLot={onConsumeInventoryLot} undo={reversals} />}
           {page === 'history' && <HistoryPage onOpen={open} onOpenConsumption={openConsumption} onUndoPrep={onUndoPrep} onUndoReceipt={onUndoReceipt} />}
           {page === 'trends' && <TrendsPage onOpen={open} />}
-          {page === 'week' && <WeekPage onCookMeal={stagePlans} onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onConsume={onConsumePlannedMeals} onSetServings={onSetPlannedConsumptionServings} />}
+          {page === 'week' && <WeekPage range={selectedWeek} onChangeWeek={changeWeek} onCookMeal={stagePlans} onOpen={open} notify={notify} onRemove={onRemovePlannedMeals} onConsume={onConsumePlannedMeals} onSetServings={onSetPlannedConsumptionServings} />}
           {page === 'grocery' && (
             <GroceryPage
+              range={selectedWeek}
+              onChangeWeek={changeWeek}
               onReceive={onReceiveShopping}
               checked={checkedGroceries}
               toggle={toggleGrocery}
@@ -697,8 +710,14 @@ function RecipesPage({ filter, onFilter, onOpen }: { filter: string; onFilter: (
   );
 }
 
-function GroceryPage({ onReceive, checked, toggle, shoppingMode, onShoppingMode, onRemove, notify }: { onReceive?: (id: string, receipt: ShoppingReceipt) => Promise<void>; checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void; onRemove?: (id: string) => Promise<void>; notify: Notify }) {
-  const { grocerySections, inventorySections, settings } = usePantryData();
+interface WeekSelectionProps { range: PlanningRange; onChangeWeek: (delta: number) => void }
+
+function WeekSelector({ range, onChangeWeek }: WeekSelectionProps) {
+  return <div className="week-switcher" role="group" aria-label="Planning week"><button className="icon-button" aria-label="Previous week" onClick={() => onChangeWeek(-1)}>‹</button><strong>{formatPlanningRange(range)}</strong><button className="icon-button" aria-label="Next week" onClick={() => onChangeWeek(1)}>›</button></div>;
+}
+
+function GroceryPage({ range, onChangeWeek, onReceive, checked, toggle, shoppingMode, onShoppingMode, onRemove, notify }: WeekSelectionProps & { onReceive?: (id: string, receipt: ShoppingReceipt) => Promise<void>; checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void; onRemove?: (id: string) => Promise<void>; notify: Notify }) {
+  const { grocerySections, groceryGeneration, inventorySections, settings } = usePantryData();
   const [receiving, setReceiving] = useState<GroceryItem | null>(null);
   const weekly = settings.weeklyFoodBudget;
   const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
@@ -711,6 +730,10 @@ function GroceryPage({ onReceive, checked, toggle, shoppingMode, onShoppingMode,
   const alreadyInKitchen = inventorySections.flatMap((section) => section.foods).slice(0, 6);
   return (
     <div className={cx(shoppingMode && 'shopping-mode')}>
+      <div className="grocery-range">
+        <WeekSelector range={range} onChangeWeek={onChangeWeek} />
+        <small aria-label="Saved grocery ranges">{groceryGeneration.ranges.length ? `Generated for: ${groceryGeneration.ranges.map(formatPlanningRange).join('; ')}${groceryGeneration.unknownRange ? '; some ranges unavailable' : ''}` : groceryGeneration.unknownRange ? 'Generated range unavailable' : 'No saved generated range'}</small>
+      </div>
       <Card className="grocery-summary">
         <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{demandChanges ? `${demandChanges} changed demand${demandChanges === 1 ? '' : 's'} to review` : total - done === 0 ? 'All items checked' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /></div>
         <div className="budget-panel">
@@ -762,28 +785,14 @@ function PlannedMealEatEditor({ meals, notify, onConsume }: { meals: Array<{ id?
   return <div className="meal-eat-control"><div className="meal-eat-fields">{meals.map((meal) => { const key = meal.id ?? meal.name; const amount = Number(values[key]); return <label key={key}><span>{meals.length === 1 ? 'Eating now' : meal.name}</span><span className="meal-eat-input"><input aria-label={`Servings of ${meal.name} eaten now`} type="number" min="0.01" max={meal.sourceServingsAvailable ?? meal.preparedServingsAvailable} step="any" value={values[key] ?? ''} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} /><em>serving{amount === 1 ? '' : 's'}</em></span><small>{formatServings(meal.plannedServings ?? 1)} planned{(meal.sourceServingsAvailable ?? meal.preparedServingsAvailable) !== undefined ? ` · ${formatServings((meal.sourceServingsAvailable ?? meal.preparedServingsAvailable)!)} available` : ''}</small></label>; })}</div><button className="button primary compact meal-eat-button" disabled={!onConsume || !valid || saving} onClick={() => { if (!onConsume || !valid) return; setSaving(true); void onConsume(consumptions).then(() => notify(`${formatServings(total)} logged as eaten.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not log the planned item as eaten.')).finally(() => setSaving(false)); }}><Utensils />{saving ? 'Logging…' : 'Log eaten'}</button></div>;
 }
 
-function WeekPage({ onCookMeal, onOpen, notify, onRemove, onConsume, onSetServings }: { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onConsume?: (consumptions: PlannedMealConsumption[]) => Promise<string[]>; onSetServings?: (id: string, servings: number) => Promise<void>; onCookMeal: (ids: string[]) => void }) {
+function WeekPage({ range, onChangeWeek, onCookMeal, onOpen, notify, onRemove, onConsume, onSetServings }: WeekSelectionProps & { onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; notify: Notify; onRemove?: (ids: string[]) => Promise<void>; onConsume?: (consumptions: PlannedMealConsumption[]) => Promise<string[]>; onSetServings?: (id: string, servings: number) => Promise<void>; onCookMeal: (ids: string[]) => void }) {
   const { plannedMeals, recipes, settings } = usePantryData();
-  const [weekOffset, setWeekOffset] = useState(0);
-  const weekDays = useMemo(() => {
-    const now = new Date();
-    now.setHours(12, 0, 0, 0);
-    const start = new Date(now);
-    start.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
-    return Array.from({ length: 7 }, (_, offset) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + offset);
-      let dateKey = calendarDateKey(date);
-      try {
-        const parts = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: settings.timeZone }).formatToParts(date);
-        const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
-        dateKey = `${value('year')}-${value('month')}-${value('day')}`;
-      } catch { /* device date is a safe fallback */ }
-      return { day: date.toLocaleDateString([], { weekday: 'short' }).toUpperCase(), date: String(date.getDate()), dateKey, today: date.toDateString() === now.toDateString(), meals: plannedMeals.filter((meal) => meal.dateKey === dateKey).map((meal) => ({ ...meal, slot: `${meal.slot} · ${costLabel(meal.cost, meal.costIsEstimated)}` })) };
-    });
-  }, [plannedMeals, settings.timeZone, weekOffset]);
-  const weekLabel = `${new Date(`${weekDays[0].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(`${weekDays[6].dateKey}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  const todayKey = calendarDateKey(new Date());
+  const todayKey = dateKeyInTimeZone(new Date(), settings.timeZone);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, offset) => {
+    const dateKey = addCalendarDays(range.from, offset);
+    const date = new Date(`${dateKey}T12:00:00Z`);
+    return { day: date.toLocaleDateString([], { weekday: 'short', timeZone: 'UTC' }).toUpperCase(), date: String(date.getUTCDate()), dateKey, today: dateKey === todayKey, meals: plannedMeals.filter((meal) => meal.dateKey === dateKey).map((meal) => ({ ...meal, slot: `${meal.slot} · ${costLabel(meal.cost, meal.costIsEstimated)}` })) };
+  }), [plannedMeals, range.from, todayKey]);
   const weekly = settings.weeklyFoodBudget;
   const weekMeals = weekDays.flatMap((day) => day.meals);
   const weekMealCount = new Set(weekMeals.map((meal) => meal.groupId ?? meal.id ?? meal.name)).size;
@@ -795,7 +804,7 @@ function WeekPage({ onCookMeal, onOpen, notify, onRemove, onConsume, onSetServin
   return (
     <Card className="week-card">
       <div className="week-header">
-        <div className="week-switcher"><button className="icon-button" aria-label="Previous week" onClick={() => setWeekOffset((value) => value - 1)}>‹</button><strong>{weekLabel}</strong><button className="icon-button" aria-label="Next week" onClick={() => setWeekOffset((value) => value + 1)}>›</button></div>
+        <WeekSelector range={range} onChangeWeek={onChangeWeek} />
         <p>{weekMealCount} item{weekMealCount === 1 ? '' : 's'} planned · {unavailableMealPrices ? <><span className="spend">{usd(committed)}</span> known · {unavailableMealPrices} price{unavailableMealPrices === 1 ? '' : 's'} unavailable</> : <><span className="spend">{usd(unspent)}</span> of the week's budget still unspent</>}</p>
         <div className="week-budget-bar"><Progress value={committedPct} color="var(--spend)" /><small>{usd(committed)} known of {usd(weekly)}{unavailableMealPrices ? ' · incomplete' : ''}</small></div>
       </div>

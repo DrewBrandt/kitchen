@@ -1,4 +1,5 @@
 import { cookingAttemptIdentity } from './cooking-stage';
+import type { PlanningRange } from './planning-week';
 import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
@@ -546,6 +547,15 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     return [{ lotId: lot.id, name: product?.name ?? item.free_text ?? food?.name ?? 'Receipt', acquiredAt: lot.acquired_at, quantity: formatQuantity(food && unit ? fromFoodBase(food, Number(lot.initial_qty), unit) : Number(lot.initial_qty), unit?.short_name), cost: lot.total_cost }];
   }).sort((a,b) => b.acquiredAt.localeCompare(a.acquiredAt));
   const groceryGroups = new Map<string, PantryData['grocerySections'][number]['items']>();
+  // Include inactive rows: a rebuild with no shortage still records its range there.
+  // No rows cannot establish a previous rebuild, and per-food reconciliation can leave mixed ranges.
+  const generatedRows = (shoppingResult.data ?? []).filter((item) => item.source === 'generated');
+  const groceryGeneration = {
+    ranges: [...new Map(generatedRows.flatMap((item) => item.generated_from && item.generated_through
+      ? [[`${item.generated_from}/${item.generated_through}`, { from: item.generated_from, through: item.generated_through }] as const]
+      : [])).values()].sort((a, b) => a.from.localeCompare(b.from) || a.through.localeCompare(b.through)),
+    unknownRange: generatedRows.some((item) => !item.generated_from || !item.generated_through),
+  };
   for (const item of shoppingResult.data ?? []) {
     if (item.source === 'generated' && item.generated_active === false) continue;
     const food = item.food ? foods.get(item.food) : undefined;
@@ -897,6 +907,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
     inventorySections,
     recipes,
     grocerySections,
+    groceryGeneration,
     receiptHistory,
     nutrients,
     weekDays,
@@ -1068,14 +1079,10 @@ export async function consumePreparedLot(client: Client, lotId: string, quantity
   });
 }
 
-export async function rebuildShoppingFromPlan(client: Client) {
-  const start = new Date();
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  const through = new Date(start);
-  through.setDate(start.getDate() + 6);
+export async function rebuildShoppingFromPlan(client: Client, range: PlanningRange) {
   const { data, error } = await client.rpc('rebuild_shopping_from_plan', {
-    p_from: start.toLocaleDateString('en-CA'),
-    p_through: through.toLocaleDateString('en-CA'),
+    p_from: range.from,
+    p_through: range.through,
   });
   if (error) throw error;
   return data;

@@ -1,4 +1,5 @@
 import type { QuantityCorrectionSnapshot } from './QuantityCorrectionEditor';
+import type { PlanningRange } from './lib/planning-week';
 import type { ManualConsumptionSnapshot } from './ManualConsumptionEditor';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
@@ -157,6 +158,7 @@ export interface PantryData {
   inventorySections: Array<{ emoji: string; label: string; foods: InventoryFood[] }>;
   recipes: Recipe[];
   grocerySections: Array<{ emoji: string; label: string; items: GroceryItem[] }>;
+  groceryGeneration: { ranges: PlanningRange[]; unknownRange: boolean };
   receiptHistory?: Array<{ lotId: string; name: string; acquiredAt: string; quantity: string; cost: number | null }>;
   nutrients: Array<{ label: string; value: string; target: string; pct: number; color: string }>;
   weekDays: Array<{ day: string; date: string; dateKey?: string; today?: boolean; meals: Array<Partial<PlannedMealView> & Pick<PlannedMealView, 'slot' | 'name' | 'emoji'>> }>;
@@ -255,6 +257,7 @@ export const previewPantryData: PantryData = {
     items: section.items.map((item, index) => ({ ...item, checked: item.name === 'Eggs', cost: [2.18, 3.49, 4.79, 3.98, 4.29][index] ?? 3.49 })),
   })),
   nutrients: NUTRIENTS,
+  groceryGeneration: { ranges: [], unknownRange: false },
   weekDays: WEEK_DAYS,
   plannedMeals: [
     { id: 'preview-plan-pancakes', groupId: 'preview-plan-pancakes', dateKey: previewDateKey(), slot: 'BREAKFAST', name: 'Simple Pancakes', emoji: '🥞', recipeId: 'pancakes', sourceKind: 'recipe', status: 'planned', isLeftover: false, scaleFactor: 1, plannedServings: 1, consumptionStatus: 'planned', cost: 4.72, costIsEstimated: true, nutrition: { Calories: 310, Protein: 9, Carbs: 48, Fat: 9, Fiber: 2, Sodium: 520 } },

@@ -235,6 +235,8 @@ button.soon-row:hover { background: #121715; }
 .combined-components svg { width: 14px; color: var(--faint); }
 
 .grocery-summary { padding: 18px 20px; display: flex; gap: 20px; align-items: stretch; }
+.grocery-range { margin-bottom: 16px; }
+.grocery-range > small { display: block; padding: 8px 12px; color: var(--muted); }
 .grocery-summary > .grow { padding-right: 18px; border-right: 1px solid #1e2523; }
 .grocery-summary > .grow > small { color: var(--faint); margin-top: 9px; }
 .grocery-count { display: flex; align-items: baseline; gap: 10px; }
