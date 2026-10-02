@@ -189,20 +189,20 @@ describe('Pantry GPT operator pack', () => {
   });
 
   it('requires source-backed research before reusable-product nutrition is omitted', () => {
-    expect(instructions).toContain('web research is required: use its barcode');
-    expect(instructions).toMatch(/Do this before\s+asking Drew or leaving it unresolved/);
-    expect(instructions).toContain('preserve the source URL or citation in `nutrition.source`');
-    expect(instructions).toContain('Omit reusable-product nutrition only after a');
-    expect(instructions).toContain('“do not guess” is not permission to leave it empty');
+    expect(instructions).toContain('Research missing reusable-product nutrition by exact identity/barcode');
+    expect(instructions).toMatch(/before asking\s+Drew/);
+    expect(instructions).toContain('cite `nutrition.source`');
+    expect(instructions).toContain('Only omit after documented lookup failure');
+    expect(instructions).toContain('unknowns are not zero');
   });
 
   it('requires price research or a user question before a paid write', () => {
-    expect(instructions).toContain('Cost is mandatory for a purchase or paid meal');
-    expect(instructions).toContain('research');
-    expect(instructions).toContain('the exact product and store/current retailer price');
-    expect(instructions).toContain('never silently omit cost because a field is');
+    expect(instructions).toContain('Purchases/paid meals require cost');
+    expect(instructions).toContain('Research exact product/store price if absent');
+    expect(instructions).toContain('ask if lookup fails or variants conflict');
+    expect(instructions).toContain('Optional fields do not excuse omission');
     expect(instructions).toContain('Record full `totalPrice`');
-    expect(instructions).toContain("Drew's `outOfPocketCost`, `paidBy`");
+    expect(instructions).toMatch(/Drew's\s+`outOfPocketCost`, `paidBy`/);
     expect(instructions).toContain('`costIsEstimated`, source, and `priceAsOf`');
   });
 

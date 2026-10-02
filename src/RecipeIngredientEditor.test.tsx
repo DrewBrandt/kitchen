@@ -18,3 +18,15 @@ it('keeps IDs attached through a duplicate quantity collision, reorder, removal 
   await user.click(screen.getByRole('button', { name: 'Add ingredient' }));
   expect(payload().ids).toEqual(['a', null]);
 });
+
+it('opts a weighed ingredient into saved pieces and an anchor without changing canonical quantity', async () => {
+  const recipe = { ...RECIPES[0], ingredientText: '450 g Chicken', ingredients: [{ id: 'a', label: 'Chicken', name: 'Chicken', stock: '', quantity: 450, unit: 'g', baseGrams: 450 }] };
+  const { container } = render(<form><RecipeIngredientEditor recipe={recipe} /></form>);
+  await userEvent.click(screen.getByRole('button', { name: 'Use pieces for ingredient 1' }));
+  await userEvent.clear(screen.getByLabelText('Piece count for ingredient 1'));
+  await userEvent.type(screen.getByLabelText('Piece count for ingredient 1'), '3');
+  await userEvent.click(screen.getByLabelText('Allow scaling from ingredient 1'));
+  const form = new FormData(container.querySelector('form')!);
+  expect(form.get('ingredients')).toBe('450 g Chicken');
+  expect(JSON.parse(String(form.get('ingredient_piece_bases')))[0]).toMatchObject({ count: 3, grams: 450, sourceQuantity: 450, sourceUnit: 'g', anchor: true });
+});

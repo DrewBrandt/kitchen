@@ -419,7 +419,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
           remainingBase: Number(lot.remaining_qty),
           remainingPieces: lot.piece_count && lot.piece_basis_qty ? Number(lot.remaining_qty) * Number(lot.piece_count) / Number(lot.piece_basis_qty) : undefined,
         })) : [];
-        const pieceFields = { id: ingredient.id, pieceLots, ...(ingredient.piece_basis ? { pieceBasis: ingredient.piece_basis as unknown as import('../data').RecipePieceBasis } : {}) };
+        const pieceFields = { id: ingredient.id, pieceLots, ...(food.measure_style === 'weight' && !food.always_available ? { baseGrams: toFoodBase(food, requestedQuantity, unit) } : {}), ...(ingredient.piece_basis ? { pieceBasis: ingredient.piece_basis as unknown as import('../data').RecipePieceBasis } : {}) };
         if (food.always_available) return { ...pieceFields, quantity: requestedQuantity, unit: unit.short_name, name: ingredientName, label: pieceFields.pieceBasis ? `${formatAmount(pieceFields.pieceBasis.count)} ${pieceFields.pieceBasis.label} (~${formatAmount(pieceFields.pieceBasis.grams)} g estimated)` : `${formatRecipeQuantity(requestedQuantity, unit.short_name)} ${ingredientName}`, stock: 'Always available' };
         const neededBase = toFoodBase(food, Number(ingredient.qty), unit);
         const availableBase = stockByFood.get(ingredient.ingredient) ?? 0;
