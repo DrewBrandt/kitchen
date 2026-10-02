@@ -203,7 +203,8 @@ describe('Pantry web UI', () => {
     const { container } = render(<App />);
 
     expect(screen.getByText(/Includes items planned for today/)).toBeInTheDocument();
-    expect(container.querySelectorAll('.nutrition-card .projection-segment')).toHaveLength(7);
+    expect(container.querySelectorAll('.nutrition-card .projection-segment')).toHaveLength(6);
+    expect(container.querySelector('.spend-metric .projection-segment')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     expect(screen.getByText('Planned for today')).toBeInTheDocument();
