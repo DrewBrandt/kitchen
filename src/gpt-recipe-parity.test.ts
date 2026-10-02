@@ -108,9 +108,9 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
 
   it('documents safe POST narrowing and PATCH identity without adding operations', () => {
     expect(Object.values(schema.paths).flatMap((methods) => Object.values(methods as object))).toHaveLength(30);
-    expect(schema.paths['/v1/recipes/{id}'].patch.description).toContain('may reject ambiguous duplicates');
-    expect(schema.paths['/v1/recipes/{id}'].patch.description).toContain('unit.id to unit');
-    expect(schema.paths['/v1/recipes'].post.description).toContain('deliberately narrows legacy destructive upsert behavior');
+    expect(schema.paths['/v1/recipes/{id}'].patch.requestBody.content['application/json'].schema.properties.ingredients.items.properties.id.description).toContain('may reject ambiguous duplicates');
+    expect(schema.paths['/v1/recipes/{id}'].patch.requestBody.content['application/json'].schema.properties.ingredients.description).toContain('unit.id to unit');
+    expect(schema.paths['/v1/recipes'].post.description).toContain('For ingredient removals, replacements or ambiguous matches');
     expect(schema.paths['/v1/recipes'].post.description).toContain('use editRecipe (PATCH)');
     expect(schema.paths['/v1/recipes'].post.requestBody.content['application/json'].schema.properties.ingredients.items.properties.id).toBeUndefined();
   });

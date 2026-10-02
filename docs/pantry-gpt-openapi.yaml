@@ -292,11 +292,7 @@ paths:
       operationId: findRecipes
       summary: Find recipes with resolved ingredients and units
       description: >-
-        Returns ingredients with stable row id, ingredient (food UUID), qty,
-        sort_order, nullable note and pinned_product, and a resolved unit object.
-        For PATCH map ingredient to foodId, qty to quantity, sort_order to
-        sortOrder, and unit.id to unit; retain each existing row id.
-        pinned_product is read-only here and retained on matched rows.
+        Read recipes before editing. Returns stable ingredient row IDs and resolved units. For PATCH map ingredient to foodId, qty to quantity, piece_basis to pieceBasis, sort_order to sortOrder, and unit.id to unit. Retain existing row IDs; product pins are read-only.
       parameters:
         - {in: query, name: q, required: false, schema: {type: string}}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
@@ -304,12 +300,7 @@ paths:
       operationId: saveRecipe
       summary: Save a recipe; use editRecipe for existing recipes
       description: >-
-        Prefer this operation for creation. Existing-id updates preserve omitted
-        metadata and matched ingredient row identity, notes and product pins.
-        Ingredient removals, replacements or ambiguous identity are rejected
-        atomically; use editRecipe (PATCH) with ingredient IDs for those changes.
-        This deliberately narrows legacy destructive upsert behavior.
-        Successful creation and updates still return status saved and the recipe id.
+        Create recipes. Existing-id updates preserve omitted metadata and matched ingredient identity, notes and product pins. For ingredient removals, replacements or ambiguous matches, use editRecipe (PATCH) with ingredient IDs. Returns status saved and recipe id.
       x-openai-isConsequential: true
       requestBody:
         required: true
@@ -376,17 +367,7 @@ paths:
       operationId: editRecipe
       summary: Correct selected recipe fields and optionally replace all ingredients
       description: >-
-        Use for existing recipes. Omitted fields are preserved. Omit ingredients
-        for metadata-only edits; when supplied, send the complete desired list.
-        Read findRecipes first: map ingredient to foodId, qty to quantity,
-        piece_basis to pieceBasis, sort_order to sortOrder, and unit.id to unit. Include each existing row id
-        to preserve identity, notes and product pins, especially for duplicate
-        foods or reordering. Explicit id: null creates a new row; omitted id uses
-        legacy matching and may reject ambiguous duplicates. Omitted note is
-        retained; null or an empty string clears it. Product pins cannot be edited
-        here. Omitted nutrition preserves stored values and basis; null clears
-        the override. Supplied nutrition contains whole-recipe totals using the
-        resulting servings as basis; basisQuantity is ignored.
+        Edit existing recipes; read findRecipes first. Omitted fields are preserved. Omit ingredients for metadata-only edits; otherwise send the complete desired list with existing row IDs. Use id: null for new rows. Product pins are read-only. See field descriptions for mapping and nutrition rules.
       x-openai-isConsequential: true
       parameters:
         - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
@@ -406,6 +387,7 @@ paths:
                 sourceNote: {type: [string, 'null']}
                 promptForFeedback: {type: boolean}
                 nutrition:
+                  description: Omit to preserve stored values and basis; null clears the override. Supply whole-recipe nutrient totals using resulting servings as basis; basisQuantity is ignored.
                   type: [object, 'null']
                   additionalProperties: false
                   required: [calories, proteinG, carbsG, fatG, fiberG, sugarG, sodiumMg]
@@ -424,6 +406,7 @@ paths:
                 portions: {type: array, items: {type: object, additionalProperties: true}}
                 preparationRules: {type: array, items: {type: object, additionalProperties: true}}
                 ingredients:
+                  description: Omit for metadata-only edits; otherwise send the complete desired list. Map ingredient to foodId, qty to quantity, piece_basis to pieceBasis, sort_order to sortOrder, and unit.id to unit. Product pins cannot be edited here.
                   type: array
                   minItems: 1
                   items:
@@ -431,7 +414,7 @@ paths:
                     additionalProperties: false
                     required: [foodId, quantity, unit]
                     properties:
-                      id: {type: [string, 'null'], format: uuid, description: 'Existing ingredient row UUID; explicit null creates a new row.'}
+                      id: {type: [string, 'null'], format: uuid, description: 'Retain the existing row UUID to preserve identity, notes and product pins, including duplicates and reordering. Explicit null creates a new row; omitted id uses legacy matching and may reject ambiguous duplicates.'}
                       foodId: {type: string, format: uuid}
                       quantity: {type: number, exclusiveMinimum: 0}
                       unit: {type: string}
@@ -448,7 +431,7 @@ paths:
                           sourceUnit: {type: string, minLength: 1}
                           provenance: {type: string, minLength: 1}
                           anchor: {type: boolean}
-                      note: {type: [string, 'null']}
+                      note: {type: [string, 'null'], description: 'Omit to retain the existing note; null or an empty string clears it.'}
       responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
   /v1/lots/{id}:
     patch:

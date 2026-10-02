@@ -29,6 +29,14 @@ describe('Pantry GPT operator pack', () => {
     expect(operationIds.length).toBeLessThanOrEqual(30);
   });
 
+  it('keeps operation descriptions within the GPT editor 300-character limit', () => {
+    for (const methods of Object.values(schema.paths as Record<string, Record<string, { operationId: string; description?: string }>>)) {
+      for (const operation of Object.values(methods)) {
+        expect((operation.description ?? '').length, operation.operationId).toBeLessThanOrEqual(300);
+      }
+    }
+  });
+
   it('exposes every write body directly without importer-hostile references', () => {
     const writes: Array<{ route: string; method: string; operation: Record<string, unknown> }> = [];
     for (const [route, methods] of Object.entries(schema.paths as Record<string, Record<string, Record<string, unknown>>>)) {
