@@ -54,5 +54,6 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/owner_creation.sql"
 docker exec -i "$name" sh < "$repo/supabase/tests/owner_creation_concurrency.sh"
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/grouped_workflow.sql"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'

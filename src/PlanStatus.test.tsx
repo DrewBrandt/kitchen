@@ -69,7 +69,7 @@ describe('plan status from live preparation and consumption', () => {
     rerender(view(plans([{ ...sourcePrep, voided_at: '2026-10-01T20:00:00Z' }], 0)));
     for (const name of ['Tomorrow rice', 'Later rice']) {
       expectStatus(name, 'Waiting for preparation', 'planned', false);
-      expect(within(card(name)).getByRole('status')).toHaveTextContent('waiting for its planned preparation');
+      expect(within(card(name)).getByRole('status')).toHaveTextContent('not cooked yet');
     }
     expectStatus('Other rice', 'Ready · not eaten', 'ready', true);
   });
@@ -78,7 +78,7 @@ describe('plan status from live preparation and consumption', () => {
     render(view([linked('Exhausted rice', 'source', [sourcePrep], 0), linked('Unmade rice', 'source', [], 0)]));
     await userEvent.click(screen.getByRole('button', { name: /This week/ }));
     expectStatus('Exhausted rice', 'No servings remaining', 'planned', false);
-    expect(within(card('Exhausted rice')).getByRole('status')).toHaveTextContent('no servings remain in its source batch');
+    expect(within(card('Exhausted rice')).getByRole('status')).toHaveTextContent('no servings left');
     expectStatus('Unmade rice', 'Waiting for preparation', 'planned', false);
   });
 
@@ -112,5 +112,34 @@ describe('plan status from live preparation and consumption', () => {
     expect(card('Source rice')).not.toHaveClass('made');
     expect(within(card('Source rice')).getByText('Planned')).toBeInTheDocument();
     expect(within(card('Source rice')).queryByRole('button', { name: 'Log eaten' })).not.toBeInTheDocument();
+  });
+
+  it('consumes a linked group with separate portions and follows per-dish void and source undo', async () => {
+    const group = (preps: typeof sourcePrep[], aEaten = false, bEaten = false) => [
+      { ...linked('Dish A', 'source', preps, aEaten ? 1 : 2, aEaten), groupId: 'dinner-leftovers' },
+      { ...linked('Dish B', 'other-source', preps, 2, bEaten), groupId: 'dinner-leftovers', plannedServings: 0.5 },
+    ];
+    const { rerender } = render(view(group([])));
+    await userEvent.click(screen.getByRole('button', { name: /This week/ }));
+    expectStatus('Dish A, Dish B', 'Waiting for preparation', 'planned', false);
+    rerender(view(group([sourcePrep])));
+    expectStatus('Dish A, Dish B', 'Ready · not eaten', 'ready', true);
+    await userEvent.click(screen.getByRole('button', { name: 'Log eaten' }));
+    expect(consume).toHaveBeenCalledWith([
+      { mealPlanId: 'Dish A', servings: 1 }, { mealPlanId: 'Dish B', servings: 0.5 },
+    ]);
+    rerender(view(group([sourcePrep], true, true)));
+    expectStatus('Dish A, Dish B', 'Eaten', 'eaten', false);
+    // Voiding one log restores only that dish's editable portion.
+    rerender(view(group([sourcePrep], false, true)));
+    expectStatus('Dish A, Dish B', 'Ready · not eaten', 'ready', true);
+    expect(screen.queryByRole('spinbutton', { name: 'Servings of Dish B eaten now' })).not.toBeInTheDocument();
+    rerender(view(group([sourcePrep])));
+    expectStatus('Dish A, Dish B', 'Ready · not eaten', 'ready', true);
+    rerender(view(group([{ ...sourcePrep, voided_at: '2026-10-02T18:00:00Z' }])));
+    expectStatus('Dish A, Dish B', 'Waiting for preparation', 'planned', false);
+    // The unvoided second dish is still available, but cannot make this group ready.
+    expect(within(card('Dish A, Dish B')).getByRole('status')).toHaveTextContent('Dish A: not cooked yet');
+    expect(within(card('Dish A, Dish B')).getByRole('status')).not.toHaveTextContent('Dish B:');
   });
 });

@@ -25,13 +25,13 @@ function multiplyNutrition(values: NutritionValues, multiplier: number): Nutriti
 
 function SourceTabs({ value, onChange, leftovers = true }: { value: SourceType; onChange: (value: SourceType) => void; leftovers?: boolean }) {
   const tabs = [
-    { id: 'recipe' as const, label: 'Recipe', note: 'Make something', icon: BookOpen },
-    { id: 'pantry' as const, label: 'Pantry item', note: 'Use what you have', icon: PackageOpen },
-    ...(leftovers ? [{ id: 'leftover' as const, label: 'Leftovers', note: 'Eat a prepared batch', icon: Utensils }] : []),
+    { id: 'recipe' as const, label: 'Recipe', icon: BookOpen },
+    { id: 'pantry' as const, label: 'Pantry item', icon: PackageOpen },
+    ...(leftovers ? [{ id: 'leftover' as const, label: 'Leftovers', icon: Utensils }] : []),
   ];
   return <div className="source-tabs" role="tablist" aria-label="Plan source">{tabs.map((tab) => {
     const Icon = tab.icon;
-    return <button key={tab.id} type="button" role="tab" aria-selected={value === tab.id} className={value === tab.id ? 'selected' : ''} onClick={() => onChange(tab.id)}><Icon /><span><strong>{tab.label}</strong><small>{tab.note}</small></span>{value === tab.id && <Check />}</button>;
+    return <button key={tab.id} type="button" role="tab" aria-selected={value === tab.id} className={value === tab.id ? 'selected' : ''} onClick={() => onChange(tab.id)}><Icon /><span><strong>{tab.label}</strong></span>{value === tab.id && <Check />}</button>;
   })}</div>;
 }
 
@@ -58,8 +58,8 @@ function ChoiceList({ type, query, selectedId, onSelect }: { type: SourceType; q
 
 function LotChoice({ product, value, onChange }: { product: ProductView; value: string; onChange: (value: string) => void }) {
   return <div className="stock-choice">
-    <div className="stock-choice-head"><span>Which stock?</span><small>Automatic uses the first expiring lot when you log it.</small></div>
-    <label className={value === 'any' ? 'selected' : ''}><input type="radio" checked={value === 'any'} onChange={() => onChange('any')} /><span><strong>Choose automatically</strong><small>{formatServings(product.stockServings)} across {product.availableLots.length} lot{product.availableLots.length === 1 ? '' : 's'}</small></span></label>
+    <div className="stock-choice-head"><span>Which stock?</span></div>
+    <label className={value === 'any' ? 'selected' : ''}><input type="radio" checked={value === 'any'} onChange={() => onChange('any')} /><span><strong>First to expire</strong><small>{formatServings(product.stockServings)} across {product.availableLots.length} lot{product.availableLots.length === 1 ? '' : 's'}</small></span></label>
     {product.availableLots.map((lot) => <label key={lot.id} className={value === lot.id ? 'selected' : ''}><input type="radio" checked={value === lot.id} onChange={() => onChange(lot.id)} /><span><strong>{lot.location} · {formatServings(lot.remainingServings)}</strong><small>{lot.dateLabel} · {lot.costPerServing === null ? 'Price unavailable' : `${lot.costIsEstimated ? '~' : ''}${usd(lot.costPerServing)} per serving`}</small></span></label>)}
   </div>;
 }
@@ -120,7 +120,7 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
     onValidityChange?.(Boolean(selectedId) && amount > 0 && (!selectedRecipe || Number(batchServings) > 0));
   }, [amount, batchServings, onValidityChange, selectedId, selectedRecipe]);
   return <div className={`plan-composer${sourceExpanded ? '' : ' source-chosen'}`}>
-    <section className="composer-step"><div className="composer-step-title"><i>1</i><div><strong>Choose what you’ll have</strong><small>Start broad. Lot details appear only when they matter.</small></div></div>
+    <section className="composer-step"><div className="composer-step-title"><i>1</i><div><strong>Choose what you’ll have</strong></div></div>
       <SourceTabs value={type} onChange={chooseType} />
       {sourceExpanded ? <>
         <label className="source-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${type === 'pantry' ? 'pantry items' : type === 'leftover' ? 'batches or future meals' : 'recipes'}…`} aria-label="Search plan sources" />{query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search"><X /></button>}</label>
@@ -217,9 +217,9 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
     catch (error) { notify(error instanceof Error ? error.message : 'Could not log this item.'); }
     finally { setSaving(''); }
   }
-  if (!open) return <button className="sandbox-invite" onClick={() => setOpen(true)}><span className="sandbox-icon"><FlaskConical /></span><span className="grow"><strong>What if I ate something else?</strong><small>Try a food or drink against today’s totals before you commit.</small></span><span>Try a food</span></button>;
+  if (!open) return <button className="sandbox-invite" onClick={() => setOpen(true)}><span className="sandbox-icon"><FlaskConical /></span><span className="grow"><strong>What if I ate something else?</strong></span><span>Try a food</span></button>;
   return <section className="nutrition-sandbox" aria-labelledby="sandbox-title">
-    <div className="sandbox-head"><span className="sandbox-icon"><FlaskConical /></span><div className="grow"><strong id="sandbox-title">Try it against your day</strong><small>This is a scratchpad. Nothing changes until you plan or log it.</small></div><button className="icon-button" onClick={() => setOpen(false)} aria-label="Close nutrition scratchpad"><X /></button></div>
+    <div className="sandbox-head"><span className="sandbox-icon"><FlaskConical /></span><div className="grow"><strong id="sandbox-title">Try it against your day</strong><small>Preview only</small></div><button className="icon-button" onClick={() => setOpen(false)} aria-label="Close nutrition scratchpad"><X /></button></div>
     <div className="sandbox-workspace">
       <div className="sandbox-picker">
         <SourceTabs value={type} onChange={chooseType} leftovers={false} />
@@ -229,7 +229,7 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
         {selectedProduct && <LotChoice product={selectedProduct} value={stockChoice} onChange={setStockChoice} />}
       </div>
       <div className="sandbox-impact">
-        {!selectedProduct && !selectedRecipe ? <div className="sandbox-placeholder"><FlaskConical /><strong>Pick something to see the tradeoff</strong><small>We’ll compare today as logged + planned with the new amount.</small></div> : <>
+        {!selectedProduct && !selectedRecipe ? <div className="sandbox-placeholder"><FlaskConical /><strong>Pick something to see the tradeoff</strong></div> : <>
           <div className="impact-head"><span>{selectedProduct?.emoji ?? selectedRecipe?.emoji}</span><div><strong>{selectedProduct?.label ?? selectedRecipe?.name}</strong><small>{formatServings(amount)} adds {Math.round(candidate.Calories)} calories{costPerServing === null ? '' : ` · ${costIsEstimated ? '~' : ''}${usd(costPerServing * amount)}`}</small></div></div>
           <div className="impact-table"><div className="impact-table-head"><span>Nutrient</span><span>Before</span><span>Change</span><span>After</span></div>{(['Calories', 'Protein', 'Carbs', 'Fat', 'Sodium'] as NutrientName[]).map((label) => {
             const after = baseline[label] + candidate[label];
@@ -237,9 +237,9 @@ export function NutritionSandbox({ onPlan, onConsumeLot, notify }: { onPlan?: (f
             const over = (label === 'Calories' || label === 'Sodium') && after > targets[label];
             return <div className={over ? 'over' : ''} key={label}><strong>{label}</strong><span>{formatNutritionAmount(baseline[label], label)}</span><span>+{formatNutritionAmount(candidate[label], label)}</span><span><b>{formatNutritionAmount(after, label)}</b> / {formatNutritionAmount(targets[label], label)} {unit}</span><i style={{ width: `${Math.min(100, after / Math.max(1, targets[label]) * 100)}%` }} /></div>;
           })}</div>
-          {pendingFields && <small role="status">Pending: {String(pendingFields.get('plan_date'))} · {String(pendingFields.get('daypart'))}</small>}
+{pendingFields && <small role="status">Pending: {String(pendingFields.get('plan_date'))} · {String(pendingFields.get('daypart'))}</small>}
           <div className="sandbox-actions"><button className="button secondary" disabled={!exactLot || !onConsumeLot || saving !== '' || exactLot.remainingServings + 0.0001 < amount} onClick={() => void logNow()} title={!exactLot ? 'Choose one exact lot to log now' : undefined}>{saving === 'log' ? 'Logging…' : 'Log eaten now'}</button><button className="button primary" disabled={!onPlan || saving !== '' || pendingPlan?.key !== selectionKey} onClick={() => void plan()}><CalendarDays />{saving === 'plan' ? (pendingFields ? 'Retrying…' : 'Adding…') : pendingFields ? 'Retry addition' : 'Add to today'}</button></div>
-          {selectedProduct && !exactLot && <small className="sandbox-action-hint">Choose an exact lot above to log immediately, or leave it automatic and add it to today’s plan.</small>}
+          {selectedProduct && !exactLot && <small className="sandbox-action-hint">Choose stock to log now.</small>}
         </>}
       </div>
     </div>

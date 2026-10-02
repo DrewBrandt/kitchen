@@ -48,12 +48,12 @@ export function QuantityCorrectionEditor({ id, label, snapshot, save, close }: {
     catch (cause) { if (isDefiniteMutationFailure(cause)) setPending(undefined); setError(mutationError(cause)); }
     finally { setBusy(false); }
   }}>
-    <strong>Correct only {label}</strong><code>Event {id}</code>
-    <p>Recorded: {formatAmount(displayedOriginal)} {snapshot.displayUnit} ({formatAmount(original)} {snapshot.canonicalUnit}). The same source lot and original date/time will be kept.</p>
+    <strong>Correct only {label}</strong>
+    <p>Recorded: {formatAmount(displayedOriginal)} {snapshot.displayUnit} ({formatAmount(original)} {snapshot.canonicalUnit}).</p>
     <label className="field"><span>Correct amount eaten ({snapshot.displayUnit})</span><input type="number" min="0" step="any" value={amount} disabled={busy || Boolean(pending) || !hydrated} onChange={(event) => setAmount(event.target.value)} /></label>
-    {valid && <div role="status"><p>Corrected amount: {formatAmount(quantity)} {snapshot.canonicalUnit}. {delta >= 0 ? 'Return' : 'Deduct'} {formatAmount(Math.abs(delta))} {snapshot.canonicalUnit} {delta >= 0 ? 'to' : 'from'} the original lot.</p><p>Corrected totals: {value(snapshot.calories, 'cal')} · {value(snapshot.protein, 'g protein')} · Recorded cost {snapshot.cost === null ? 'unknown' : `$${(snapshot.cost * ratio).toFixed(2)}`}{snapshot.estimated ? ' · estimates remain estimates' : ''}.</p></div>}
-    <p>All recorded nutrition and attributable costs scale with the quantity. Unknown values stay unknown. The old event stays in history as replaced and cannot be restored. Use Remove this event to record none.</p>
-    {pending && <p>Retry uses the original correction until its result is confirmed.</p>}
+    {valid && <div role="status"><p>Corrected amount: {formatAmount(quantity)} {snapshot.canonicalUnit}. {delta >= 0 ? 'Return' : 'Deduct'} {formatAmount(Math.abs(delta))} {snapshot.canonicalUnit} {delta >= 0 ? 'to' : 'from'} the original lot.</p><p>Corrected totals: {value(snapshot.calories, 'cal')} · {value(snapshot.protein, 'g protein')} · Recorded cost {snapshot.cost === null ? 'unknown' : `$${(snapshot.cost * ratio).toFixed(2)}`}{snapshot.estimated ? ' · estimated' : ''}.</p></div>}
+    <p>This replaces the old event and cannot be undone. To record none, remove the event.</p>
+    {pending && <p>Retrying the same correction.</p>}
     {error && <p role="alert">{error}</p>}
     <button className="button primary" disabled={!hydrated || busy || !valid || (!pending && quantity === original)}>{busy ? 'Saving…' : pending ? 'Retry correction' : 'Save quantity correction'}</button>
     <button type="button" className="button" disabled={busy} onClick={close}>Close correction</button>

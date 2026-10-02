@@ -186,7 +186,7 @@ describe('Pantry web UI', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Inventory' }));
-    expect(screen.getAllByText('Estimated inventory value: $3.18').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Estimated inventory value: $3.18').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Recipes' }));
     // Per-serving is derived from the batch, not stored: $4.72 over 4 servings.
@@ -312,7 +312,7 @@ describe('Pantry web UI', () => {
     const meals = ['Rice', 'Chicken'].map((name, i) => ({ ...previewPantryData.plannedMeals[0], id: `leftover-${i}`, name, groupId: 'leftovers', dateKey: currentDateKey(), isLeftover: true, status: 'planned' as const, consumptionStatus: 'planned', preparedServingsAvailable: i === 0 ? 2 : 0, waitingForPreparation: i === 1 }));
     const { rerender } = render(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: meals }}><App onConsumePlannedMeals={onConsume} /></PantryDataProvider>);
     await user.click(screen.getByRole('button', { name: /This week/ }));
-    expect(screen.getByText(/Chicken: waiting for its planned preparation/)).toBeInTheDocument();
+    expect(screen.getByText(/Chicken: not cooked yet/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Log eaten' })).not.toBeInTheDocument();
     rerender(<PantryDataProvider data={{ ...previewPantryData, plannedMeals: meals.map((meal) => ({ ...meal, preparedServingsAvailable: 2, waitingForPreparation: false })) }}><App onConsumePlannedMeals={onConsume} /></PantryDataProvider>);
     const rice = screen.getByRole('spinbutton', { name: 'Servings of Rice eaten now' });
@@ -390,7 +390,7 @@ describe('Pantry web UI', () => {
     expect(linkedMultiplier).toHaveAttribute('readonly');
     await user.type(linkedMultiplier, '3');
     expect(linkedMultiplier).toHaveValue(2);
-    expect(within(cards[1]).getByText(/Edit the plan to change its recipe multiplier/)).toBeInTheDocument();
+    expect(within(cards[1]).getByText('Batch size (from plan)')).toBeInTheDocument();
     expect(within(cards[0]).getByText('3 cups in stock')).toBeInTheDocument();
     expect(within(cards[1]).getByText('3 cups in stock · short')).toBeInTheDocument();
     await user.click(within(cards[0]).getByRole('button', { name: /2 cups flour/ }));
@@ -417,9 +417,9 @@ describe('Pantry web UI', () => {
     expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled();
     await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
     await user.click(within(card).getByRole('button', { name: 'Half' }));
-    expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    expect(within(card).getByText(/~75 g/)).toBeInTheDocument();
     expect(within(card).getByText(/Original recipe requirement: 600 g chicken.*replaced by pieces/)).toBeInTheDocument();
-    expect(within(card).getByText(/Adjusted nutrition and cost preview unavailable/)).toBeInTheDocument();
+    expect(within(card).getByText(/Adjusted nutrition & cost unavailable/)).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Quarter' }));
     expect(within(card).getByLabelText('Pieces to cook')).toHaveValue(0.25);
     await user.click(within(card).getByRole('button', { name: 'Whole' }));
@@ -447,7 +447,7 @@ describe('Pantry web UI', () => {
     await user.click(within(card).getByRole('button', { name: 'Choose pieces instead for chicken' }));
     await user.click(within(card).getByRole('button', { name: 'Half' }));
     expect(within(card).getByText(/Original recipe requirement: 1200 g chicken.*replaced by pieces/)).toBeInTheDocument();
-    expect(within(card).getByText(/Approximately 75 g/)).toBeInTheDocument();
+    expect(within(card).getByText(/~75 g/)).toBeInTheDocument();
     const yieldInput = within(card).getByLabelText('Servings of ' + recipe.name + ' made');
     await user.clear(yieldInput);
     await user.type(yieldInput, '3');
@@ -919,7 +919,7 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'Food log' }));
     await user.click(screen.getByRole('button', { name: /What if I ate something else/ }));
-    expect(screen.getByText(/Nothing changes until you plan or log it/)).toBeInTheDocument();
+    expect(screen.getByText('Preview only')).toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Bailey's/ }));
     expect(screen.getByText(/1 serving adds 147 calories/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Log eaten now' })).toBeDisabled();

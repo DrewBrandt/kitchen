@@ -2,7 +2,7 @@ import { preparedPlanAvailability } from './prepared-plan';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../database.types';
 import type { ShoppingReceipt, FoodLogEntry, NutritionValues, NutrientName, PantryData, PlannedMealConsumption, PreparationOptions, PreparationResult } from '../pantry-data';
-import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue, inventoryValueLabel } from './cost';
+import { DEFAULT_WEEKLY_FOOD_BUDGET, perServingCost, remainingValue } from './cost';
 import { formatAmount, formatServings, formatStockQuantity, shoppingQuantityPresentation } from './format';
 import { runRetryableMutation } from './mutation-feedback';
 import { nutritionForServings } from './nutrition';
@@ -103,7 +103,7 @@ export const formatRecipeQuantity = (value: number, unit?: string | null) => {
 
 const formatCost = (value: CostValue) => value.cost === null ? 'price unavailable' : `${value.estimated ? '~' : ''}$${value.cost.toFixed(2)}`;
 
-const formatInventoryCost = (value: CostValue) => inventoryValueLabel(value.cost, value.estimated);
+
 
 const formatUsStock = (baseValue: number, unit?: Database['public']['Tables']['measure_conversions']['Row']) => {
   const converted = baseValue * Number(unit?.base_to_this_ratio ?? 1);
@@ -314,7 +314,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
         total: formatUsStock(total, displayUnit),
         due: due.label,
         tone: due.tone,
-        lots: stockLots.map((lot) => `${formatUsStock(Number(lot.remaining_qty), displayUnit)} ${lot.location ?? 'unassigned'} · ${formatInventoryCost(lotCost(lot, Number(lot.remaining_qty), products.get(lot.product ?? '')))}`),
+        lots: stockLots.map((lot) => `${formatUsStock(Number(lot.remaining_qty), displayUnit)} ${lot.location ?? 'unassigned'}`),
         cost: knownCosts.length === stockLots.length ? knownCosts.reduce((total, value) => total + value, 0) : null,
         costIsEstimated: costValues.some((value) => value.estimated),
         purchasePriceUnknown: stockLots.some((lot) => lot.total_cost === null),

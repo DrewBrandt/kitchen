@@ -58,7 +58,7 @@ it('retries scratchpad append after a lost response and remount with the origina
   await user.click(screen.getByRole('button', { name: 'Increase amount' })); await expectNew();
   await user.click(screen.getByRole('button', { name: 'Decrease amount' })); await expectRetry();
   await user.click(screen.getByRole('radio', { name: /pantry.*9.3 servings/ })); await expectNew();
-  await user.click(screen.getByRole('radio', { name: /Choose automatically/ })); await expectRetry();
+  await user.click(screen.getByRole('radio', { name: /First to expire/ })); await expectRetry();
   await user.click(screen.getByRole('tab', { name: /Recipe/ }));
   await user.click(screen.getByRole('option', { name: /Simple Pancakes/ })); await expectNew();
   await user.click(screen.getByRole('tab', { name: /Pantry item/ }));

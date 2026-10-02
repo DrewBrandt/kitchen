@@ -53,16 +53,16 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const PAGE_META: Record<PageId, { eyebrow: string; title: string; subtitle: string; primary: string; secondary?: string }> = {
-  today: { eyebrow: '', title: '', subtitle: 'See what needs attention and what is ready to eat.', primary: 'Add inventory', secondary: 'Look up barcode' },
-  inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: 'Grouped by grocery department. Lots deduct earliest-expiry first.', primary: 'Add lot' },
-  'on-deck': { eyebrow: 'COOKING WORKSPACE', title: 'On deck', subtitle: 'Keep every active recipe visible and arrange the workspace around how you cook.', primary: 'Add recipe' },
-  recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: 'What is ready to cook, and exactly what a run to the store would unlock.', primary: 'New recipe' },
-  products: { eyebrow: 'KNOWN PRODUCTS', title: 'Products', subtitle: 'Search every known product, inspect nutrition, and compare alternatives for the same food.', primary: 'Add product' },
-  'food-log': { eyebrow: 'TODAY', title: 'Food log', subtitle: 'See what you ate, what you planned, and what another choice would change.', primary: 'Log food', secondary: 'Look up barcode' },
-  history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '9 meals · 6 distinct foods · 1 repeated three times or more.', primary: 'Export range' },
-  trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: 'Daily nutrition against targets, and the foods driving each nutrient.', primary: 'Edit targets' },
-  week: { eyebrow: 'YOUR PLAN', title: 'This week', subtitle: 'Plan recipes, leftovers, or anything already in the pantry.', primary: 'Add to day', secondary: 'Rebuild grocery list' },
-  grocery: { eyebrow: 'THIS WEEK', title: 'Grocery list', subtitle: 'Manual items and plan shortages, grouped by grocery department.', primary: 'Add item', secondary: 'Rebuild from plan' },
+  today: { eyebrow: '', title: '', subtitle: '', primary: 'Add inventory', secondary: 'Look up barcode' },
+  inventory: { eyebrow: '6 FOODS · 7 LOTS', title: 'Inventory', subtitle: '', primary: 'Add lot' },
+  'on-deck': { eyebrow: 'COOKING WORKSPACE', title: 'On deck', subtitle: '', primary: 'Add recipe' },
+  recipes: { eyebrow: '2 RECIPES · 2 COOKABLE NOW', title: 'Recipes', subtitle: '', primary: 'New recipe' },
+  products: { eyebrow: 'KNOWN PRODUCTS', title: 'Products', subtitle: '', primary: 'Add product' },
+  'food-log': { eyebrow: 'TODAY', title: 'Food log', subtitle: '', primary: 'Log food', secondary: 'Look up barcode' },
+  history: { eyebrow: 'LAST 2 WEEKS', title: 'History', subtitle: '', primary: 'Export range' },
+  trends: { eyebrow: 'LAST 30 DAYS', title: 'Trends', subtitle: '', primary: 'Edit targets' },
+  week: { eyebrow: 'YOUR PLAN', title: 'This week', subtitle: '', primary: 'Add to day', secondary: 'Rebuild grocery list' },
+  grocery: { eyebrow: 'THIS WEEK', title: 'Grocery list', subtitle: '', primary: 'Add item', secondary: 'Rebuild from plan' },
 };
 
 export const INVENTORY_SECTIONS = [
