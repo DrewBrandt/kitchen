@@ -14,7 +14,7 @@ paths:
       summary: Read inventory lots with exact IDs and acquisition/payment provenance
       parameters:
         - {in: query, name: includeDepleted, required: false, schema: {type: boolean, default: false}, description: Include zero-remaining lots for audit and correction.}
-      responses: {'200': {$ref: '#/components/responses/Success'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+      responses: {'200': {$ref: '#/components/responses/Inventory'}, '401': {$ref: '#/components/responses/Unauthorized'}}
     post:
       operationId: reconcilePantryInventory
       summary: Atomically replace live lots for selected foods using auditable adjustments
@@ -901,6 +901,12 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
   responses:
+    Inventory:
+      description: Raw product lots with explicit stock units and price bases. Prepared batches use the prepared endpoint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InventoryResponse'
     Success:
       description: Operation completed
       content: {application/json: {schema: {type: object, additionalProperties: true}}}
@@ -914,6 +920,251 @@ components:
       description: Resource not found
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    InventoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - exportedAt
+        - lots
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        lots:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryLot"
+    InventoryLot:
+      type: object
+      additionalProperties: false
+      required:
+        - lotId
+        - quantityBase
+        - baseUnit
+        - displayQuantity
+        - initialQuantityBase
+        - productPackage
+        - valuation
+        - pieceBasis
+      properties:
+        lotId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        product:
+          type:
+            - string
+            - "null"
+          description: Product label.
+        foodId:
+          type: string
+          format: uuid
+        food:
+          type: string
+        quantityBase:
+          type: number
+          description: Remaining canonical stock. Pair ONLY with baseUnit, never displayUnit.
+        baseUnit: &a1
+          type:
+            - string
+            - "null"
+          enum:
+            - g
+            - fl oz
+            - ct
+            - null
+          description: "Canonical food quantity unit: grams for weight, US fluid ounces for volume, count for discrete. Null for an unsupported dimension."
+        displayQuantity:
+          type:
+            - number
+            - "null"
+          description: Remaining stock converted using the stored unit factor. Pair with displayUnit. Null if unit/dimension is missing, invalid, or cross-dimension; never infer a conversion.
+        displayUnit:
+          type: string
+          description: Preferred unit of displayQuantity only. Legacy field; it does NOT describe quantityBase.
+        initialQuantityBase:
+          type:
+            - number
+            - "null"
+          description: Original acquired quantity in baseUnit; the denominator for original lot price allocation.
+        productPackage:
+          type: object
+          additionalProperties: false
+          required:
+            - quantityBase
+            - baseUnit
+            - displayQuantity
+            - displayUnit
+            - estimatedPrice
+            - priceSource
+            - priceAsOf
+          properties:
+            quantityBase:
+              type:
+                - number
+                - "null"
+              description: Quantity per product package in baseUnit; not the current lot balance.
+            baseUnit: *a1
+            displayQuantity:
+              type:
+                - number
+                - "null"
+              description: Package quantity converted into package displayUnit, or null when conversion is unavailable.
+            displayUnit:
+              type:
+                - string
+                - "null"
+              description: Product package unit; applies only to displayQuantity.
+            estimatedPrice:
+              type:
+                - number
+                - "null"
+              description: Estimated price for one package of quantityBase, not the remaining stock. Null is unknown; zero is free.
+            priceSource:
+              type:
+                - string
+                - "null"
+              description: Provenance of the package estimate.
+            priceAsOf:
+              type:
+                - string
+                - "null"
+              description: Date of the package estimate.
+        valuation:
+          type: object
+          additionalProperties: false
+          required:
+            - originalLotPrice
+            - originalLotQuantityBase
+            - baseUnit
+            - remainingValue
+            - remainingValueIsEstimated
+            - remainingValueBasis
+            - remainingValueSource
+            - remainingValuePriceAsOf
+          properties:
+            originalLotPrice:
+              type:
+                - number
+                - "null"
+              description: Original full-lot total price, identical to legacy totalPrice. Its quantity basis is originalLotQuantityBase; root costIsEstimated/costSource/priceAsOf describe it.
+            originalLotQuantityBase:
+              type:
+                - number
+                - "null"
+              description: Quantity priced by originalLotPrice, in baseUnit.
+            baseUnit: *a1
+            remainingValue:
+              type:
+                - number
+                - "null"
+              description: "Prorated current stock value: original lot price / initial quantity * remaining quantity; if original cost is unknown, use product package estimated price / package quantity. Null remains unknown; zero remains zero."
+            remainingValueIsEstimated:
+              type: boolean
+              description: Lot estimate flag when using original lot cost; true for product fallback or unavailable value.
+            remainingValueBasis:
+              type: string
+              enum:
+                - original_lot
+                - product_package_estimate
+                - unavailable
+            remainingValueSource:
+              type: string
+            remainingValuePriceAsOf:
+              type:
+                - string
+                - "null"
+              description: Price date for the valuation basis; may differ from root priceAsOf.
+        pieceBasis:
+          type:
+            - object
+            - "null"
+          description: Legacy recorded count/quantity basis only. It may be stale after stock changes and is NOT a confirmed remaining count. No current-piece validity guarantee.
+          additionalProperties: false
+          required:
+            - pieceCount
+            - quantityBase
+            - baseUnit
+            - interpretation
+            - remainingCountConfirmed
+          properties:
+            pieceCount:
+              type: number
+              exclusiveMinimum: 0
+              description: Recorded count at the basis quantity, not confirmed current pieces.
+            quantityBase:
+              type: number
+              exclusiveMinimum: 0
+              description: Canonical quantity associated with the recorded count.
+            baseUnit: *a1
+            interpretation:
+              const: legacy_basis_only
+            remainingCountConfirmed:
+              const: false
+        status:
+          type: string
+          enum:
+            - available
+            - depleted
+        acquisitionType:
+          type:
+            - string
+            - "null"
+          description: Acquisition classification.
+        totalPrice:
+          type:
+            - number
+            - "null"
+          description: Legacy original full-lot price, NOT remaining value or necessarily price per product package. See valuation.
+        outOfPocketCost:
+          type:
+            - number
+            - "null"
+          description: Original acquisition payment, not remaining value.
+        paidBy:
+          type:
+            - string
+            - "null"
+          description: Original payer.
+        costIsEstimated:
+          type: boolean
+        costSource:
+          type:
+            - string
+            - "null"
+          description: Original lot price provenance.
+        priceAsOf:
+          type:
+            - string
+            - "null"
+          description: Original lot price date.
+        location:
+          type:
+            - string
+            - "null"
+          description: Storage location.
+        bestBy:
+          type:
+            - string
+            - "null"
+          description: Best-by date.
+        acquiredAt:
+          type:
+            - string
+            - "null"
+          description: Acquisition timestamp.
+        acquiredTimePrecision:
+          type:
+            - string
+            - "null"
+          description: Recorded timestamp precision.
+        note:
+          type:
+            - string
+            - "null"
+          description: Lot note.
     Error:
       type: object
       required: [error]

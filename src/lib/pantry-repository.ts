@@ -108,9 +108,10 @@ const formatCost = (value: CostValue) => value.cost === null ? 'price unavailabl
 
 const formatUsStock = (baseValue: number, unit?: Database['public']['Tables']['measure_conversions']['Row']) => {
   const converted = baseValue * Number(unit?.base_to_this_ratio ?? 1);
-  if (unit?.short_name === 'oz' && converted >= 16) {
-    const pounds = Math.floor(converted / 16);
-    const ounces = converted - pounds * 16;
+  const roundedOunces = Math.round(converted * 10) / 10;
+  if (unit?.short_name === 'oz' && roundedOunces >= 16) {
+    const pounds = Math.floor(roundedOunces / 16);
+    const ounces = roundedOunces - pounds * 16;
     return `${pounds} lb${ounces >= 0.05 ? ` ${formatQuantity(ounces, 'oz')}` : ''}`;
   }
   return formatQuantity(converted, unit?.short_name);

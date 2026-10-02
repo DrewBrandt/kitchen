@@ -149,6 +149,36 @@ async function foods(db: Supabase, query?: string, id?: string) {
   }));
 }
 
+const inventoryNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  const number = Number(value); return Number.isFinite(number) ? number : null;
+};
+const inventoryBaseUnit = (style: unknown) => style === 'weight' ? 'g' : style === 'volume' ? 'fl oz' : style === 'discrete' ? 'ct' : null;
+function inventoryDisplay(quantity: number | null, food: Json | undefined, unit: Json | undefined): number | null {
+  const ratio = inventoryNumber(unit?.base_to_this_ratio);
+  // A preferred unit is not a unit for canonical stock. Cross-dimension
+  // conversions require a separate density/count contract; do not infer one.
+  if (quantity === null || !inventoryBaseUnit(food?.measure_style) || unit?.measure_style !== food?.measure_style || ratio === null || ratio <= 0) return null;
+  const converted = quantity * ratio; return Number.isFinite(converted) ? converted : null;
+}
+function inventoryValuation(lot: Json, product: Json | undefined, baseUnit: string | null) {
+  const initial = inventoryNumber(lot.initial_qty), remaining = inventoryNumber(lot.remaining_qty);
+  const originalPrice = inventoryNumber(lot.total_cost), packagePrice = inventoryNumber(product?.estimated_cost), packageQty = inventoryNumber(product?.package_qty_base);
+  // Same allocation as the app's lotCost: original lot cost first, then the
+  // product package estimate. Null is unknown; a recorded zero stays zero.
+  const useLot = originalPrice !== null && initial !== null && initial > 0;
+  const useProduct = !useLot && packagePrice !== null && packageQty !== null && packageQty > 0;
+  const allocated = remaining === null ? null : useLot ? originalPrice! / initial! * remaining : useProduct ? packagePrice! / packageQty! * remaining : null;
+  return {
+    originalLotPrice: originalPrice, originalLotQuantityBase: initial, baseUnit,
+    remainingValue: allocated !== null && Number.isFinite(allocated) ? allocated : null,
+    remainingValueIsEstimated: useLot ? Boolean(lot.cost_is_estimated) : true,
+    remainingValueBasis: useLot ? 'original_lot' : useProduct ? 'product_package_estimate' : 'unavailable',
+    remainingValueSource: useLot ? lot.cost_source ?? (lot.cost_is_estimated ? 'Lot estimate' : 'Purchase cost') : product?.cost_source ?? 'Product price estimate',
+    remainingValuePriceAsOf: (useLot ? lot.price_as_of : product?.cost_as_of) ?? null,
+  };
+}
+
 async function inventory(db: Supabase, includeDepleted = false) {
   const [lotResult, productResult, foodResult, unitResult] = await Promise.all([
     (() => {
@@ -164,9 +194,20 @@ async function inventory(db: Supabase, includeDepleted = false) {
     const product = products.find((row) => row.id === lot.product);
     const food = foodRows.find((row) => row.id === product?.food);
     const unit = units.find((row) => row.id === food?.display_unit);
+    const packageUnit = units.find((row) => row.id === product?.package_unit);
+    const baseUnit = inventoryBaseUnit(food?.measure_style);
+    const quantity = inventoryNumber(lot.remaining_qty), packageQuantity = inventoryNumber(product?.package_qty_base);
+    const pieceCount = inventoryNumber(lot.piece_count), pieceQuantity = inventoryNumber(lot.piece_basis_qty);
     return { lotId: lot.id, productId: product?.id,
       product: product ? [product.brand, product.name].filter(Boolean).join(" · ") : null,
       foodId: food?.id, food: food?.name, quantityBase: Number(lot.remaining_qty), displayUnit: unit?.short_name,
+      baseUnit, displayQuantity: inventoryDisplay(quantity, food, unit), initialQuantityBase: inventoryNumber(lot.initial_qty),
+      productPackage: { quantityBase: packageQuantity, baseUnit, displayQuantity: inventoryDisplay(packageQuantity, food, packageUnit), displayUnit: packageUnit?.short_name ?? null,
+        estimatedPrice: inventoryNumber(product?.estimated_cost), priceSource: product?.cost_source ?? null, priceAsOf: product?.cost_as_of ?? null },
+      valuation: inventoryValuation(lot, product, baseUnit),
+      pieceBasis: pieceCount !== null && pieceCount > 0 && pieceQuantity !== null && pieceQuantity > 0 ? {
+        pieceCount, quantityBase: pieceQuantity, baseUnit, interpretation: 'legacy_basis_only', remainingCountConfirmed: false,
+      } : null,
       status: Number(lot.remaining_qty) > INVENTORY_QUANTITY_EPSILON ? "available" : "depleted",
       acquisitionType: lot.acquisition_type,
       totalPrice: lot.total_cost, outOfPocketCost: lot.out_of_pocket_cost, paidBy: lot.paid_by,
