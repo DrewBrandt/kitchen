@@ -6,6 +6,7 @@
 - Start every implementation task in its own Git worktree on a dedicated `codex/` branch. Do not implement directly on `main`.
 - Preserve unrelated user or agent changes. Do not copy uncommitted work from another worktree unless its owner explicitly asks you to.
 - New worktrees do not contain ignored dependency or build directories. Bootstrap each worktree before analysis or tests with `npm ci` at the repository root. Use the lockfile; do not copy `node_modules` or build output from another worktree.
+- API handler contract tests import Node built-ins. Keep `@types/node` as an explicit development dependency; its optional-peer presence in a local restore does not guarantee availability in the clean Pages build.
 - When validating a feature worktree without environment files, also build with nonempty `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` placeholders. Otherwise Vite can remove the authenticated application as unreachable, leaving its bundle unverified. Use `https://example.supabase.co` and `build-validation-placeholder` for this build-only check; never deploy that output.
 - If the sandbox blocks dependency network access, rerun only the standard locked restore command with the required network approval. Do not replace the locked restore with copied dependencies or an unpinned install.
 - If Vitest fails before running tests with `EPERM` creating its temporary `client` directory under the user's Temp folder, rerun the same test command with narrowly scoped approval; do not change machine permissions or copy dependencies.
