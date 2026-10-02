@@ -404,6 +404,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       id: recipe.id,
       emoji: recipe.emoji ?? '🍳',
       name: recipe.name,
+      hasNutritionOverride: [recipe.override_kcal, recipe.override_protein_g, recipe.override_carbs_g, recipe.override_fat_g, recipe.override_fiber_g, recipe.override_sugar_g, recipe.override_sodium_mg].some((value) => value != null),
       servings: Number(recipe.servings),
       minutes: Math.max(10, steps.length * 5),
       nutrition: `${kcal ? `${Math.round(kcal / Number(recipe.servings))} cal · ${Math.round(protein / Number(recipe.servings))} g protein per serving` : 'Nutrition calculated from ingredients'} · ${formatCost({ cost: estimatedCost, estimated: ingredientCosts.some((value) => value.estimated), source: 'Recipe ingredients' })} batch`,
@@ -997,7 +998,7 @@ export async function cookRecipe(client: Client, recipeId: string, options: Prep
       p_location: savedOptions.location ?? 'fridge',
       ...(savedOptions.mealPlanId ? { p_meal_plan: savedOptions.mealPlanId } : {}),
       p_eaten_servings: savedOptions.servingsEaten ?? 0,
-      ...(savedOptions.pieceInputs?.length ? { p_piece_inputs: savedOptions.pieceInputs.map((input) => ({ ...input })) } : {}),
+      ...(savedOptions.pieceInputs?.length ? { p_piece_inputs: savedOptions.pieceInputs.map((input) => ({ ...input, ...(savedOptions.useIngredientNutrition ? { useIngredientNutrition: true } : {}) })) } : {}),
     });
     if (error) throw error;
     const result = data as Record<string, unknown>;

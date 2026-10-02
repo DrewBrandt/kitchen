@@ -1159,3 +1159,9 @@ button.soon-row:hover { background: #121715; }
 .leftover-component { padding: 12px; border: 1px solid #2b3430; border-radius: 9px; gap: 8px; }
 .leftover-choice { display: flex; align-items: center; gap: 8px; }
 .leftover-choice input[type="checkbox"] { width: 16px; height: 16px; padding: 0; accent-color: var(--mint); }
+
+.recipe-piece-fields, .recipe-ingredient-edit-row > .recipe-piece-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.recipe-piece-fields > small, .recipe-piece-fields > label:not(.field) { grid-column: 1 / -1; }
+.recipe-piece-fields > small { overflow-wrap: anywhere; }
+.piece-nutrition-choice { display: grid; gap: 6px; flex-basis: 100%; }
+.deck-card-footer:has(.piece-nutrition-choice) { flex-wrap: wrap; }

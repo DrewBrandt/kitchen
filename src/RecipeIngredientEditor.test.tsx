@@ -30,3 +30,13 @@ it('opts a weighed ingredient into saved pieces and an anchor without changing c
   expect(form.get('ingredients')).toBe('450 g Chicken');
   expect(JSON.parse(String(form.get('ingredient_piece_bases')))[0]).toMatchObject({ count: 3, grams: 450, sourceQuantity: 450, sourceUnit: 'g', anchor: true });
 });
+
+it('rounds displayed mass without rewriting the saved ingredient or estimate', () => {
+  const grams = 907.184739989;
+  const recipe = { ...RECIPES[0], ingredientText: `${grams} g Chicken`, ingredients: [{ id: 'a', label: 'Chicken', stock: '', pieceBasis: { count: 4, grams, label: 'thighs', sourceQuantity: 2, sourceUnit: 'lb', provenance: 'fixture' } }] };
+  const { container } = render(<form><RecipeIngredientEditor recipe={recipe} /></form>);
+  expect(screen.getByLabelText('Ingredient 1')).toHaveValue('907.18 g Chicken');
+  const form = new FormData(container.querySelector('form')!);
+  expect(form.get('ingredients')).toBe(`${grams} g Chicken`);
+  expect(JSON.parse(String(form.get('ingredient_piece_bases')))[0].grams).toBe(grams);
+});

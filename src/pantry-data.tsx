@@ -125,6 +125,7 @@ export interface PreparationOptions {
   /** Browser-only identity for independently staged unplanned batches. */
   cookingDraftId?: string;
   pieceInputs?: PieceInput[];
+  useIngredientNutrition?: boolean;
   scale?: number;
   servingsMade?: number;
   location?: string;
