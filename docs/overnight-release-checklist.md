@@ -6,12 +6,13 @@ The candidate combines reviewed core `24fc3e1`, inventory API parity `5983355`, 
 
 ## Later deployment requirements
 
-After authorization and target-state verification, the release needs all of the following:
+After authorization and target-state verification, the core app/migration/API release needs the following:
 
 1. Apply only the reviewed pending migrations, in order: `202610010013_atomic_owner_creation.sql`, `202610010014_allow_future_food_log_undo.sql`, and `202610010015_preserve_recipe_post_updates.sql`. Verify the deployed baseline and historical migration fingerprints first; stop on unexpected pending migrations.
 2. Deploy the application from the exact accepted candidate.
 3. Separately deploy the `pantry-api` function from that same candidate. App hosting does not deploy the inventory serializer.
-4. Refresh the GPT action schema from `docs/pantry-gpt-openapi.yaml` after the matching function is deployed. A repository schema edit does not update the GPT editor.
+
+An optional GPT action schema refresh from `docs/pantry-gpt-openapi.yaml` requires separate authorization after the matching API function is deployed. The core app/migration/API release does not depend on editing GPT configuration. Neither the repository schema nor a configuration refresh establishes runtime action availability; that requires separate verification.
 
 No authentication configuration or owner-guard changes are required by this integration. Retain the reviewed permissions and do not alter tokens, authentication settings, or existing ACLs as a deployment workaround.
 
