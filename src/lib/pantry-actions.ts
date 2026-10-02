@@ -333,6 +333,7 @@ export async function savePanelAction(client: Client, kind: PanelKind, form: For
         recipe: optionalText(form, 'recipe'), product: optionalText(form, 'product'),
         inventory_lot: optionalText(form, 'inventory_lot'), source_group_id: optionalText(form, 'source_group_id'),
         note: optionalText(form, 'note'),
+        ...(form.has('leftover_dishes') ? { leftover_dishes: JSON.parse(text(form, 'leftover_dishes')) } : {}),
       },
     });
     if (error) throw error;

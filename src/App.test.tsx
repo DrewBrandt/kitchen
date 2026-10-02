@@ -342,7 +342,10 @@ describe('Pantry web UI', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Recipes' }));
       await userEvent.click(screen.getAllByRole('button', { name: 'Make batch' })[0]);
       const card = screen.getAllByRole('article', { name: previewPantryData.recipes[0].name }).find((card) => within(card).queryByText('Unplanned'))!;
-      const method = card.querySelectorAll('details')[1];
+      const method = card.querySelector('.deck-card-body > details') as HTMLDetailsElement;
+      expect(method.querySelector('summary')).toHaveTextContent('Method');
+      expect(method.open).toBe(true);
+      expect(card.querySelector('.deck-card-header')).toHaveTextContent(String(previewPantryData.recipes[0].servings));
       method.open = false;
       await userEvent.click(within(card).getByRole('button', { name: 'Method' }));
       expect(method.open).toBe(true);

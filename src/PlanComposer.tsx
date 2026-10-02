@@ -84,41 +84,45 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
   const [query, setQuery] = useState('');
   const [stockChoice, setStockChoice] = useState(values.inventory_lot ?? 'any');
   const [servings, setServings] = useState('1');
+  const [leftoverPortions, setLeftoverPortions] = useState<Record<string, string>>({});
   const selectedRecipe = type === 'recipe' ? recipes.find((recipe) => recipe.id === selectedId) : undefined;
   const selectedProduct = type === 'pantry' ? products.find((product) => product.id === selectedId) : undefined;
   const selectedLeftover = type === 'leftover' ? plannedMeals.find((plan) => plan.groupId === selectedId) : undefined;
   const selectedBatch = type === 'leftover' && selectedId.startsWith('lot:') ? preparedLots.find((lot) => lot.id === selectedId.slice(4)) : undefined;
-  const leftoverComponents = selectedLeftover ? plannedMeals.filter((plan) => plan.groupId === selectedLeftover.groupId && !plan.isLeftover) : [];
-  const leftoverNutrition = leftoverComponents.reduce((total, plan) => {
+  const leftoverComponents = selectedLeftover ? plannedMeals.filter((plan) => plan.groupId === selectedLeftover.groupId && !plan.isLeftover && plan.recipeId && ["planned", "made"].includes(plan.status)) : [];
+  const chosenLeftovers = leftoverComponents.filter((plan) => plan.id && Object.hasOwn(leftoverPortions, plan.id));
+  const leftoverNutrition = chosenLeftovers.reduce((total, plan) => {
     const recipe = recipes.find((candidate) => candidate.id === plan.recipeId);
-    if (recipe) for (const key of Object.keys(total) as NutrientName[]) total[key] += recipePerServing(recipe)[key];
+    if (recipe) for (const key of Object.keys(total) as NutrientName[]) total[key] += recipePerServing(recipe)[key] * (Number(leftoverPortions[plan.id!]) || 0);
     return total;
   }, { ...EMPTY_NUTRITION });
-  const leftoverCosts = leftoverComponents.map((plan) => recipes.find((recipe) => recipe.id === plan.recipeId)?.costPerServing ?? null);
+  const leftoverCosts = chosenLeftovers.map((plan) => { const price = recipes.find((recipe) => recipe.id === plan.recipeId)?.costPerServing; return price == null ? null : price * (Number(leftoverPortions[plan.id!]) || 0); });
   const leftoverCost = leftoverCosts.length && leftoverCosts.every((cost) => cost !== null) ? leftoverCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0) : null;
   const [batchServings, setBatchServings] = useState(String(selectedRecipe?.servings ?? 1));
   const amount = Math.max(0, Number(servings) || 0);
   const nutrition = selectedRecipe ? multiplyNutrition(recipePerServing(selectedRecipe), amount)
     : selectedProduct ? multiplyNutrition(selectedProduct.nutritionPerServing, amount)
       : selectedBatch?.nutritionPerServing ? multiplyNutrition(selectedBatch.nutritionPerServing, amount)
-        : selectedLeftover ? multiplyNutrition(leftoverNutrition, amount)
+        : selectedLeftover ? leftoverNutrition
         : EMPTY_NUTRITION;
   const selectedLot = selectedProduct?.availableLots.find((lot) => lot.id === stockChoice);
   const projectedLot = selectedLot ?? (stockChoice === 'any' ? selectedProduct?.availableLots[0] : undefined);
   const costPerServing = selectedRecipe?.costPerServing ?? projectedLot?.costPerServing ?? selectedProduct?.costPerServing ?? (selectedBatch ? selectedBatch.costPerServing : leftoverCost);
-  const cost = costPerServing === null || costPerServing === undefined ? null : costPerServing * amount;
+  const cost = selectedLeftover ? leftoverCost : costPerServing === null || costPerServing === undefined ? null : costPerServing * amount;
   const exactLot = selectedBatch?.id ?? (selectedProduct && stockChoice !== 'any' ? stockChoice : '');
   const chooseType = (next: SourceType) => { setType(next); setSelectedId(''); setStockChoice('any'); setQuery(''); setSourceExpanded(true); };
   const chooseSource = (id: string) => {
     setSelectedId(id);
+    setLeftoverPortions(Object.fromEntries(plannedMeals.filter((plan) => plan.groupId === id && !plan.isLeftover && plan.recipeId && ["planned", "made"].includes(plan.status) && plan.id).map((plan) => [plan.id!, String(plan.plannedServings ?? 1)])));
     setStockChoice('any');
     setSourceExpanded(false);
     const recipe = recipes.find((candidate) => candidate.id === id);
     if (recipe) setBatchServings(String(recipe.servings));
   };
+  const validLeftovers = !selectedLeftover || (chosenLeftovers.length > 0 && chosenLeftovers.every((plan) => Number.isFinite(Number(leftoverPortions[plan.id!])) && Number(leftoverPortions[plan.id!]) > 0));
   useEffect(() => {
-    onValidityChange?.(Boolean(selectedId) && amount > 0 && (!selectedRecipe || Number(batchServings) > 0));
-  }, [amount, batchServings, onValidityChange, selectedId, selectedRecipe]);
+    onValidityChange?.(validLeftovers && Boolean(selectedId) && amount > 0 && (!selectedRecipe || Number(batchServings) > 0));
+  }, [amount, batchServings, onValidityChange, selectedId, selectedRecipe, validLeftovers]);
   return <div className={`plan-composer${sourceExpanded ? '' : ' source-chosen'}`}>
     <section className="composer-step"><div className="composer-step-title"><i>1</i><div><strong>Choose what you’ll have</strong></div></div>
       <SourceTabs value={type} onChange={chooseType} />
@@ -129,15 +133,16 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
       {selectedProduct && <LotChoice product={selectedProduct} value={stockChoice} onChange={setStockChoice} />}
     </section>
 
-    {(selectedRecipe || selectedProduct || selectedLeftover || selectedBatch) && <section className="composer-step"><div className="composer-step-title"><i>2</i><div><strong>Set the portion and timing</strong><small>{selectedProduct?.servingLabel ?? (selectedRecipe ? `One serving is 1/${selectedRecipe.servings} of the usual batch.` : selectedBatch ? `One serving is 1/${selectedBatch.servingsTotal} of this actual batch.` : 'The amount applies to each dish in this meal.')}</small></div></div>
+    {(selectedRecipe || selectedProduct || selectedLeftover || selectedBatch) && <section className="composer-step"><div className="composer-step-title"><i>2</i><div><strong>Set the portion and timing</strong><small>{selectedProduct?.servingLabel ?? (selectedRecipe ? `One serving is 1/${selectedRecipe.servings} of the usual batch.` : selectedBatch ? `One serving is 1/${selectedBatch.servingsTotal} of this actual batch.` : '')}</small></div></div>
       <input type="hidden" name="intent" value={type === 'pantry' || selectedBatch ? 'consume' : type === 'leftover' ? 'leftover' : 'prepare'} />
       <input type="hidden" name="recipe" value={selectedRecipe?.id ?? ''} />
       <input type="hidden" name="product" value={selectedProduct && !exactLot ? selectedProduct.id : ''} />
       <input type="hidden" name="inventory_lot" value={exactLot} />
+      {selectedLeftover && <input type="hidden" name="leftover_dishes" value={JSON.stringify(chosenLeftovers.map((plan) => ({ source_meal_plan: plan.id, planned_servings: Number(leftoverPortions[plan.id!]) })))} />}
       <input type="hidden" name="source_group_id" value={selectedLeftover?.groupId ?? ''} />
       <input type="hidden" name="scale_factor" value={selectedRecipe ? Math.max(0.01, Number(batchServings) / selectedRecipe.servings) : 1} />
       <div className="composer-fields">
-        <label className="field"><span>Servings you’ll eat</span><input name="planned_servings" type="number" min="0.01" step="any" required value={servings} onChange={(event) => setServings(event.target.value)} /></label>
+        {selectedLeftover ? leftoverComponents.map((plan) => plan.id && <div className="field leftover-component" key={plan.id}><label className="leftover-choice"><input type="checkbox" checked={Object.hasOwn(leftoverPortions, plan.id)} onChange={(event) => setLeftoverPortions((current) => { const next = { ...current }; if (event.target.checked) next[plan.id!] = String(plan.plannedServings ?? 1); else delete next[plan.id!]; return next; })} /> {plan.name}</label>{Object.hasOwn(leftoverPortions, plan.id) && <label><span>Servings to eat</span><input aria-label={"Servings of " + plan.name + " to eat"} type="number" min="0.01" step="any" required value={leftoverPortions[plan.id]} onChange={(event) => setLeftoverPortions((current) => ({ ...current, [plan.id!]: event.target.value }))} /></label>}<small>{plan.status === "planned" ? "Not cooked yet" : "Cooked"}</small></div>) : <label className="field"><span>Servings you’ll eat</span><input name="planned_servings" type="number" min="0.01" step="any" required value={servings} onChange={(event) => setServings(event.target.value)} /></label>}
         {selectedRecipe && <label className="field"><span>Servings to make</span><input type="number" min="0.25" step="0.25" required value={batchServings} onChange={(event) => setBatchServings(event.target.value)} /></label>}
         <label className="field"><span>Date</span><input name="plan_date" type="date" required defaultValue={values.plan_date || today} /></label>
         <label className="field"><span>Time of day</span><select name="daypart" required defaultValue={values.daypart || 'dinner'}>{['breakfast', 'brunch', 'lunch', 'dinner', 'snack', 'dessert'].map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>

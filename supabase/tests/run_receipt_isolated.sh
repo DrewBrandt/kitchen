@@ -130,3 +130,5 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 docker exec -i "$name" sh < "$repo/supabase/tests/grocery_demand_concurrency.sh"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'
+
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/leftover_components.sql"

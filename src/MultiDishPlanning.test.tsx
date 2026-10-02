@@ -101,6 +101,9 @@ it('Cook meal stages exact unfinished plan IDs, including repeated recipes, with
   await waitFor(() => expect(screen.getAllByRole('article', { name: 'Chicken' })).toHaveLength(2));
   expect(screen.getAllByLabelText('Recipe multiplier for Chicken').map((input) => (input as HTMLInputElement).value).sort()).toEqual(['0.5', '2']);
   const first = screen.getAllByRole('article', { name: 'Chicken' }).find((card) => (within(card).getByLabelText('Recipe multiplier for Chicken') as HTMLInputElement).value === '2')!;
+  expect(first.querySelector('.deck-card-header')).toHaveTextContent('4 servings');
+  expect(first.querySelector('.deck-card-body > details > summary')).toHaveTextContent('Method');
+  expect(first.querySelector('.deck-card-body > details')).toHaveAttribute('open');
   await user.click(within(first).getByRole('button', { name: 'Finish cooking' }));
   await waitFor(() => expect(cook).toHaveBeenCalledWith(dishes[0].id, expect.objectContaining({ mealPlanId: 'dish-one', scale: 2, servingsMade: 4 })));
   rerender(view(plans.map((plan) => plan.id === 'dish-one' ? { ...plan, status: 'made' } : plan)));
