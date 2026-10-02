@@ -8,6 +8,32 @@ do $$ declare email text; begin
 end $$;
 select set_config('request.jwt.claims','{"role":"authenticated","sub":"98390000-0000-0000-0000-000000000001","session_id":"98390000-0000-0000-0000-000000000011"}',true);
 set local role authenticated;
+
+-- Typed invalid input and non-finite/null/reversed ranges must reject before any row mutation.
+do $$ declare v record; via_wrapper boolean; rejected boolean; snapshot jsonb; begin
+ select coalesce(jsonb_agg(to_jsonb(s) order by id),'[]') into snapshot from public.shopping_items s;
+ for v in select * from (values
+  (null::text,'2026-10-09'),('2026-10-03',null),('2026-10-09','2026-10-03'),
+  ('infinity','infinity'),('-infinity','2026-10-09'),('2026-10-03','infinity'),
+  ('-infinity','infinity'),('2026-10-03','-infinity'),('not-a-date','2026-10-09')
+ ) ranges(first_date,last_date) loop
+  foreach via_wrapper in array array[false,true] loop
+   rejected:=false;
+   begin
+    if via_wrapper then perform public.rebuild_shopping_from_plan(v.first_date::date,v.last_date::date);
+    else perform public.reconcile_shopping_demand(v.first_date::date,v.last_date::date); end if;
+   exception when raise_exception then
+    if sqlerrm<>'Choose a valid plan range' then raise; end if; rejected:=true;
+   when invalid_datetime_format then
+    if v.first_date is distinct from 'not-a-date' then raise; end if; rejected:=true;
+   end;
+   if not rejected then raise exception 'Invalid range accepted: %, %',v.first_date,v.last_date; end if;
+   if snapshot is distinct from (select coalesce(jsonb_agg(to_jsonb(s) order by id),'[]') from public.shopping_items s)
+    then raise exception 'Invalid range changed shopping rows'; end if;
+  end loop;
+ end loop;
+end $$;
+
 do $$ declare
  u uuid; f uuid:=gen_random_uuid(); a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); lot uuid:=gen_random_uuid();
  recipe_id uuid; recipe_plan uuid; plans uuid[]:='{}'; pid uuid; item uuid; generic uuid; response jsonb; receipt uuid;

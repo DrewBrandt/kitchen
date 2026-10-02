@@ -20,7 +20,12 @@ export function planDisplayStatus(meals: DisplayMeal[], past: boolean) {
     : meal.status === 'made').length;
   const made = madeCount === meals.length;
   const directFromPantry = meals.every((meal) => meal.sourceKind === 'product' || meal.sourceKind === 'lot');
-  if (directFromPantry) return result(meals.every((meal) => meal.consumeFromInventory === false) ? 'No prep' : 'Ready', 'ready');
+  if (directFromPantry) {
+    if (pending.every((meal) => meal.consumeFromInventory === false)) return result('No prep', 'ready');
+    // A product reference identifies demand, not an established available lot.
+    if (pending.some((meal) => meal.sourceKind === 'product' && meal.consumeFromInventory !== false)) return result('Planned', 'planned');
+    return result('Ready', 'ready');
+  }
   if (made) return result('Made · not eaten', 'made', true);
   return result(madeCount ? `${madeCount}/${meals.length} made` : past ? 'Not made' : 'Planned', past ? 'missed' : 'planned');
 }

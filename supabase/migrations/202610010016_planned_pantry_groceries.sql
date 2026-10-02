@@ -8,7 +8,7 @@ declare shortage record; item public.shopping_items%rowtype; unit_id uuid;
   current_base numeric; target_base numeric; auto_quantity boolean; changed_count integer:=0;
 begin
   if not public.is_app_owner() then raise exception 'Unauthorized' using errcode='42501'; end if;
-  if p_from is null or p_through is null or p_through < p_from then raise exception 'Choose a valid plan range'; end if;
+  if p_from is null or p_through is null or not isfinite(p_from) or not isfinite(p_through) or p_through < p_from then raise exception 'Choose a valid plan range'; end if;
   lock table public.shopping_items in share row exclusive mode;
   -- Retain inactive rows, including checks, notes, pinned products, and manual quantities.
   update public.shopping_items set generated_active=false,generated_demand_changed=false,generated_shortage_base=0,generated_from=p_from,generated_through=p_through where source='generated' and (p_food is null or food=p_food);
