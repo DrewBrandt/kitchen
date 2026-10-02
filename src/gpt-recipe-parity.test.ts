@@ -104,13 +104,24 @@ describe('recipe Action schema and actual HTTP handler parity', () => {
     expect(rpc.mock.calls[0][1]).toEqual({ p_recipe: uuid(1), p_patch: payload });
   });
 
-  it('documents legacy ambiguity and unresolved POST risk without adding operations', () => {
+  it('documents safe POST narrowing and PATCH identity without adding operations', () => {
     expect(Object.values(schema.paths).flatMap((methods) => Object.values(methods as object))).toHaveLength(30);
     expect(schema.paths['/v1/recipes/{id}'].patch.description).toContain('may reject ambiguous duplicates');
     expect(schema.paths['/v1/recipes/{id}'].patch.description).toContain('unit.id to unit');
-    expect(schema.paths['/v1/recipes'].post.description).toContain('does not change or fix the legacy POST behavior');
-    expect(schema.paths['/v1/recipes'].post.description).toContain('Use editRecipe (PATCH)');
+    expect(schema.paths['/v1/recipes'].post.description).toContain('deliberately narrows legacy destructive upsert behavior');
+    expect(schema.paths['/v1/recipes'].post.description).toContain('use editRecipe (PATCH)');
     expect(schema.paths['/v1/recipes'].post.requestBody.content['application/json'].schema.properties.ingredients.items.properties.id).toBeUndefined();
+  });
+
+  it('keeps POST routing and saved/id responses for new and existing recipe IDs', async () => {
+    const { request, rpc } = fixture();
+    const payload = { id: uuid(1), name: 'Saved recipe', servings: 2, ingredients: [base] };
+    const result = { status: 'saved', id: uuid(1) };
+    rpc.mockResolvedValueOnce({ data: result, error: null });
+    const response = await request('POST', payload, '/v1/recipes');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(result);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith('gpt_save_recipe', { p_recipe: payload });
   });
 
   it('deprecates basisQuantity only for recipe PATCH while retaining legacy input', () => {

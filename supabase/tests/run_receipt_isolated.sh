@@ -69,6 +69,23 @@ then raise exception 'Undo migration changed more than the single chronology con
 end $$;
 SQL
       ;;
+    202610010015_preserve_recipe_post_updates.sql)
+      sql <<'SQL'
+create table isolated_test.post_functions_before as
+select oid,pg_get_functiondef(oid) definition,proacl,prosecdef,proconfig from pg_proc
+where pronamespace='public'::regnamespace and prokind='f';
+SQL
+      sql < "$migration" >/dev/null
+      sql <<'SQL'
+do $$ begin
+if exists(select 1 from isolated_test.post_functions_before b left join pg_proc p using(oid)
+ where p.oid is null or b.proacl is distinct from p.proacl or b.prosecdef is distinct from p.prosecdef
+ or b.proconfig is distinct from p.proconfig
+ or (p.oid<>'public.gpt_save_recipe(jsonb)'::regprocedure and b.definition is distinct from pg_get_functiondef(p.oid)))
+then raise exception 'POST migration altered other functions, permissions or security settings'; end if;
+end $$;
+SQL
+      ;;
     *) sql < "$migration" >/dev/null ;;
   esac
 done
@@ -84,5 +101,7 @@ docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tes
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/future_food_log_undo.sql"
 
 docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/multi_dish_plan.sql"
+docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 < "$repo/supabase/tests/recipe_post_preservation.sql"
+docker exec -i "$name" sh < "$repo/supabase/tests/recipe_post_concurrency.sh"
 
 echo 'PASS: isolated PostgreSQL 17 receipt lifecycle (synthetic auth, actual roles)'

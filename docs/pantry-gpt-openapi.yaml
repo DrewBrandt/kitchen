@@ -304,11 +304,12 @@ paths:
       operationId: saveRecipe
       summary: Save a recipe; use editRecipe for existing recipes
       description: >-
-        Prefer this operation for creation. Legacy behavior with an existing recipe
-        id remains a destructive upsert: ingredients are deleted and recreated,
-        losing row identity and product pins; omitted metadata may be reset.
-        Use editRecipe (PATCH) for existing-recipe changes. This contract does
-        not change or fix the legacy POST behavior.
+        Prefer this operation for creation. Existing-id updates preserve omitted
+        metadata and matched ingredient row identity, notes and product pins.
+        Ingredient removals, replacements or ambiguous identity are rejected
+        atomically; use editRecipe (PATCH) with ingredient IDs for those changes.
+        This deliberately narrows legacy destructive upsert behavior.
+        Successful creation and updates still return status saved and the recipe id.
       x-openai-isConsequential: true
       requestBody:
         required: true
