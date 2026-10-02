@@ -158,7 +158,7 @@ interface AppProps {
   onSetPlannedConsumptionServings?: (id: string, servings: number) => Promise<void>;
   onRemoveGrocery?: (id: string) => Promise<void>;
   onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>;
-  onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>;
+  onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean, reason?: string) => Promise<string | null>;
   onRestoreFoodLog?: (id: string) => Promise<void>;
   onUndoInventoryAdjustment?: (eventId: string) => Promise<void>;
   onUndoPrep?: (prepId: string) => Promise<void>;
@@ -404,7 +404,7 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
         </header>
 
         <div className={cx('page-content', page === 'on-deck' && 'on-deck-page-content')}>
-          {page === 'today' && <TodayPage onNavigate={setPage} onOpen={open} onOpenFood={openInventory} notify={notify} onConsumePrepared={onConsumePrepared} undo={reversals} />}
+          {page === 'today' && <TodayPage onNavigate={setPage} onOpen={open} onOpenFood={openInventory} notify={notify} onConsumePrepared={onConsumePrepared} onSetInventoryLotQuantity={onSetInventoryLotQuantity} undo={reversals} />}
           {page === 'on-deck' && <OnDeckPage onShowAll={deckPlanFocus !== null ? () => setDeckPlanFocus(null) : undefined} entries={deckEntries} locations={pantryData.locations} onAddRecipe={() => setPage('recipes')} onRemoveRecipe={removeFromDeck} notify={notify} onCook={onCookRecipe} onProgressChange={(id, active) => setActiveRecipeIds((current) => { const next = new Set(current); if (active) next.add(id); else next.delete(id); return next; })} undo={reversals} />}
           {page === 'inventory' && (
             <InventoryPage
@@ -513,7 +513,7 @@ function Progress({ value, projected = 0, color, over = false }: { value: number
   return <div className={cx('progress', over && 'over-budget')} data-value={actual}><span style={{ width: `${actual}%`, background: color }} />{plan > 0 && <i className="projection-segment" style={{ width: `${plan}%` }} />}</div>;
 }
 
-function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, undo }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void; notify: Notify; onConsumePrepared?: (id: string, quantity: number) => Promise<string | null>; undo: Reversals }) {
+function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, onSetInventoryLotQuantity, undo }: { onNavigate: (page: PageId) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void; notify: Notify; onConsumePrepared?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: AppProps['onSetInventoryLotQuantity']; undo: Reversals }) {
   const { foodLog: todayFoodLog, foodLogByDate, inventorySections, nutrients: todayNutrients, plannedMeals, preparedLots, recipes, settings, todayProjection } = usePantryData();
   const todayKey = dateKeyInTimeZone(new Date(), settings.timeZone);
   const [selectedKey, setSelectedKey] = useState(todayKey);
@@ -579,7 +579,12 @@ function TodayPage({ onNavigate, onOpen, onOpenFood, notify, onConsumePrepared, 
 
       <Card>
         <SectionTitle title="Ready to eat" />
-        {preparedLots.map((lot) => <PreparedRow key={lot.id} preparedAt={lot.preparedAt} timeZone={settings.timeZone} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} servingsLeft={lot.servingsLeft} due={lot.due} progress={lot.progress} costPerServing={lot.costPerServing} costIsEstimated={lot.costIsEstimated} onEat={(quantity) => { if (onConsumePrepared) void onConsumePrepared(lot.id, quantity).then((logId) => notify(`${formatServings(quantity)} of ${lot.name} logged as eaten.`, logId && undo.voidFoodLog ? async () => { await undo.voidFoodLog!(logId); } : undefined)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
+        {preparedLots.map((lot) => <PreparedRow key={lot.id} preparedAt={lot.preparedAt} timeZone={settings.timeZone} emoji={lot.emoji} name={lot.name} where={lot.location} servings={lot.remaining} servingsLeft={lot.servingsLeft} due={lot.due} progress={lot.progress} costPerServing={lot.costPerServing} costIsEstimated={lot.costIsEstimated} onDiscard={onSetInventoryLotQuantity ? async (quantity, reason) => {
+          try {
+            const eventId = await onSetInventoryLotQuantity(lot.id, lot.servingsLeft - quantity, true, reason);
+            notify(`${formatServings(quantity)} of ${lot.name} discarded.`, eventId && undo.undoInventoryAdjustment ? async () => { await undo.undoInventoryAdjustment!(eventId); } : undefined);
+          } catch (error) { notify(error instanceof Error ? error.message : 'Could not discard food.'); }
+        } : undefined} onEat={(quantity) => { if (onConsumePrepared) void onConsumePrepared(lot.id, quantity).then((logId) => notify(`${formatServings(quantity)} of ${lot.name} logged as eaten.`, logId && undo.voidFoodLog ? async () => { await undo.voidFoodLog!(logId); } : undefined)).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not log ${lot.name}.`)); }} />)}
         {!preparedLots.length && <div className="empty-ready"><CookingPot /><div><strong>Nothing prepared yet</strong><small>Cook a recipe to keep ready-to-eat servings here.</small></div><button className="button secondary compact" onClick={() => onNavigate('recipes')}>Find a recipe</button></div>}
       </Card>
 
@@ -601,12 +606,15 @@ function MacroRow({ label, value, target, pct, projected, color }: { label: stri
   return <div className="macro-row"><div><span>{label}</span><strong>{value}</strong><small>{target}</small></div><Progress value={pct} projected={projected} color={color} /></div>;
 }
 
-function PreparedRow({ preparedAt, timeZone, emoji, name, where, servings, servingsLeft, due, progress, costPerServing, costIsEstimated, onEat }: { preparedAt?: string; timeZone: string; emoji: string; name: string; where: string; servings: string; servingsLeft: number; due: string; progress: number; costPerServing: number | null; costIsEstimated: boolean; onEat: (quantity: number) => void }) {
+function PreparedRow({ preparedAt, timeZone, emoji, name, where, servings, servingsLeft, due, progress, costPerServing, costIsEstimated, onEat, onDiscard }: { preparedAt?: string; timeZone: string; emoji: string; name: string; where: string; servings: string; servingsLeft: number; due: string; progress: number; costPerServing: number | null; costIsEstimated: boolean; onEat: (quantity: number) => void; onDiscard?: (quantity: number, reason: string) => Promise<void> }) {
   const preparedLabel = preparedAt ? `Prepared ${formatPreparedAt(preparedAt, timeZone)}` : undefined;
   const perServing = costPerServing === null ? 'price unavailable' : `${costIsEstimated ? '~' : ''}$${costPerServing.toFixed(2)} a serving`;
   const [quantity, setQuantity] = useState(Math.min(1, servingsLeft));
+  const [discarding, setDiscarding] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
   useEffect(() => setQuantity(Math.min(1, servingsLeft)), [servingsLeft]);
-  return <div className="prepared-row" role="group" aria-label={`${name}${preparedLabel ? ` — ${preparedLabel}` : ''}`}><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong>{preparedLabel && <small>{preparedLabel}</small>}<small>{where} · <span className="spend">{perServing}</span></small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><label className="prepared-eat-quantity"><span>Eat</span><input aria-label={`Servings of ${name} eaten`} type="number" min="0.25" max={servingsLeft} step="0.25" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label><button className="button compact" disabled={!Number.isFinite(quantity) || quantity <= 0 || quantity > servingsLeft} onClick={() => onEat(quantity)}>Log eaten</button></div>;
+  return <div className="prepared-row" role="group" aria-label={`${name}${preparedLabel ? ` — ${preparedLabel}` : ''}`}><span className="row-emoji">{emoji}</span><div className="grow"><strong>{name}</strong>{preparedLabel && <small>{preparedLabel}</small>}<small>{where} · <span className="spend">{perServing}</span></small></div><div className="servings"><Progress value={progress} /><small>{servings}</small></div><small className="due">{due}</small><label className="prepared-eat-quantity"><span>Servings</span><input aria-label={`Servings of ${name} eaten`} type="number" min="0.25" max={servingsLeft} step="0.25" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label><button className="button compact" disabled={busy || !Number.isFinite(quantity) || quantity <= 0 || quantity > servingsLeft} onClick={() => onEat(quantity)}>Log eaten</button><button className="button compact secondary" disabled={!onDiscard || busy} onClick={() => setDiscarding(!discarding)}>Discard</button>{discarding && <form className="prepared-discard" onSubmit={async (event) => { event.preventDefault(); if (!onDiscard || busy || !Number.isFinite(quantity) || quantity <= 0 || quantity > servingsLeft) return; setBusy(true); try { await onDiscard(quantity, reason.trim()); setDiscarding(false); } finally { setBusy(false); } }}><label className="field"><span>Reason (optional)</span><input value={reason} onChange={(event) => setReason(event.target.value)} /></label><button className="button danger compact" disabled={busy || !Number.isFinite(quantity) || quantity <= 0 || quantity > servingsLeft}>Discard {formatServings(quantity)}</button><button type="button" className="button compact secondary" disabled={busy} onClick={() => setDiscarding(false)}>Cancel</button></form>}</div>;
 }
 
 function InventoryPage({ filter, search, onFilter, onSearch, onOpen, onOpenFood }: { filter: string; search: string; onFilter: (filter: string) => void; onSearch: (value: string) => void; onOpen: (kind: PanelKind, recipe?: Recipe, values?: Record<string, string>) => void; onOpenFood: (food: InventoryFood) => void }) {
@@ -1336,7 +1344,7 @@ const PANEL_COPY: Record<Exclude<PanelKind, 'recipe-detail' | 'cook' | 'combined
 };
 
 
-function ActionPanel({ onStageRecipes, onStartCooking, state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { onStageRecipes: (dishes: StagedDish[]) => void; onStartCooking: (recipe: Recipe) => void; state: PanelState; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
+function ActionPanel({ onStageRecipes, onStartCooking, state, onClose, notify, onSave, onCookRecipe, onSavePrepFeedback, onCookRecipes, onRecipeProgress, onConsumeInventoryLot, onSetInventoryLotQuantity, undo }: { onStageRecipes: (dishes: StagedDish[]) => void; onStartCooking: (recipe: Recipe) => void; state: PanelState; onClose: () => void; notify: Notify; onSave?: (kind: PanelKind, form: FormData) => Promise<string>; onCookRecipe?: (id: string, options?: PreparationOptions) => Promise<PreparationResult>; onSavePrepFeedback?: (prepId: string, ease: number, taste: number, minutes: number) => Promise<void>; onCookRecipes?: (ids: string[]) => Promise<void>; onRecipeProgress: (id: string, active: boolean) => void; onConsumeInventoryLot?: (id: string, quantity: number) => Promise<string | null>; onSetInventoryLotQuantity?: (id: string, remaining: number, discard: boolean, reason?: string) => Promise<string | null>; undo: Reversals }) {
   const { foodLog, grocerySections, history, nutrients, recipes, settings } = usePantryData();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1754,7 +1762,7 @@ function RecipePanel({ onStartCooking, recipe, cooking, onClose, notify, onCook,
   return <div className="panel-layer"><button className="panel-scrim" onClick={onClose} aria-label="Close panel" /><aside className="action-panel recipe-panel" role="dialog" aria-modal="true"><PanelHeader title={`${recipe.emoji} ${recipe.name}`} subtitle={`${servingLabel(recipe.servings)} · ${recipe.minutes} minutes · ${recipe.nutrition}`} onClose={onClose} /><div className="panel-body"><div className="cooking-progress"><span>{checks.size} of {total} complete</span><Progress value={total ? checks.size / total * 100 : 0} />{checks.size > 0 && <button className="text-button" onClick={clearProgress}>Reset</button>}</div><h3>INGREDIENTS</h3>{recipe.ingredients.map((item, index) => <CheckRow key={item.label} checked={checks.has(`i${index}`)} onClick={() => toggle(`i${index}`)} title={item.label} meta={item.stock} />)}<h3>METHOD</h3>{recipe.steps.map((step, index) => <CheckRow key={step} checked={checks.has(`s${index}`)} onClick={() => toggle(`s${index}`)} title={`${index + 1}. ${step}`} />)}</div><div className="panel-footer"><span className="panel-footer-spacer" /><button className="button primary" disabled={(!onStartCooking && !onCook) || saving} onClick={() => { if (onStartCooking) { onStartCooking(recipe); return; } if (!onCook) return; setSaving(true); void onCook(recipe.id).then((result) => { setPrepId(result.prepId); notify(`Made ${formatServings(result.servingsMade)} of ${recipe.name} in ${result.location}.`, result.prepId && undo.undoPrep ? async () => { await undo.undoPrep!(result.prepId); } : undefined); }).catch((error: unknown) => notify(error instanceof Error ? error.message : `Could not cook ${recipe.name}.`)).finally(() => setSaving(false)); }}>{saving ? 'Saving…' : cooking ? 'Finish cooking' : 'Make batch'}</button></div></aside></div>;
 }
 
-function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity, undo }: { food: InventoryFood; onClose: () => void; notify: Notify; onConsume?: (id: string, quantity: number) => Promise<string | null>; onSetQuantity?: (id: string, remaining: number, discard: boolean) => Promise<string | null>; undo: Reversals }) {
+function InventoryLotsPanel({ food, onClose, notify, onConsume, onSetQuantity, undo }: { food: InventoryFood; onClose: () => void; notify: Notify; onConsume?: (id: string, quantity: number) => Promise<string | null>; onSetQuantity?: (id: string, remaining: number, discard: boolean, reason?: string) => Promise<string | null>; undo: Reversals }) {
   const [busy, setBusy] = useState('');
   // The id an action returns is what its undo aims at: a food log for a consume,
   // an inventory event for an adjust or a discard.

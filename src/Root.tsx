@@ -123,7 +123,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         onSetPlannedConsumptionServings={async (id, servings) => { await setPlannedConsumptionServings(supabase, id, servings); await refresh(); }}
         onRemoveGrocery={async (id) => { await removeShoppingItem(supabase, id); await refresh(); }}
         onConsumeInventoryLot={async (id, quantity) => { const logId = await consumeInventoryLot(supabase, id, quantity); await refresh(); return logId; }}
-        onSetInventoryLotQuantity={async (id, remaining, discard) => { const eventId = await setInventoryLotQuantity(supabase, id, remaining, discard); await refresh(); return eventId; }}
+        onSetInventoryLotQuantity={async (id, remaining, discard, reason) => { const eventId = await setInventoryLotQuantity(supabase, id, remaining, discard, reason); await refresh(); return eventId; }}
         onRestoreFoodLog={async (id) => { await restoreFoodLog(supabase, id); await refresh(); }}
         onUndoInventoryAdjustment={async (eventId) => { await undoInventoryAdjustment(supabase, eventId); await refresh(); }}
         onReceiveShopping={async (id, receipt) => { await receiveShoppingItem(supabase, id, receipt); await refresh(); }}

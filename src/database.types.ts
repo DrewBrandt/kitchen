@@ -1855,7 +1855,7 @@ export type Database = {
         Returns: undefined
       }
       set_inventory_lot_quantity: {
-        Args: { p_request_id?: string;  p_discard?: boolean; p_lot: string; p_remaining: number }
+        Args: { p_request_id?: string;  p_discard?: boolean; p_lot: string; p_remaining: number; p_note?: string }
         Returns: string
       }
       to_base_quantity: {

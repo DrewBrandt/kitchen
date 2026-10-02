@@ -17,3 +17,19 @@ it('distinguishes equal-name equal-yield ready batches by pantry-local preparati
   await userEvent.click(within(newest).getByRole('button', { name: 'Log eaten' }));
   await waitFor(() => expect(onEat).toHaveBeenCalledWith('rice-1', 1));
 });
+
+
+it('discards the selected batch portion with a reason and exposes normal undo', async () => {
+  const discard = vi.fn().mockResolvedValue('waste-event');
+  const undo = vi.fn().mockResolvedValue(undefined);
+  const eat = vi.fn();
+  const lot = { ...previewPantryData.preparedLots[0], id: 'discard-lot', servingsLeft: 3 };
+  render(<PantryDataProvider data={{ ...previewPantryData, preparedLots: [lot] }}><App onSetInventoryLotQuantity={discard} onUndoInventoryAdjustment={undo} onConsumePrepared={eat} /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+  await userEvent.type(screen.getByLabelText('Reason (optional)'), 'Dropped on floor');
+  await userEvent.click(screen.getByRole('button', { name: 'Discard 1 serving' }));
+  await waitFor(() => expect(discard).toHaveBeenCalledWith('discard-lot', 2, true, 'Dropped on floor'));
+  expect(eat).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(undo).toHaveBeenCalledWith('waste-event'));
+});

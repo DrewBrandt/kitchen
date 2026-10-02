@@ -1057,9 +1057,9 @@ export async function consumeInventoryLot(client: Client, lotId: string, quantit
   });
 }
 
-export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false) {
-  return runRetryableMutation(client, 'set_inventory_lot_quantity', { lotId, remaining, discard }, async (requestId) => {
-  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_request_id: requestId, p_lot: lotId, p_remaining: remaining, p_discard: discard });
+export async function setInventoryLotQuantity(client: Client, lotId: string, remaining: number, discard = false, reason = '') {
+  return runRetryableMutation(client, 'set_inventory_lot_quantity', { lotId, remaining, discard, reason }, async (requestId) => {
+  const { data, error } = await client.rpc('set_inventory_lot_quantity', { p_request_id: requestId, p_lot: lotId, p_remaining: remaining, p_discard: discard, p_note: reason });
   if (error) throw error;
   return data;
   });
