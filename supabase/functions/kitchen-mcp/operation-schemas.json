@@ -157,9 +157,7 @@
         },
         "displayUnit": {
           "type": "string",
-          "description": "Unit UUID",
-          "full name": null,
-          "or short name.": null
+          "description": "Unit UUID, full name, or short name."
         },
         "groceryCategory": {
           "type": "string"
@@ -465,8 +463,7 @@
         },
         "servingUnit": {
           "type": "string",
-          "description": "Printed serving unit",
-          "independent of packageUnit.": null
+          "description": "Printed serving unit, independent of packageUnit."
         },
         "servingLabel": {
           "type": "string",
@@ -709,8 +706,7 @@
         },
         "archiveSourceFood": {
           "type": "boolean",
-          "description": "When merging",
-          "also archive this product's source food if it becomes unused.": null
+          "description": "When merging, also archive this product's source food if it becomes unused."
         },
         "archive": {
           "type": "boolean",
@@ -750,9 +746,7 @@
         },
         "source": {
           "type": "string",
-          "description": "Receipt",
-          "retailer listing": null,
-          "or other provenance shared by these prices.": null
+          "description": "Receipt, retailer listing, or other provenance shared by these prices."
         },
         "items": {
           "type": "array",
@@ -1314,8 +1308,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "Full price or value of the complete acquired lot",
-          "regardless of payer.": null
+          "description": "Full price or value of the complete acquired lot, regardless of payer."
         },
         "outOfPocketCost": {
           "type": [
@@ -1495,9 +1488,7 @@
             "null"
           ],
           "additionalProperties": true,
-          "description": "Required when nutrition.estimated is true; include confidence",
-          "rationale": null,
-          "and optional nutrient min/max ranges.": null
+          "description": "Required when nutrition.estimated is true; include confidence, rationale, and optional nutrient min/max ranges."
         },
         "components": {
           "type": "array",
@@ -1659,9 +1650,7 @@
         },
         "unit": {
           "type": "string",
-          "description": "Unit UUID",
-          "full name": null,
-          "or short name from food lookup.": null
+          "description": "Unit UUID, full name, or short name from food lookup."
         },
         "timestamp": {
           "type": "string",
@@ -1724,8 +1713,7 @@
         "purchasedQuantity": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Total quantity acquired",
-          "expressed in quantityUnit. Use 1 ct for one package only when the product's base food is discrete.": null
+          "description": "Total quantity acquired, expressed in quantityUnit. Use 1 ct for one package only when the product's base food is discrete."
         },
         "consumedQuantity": {
           "type": "number",
@@ -1734,12 +1722,7 @@
         },
         "quantityUnit": {
           "type": "string",
-          "description": "Explicit unit shared by purchasedQuantity and consumedQuantity",
-          "such as ct": null,
-          "oz": null,
-          "g": null,
-          "fl oz": null,
-          "or mL. Never pass an undocumented canonical/base amount.": null
+          "description": "Explicit unit shared by purchasedQuantity and consumedQuantity, such as ct, oz, g, fl oz, or mL. Never pass an undocumented canonical/base amount."
         },
         "acquisitionType": {
           "type": "string",
@@ -1780,9 +1763,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "Full retail/menu price or estimated value; null only when genuinely unavailable for a free",
-          "office": null,
-          "or gifted item.": null
+          "description": "Full retail/menu price or estimated value; null only when genuinely unavailable for a free, office, or gifted item."
         },
         "outOfPocketCost": {
           "type": "number",
@@ -1791,10 +1772,7 @@
         },
         "paidBy": {
           "type": "string",
-          "description": "Who covered the item",
-          "such as self": null,
-          "parents": null,
-          "or employer.": null
+          "description": "Who covered the item, such as self, parents, or employer."
         },
         "costIsEstimated": {
           "type": "boolean",
@@ -1802,9 +1780,7 @@
         },
         "costSource": {
           "type": "string",
-          "description": "Receipt",
-          "user statement": null,
-          "or retailer listing supporting the price and payer fields.": null
+          "description": "Receipt, user statement, or retailer listing supporting the price and payer fields."
         },
         "priceAsOf": {
           "type": [
@@ -1930,9 +1906,7 @@
             "null"
           ],
           "additionalProperties": true,
-          "description": "Required when nutrition.estimated is true; include confidence",
-          "rationale": null,
-          "and optional per-nutrient min/max ranges.": null
+          "description": "Required when nutrition.estimated is true; include confidence, rationale, and optional per-nutrient min/max ranges."
         },
         "components": {
           "type": "array",
@@ -2027,8 +2001,7 @@
         },
         "reason": {
           "type": "string",
-          "description": "Why the event is being voided",
-          "such as duplicate entry.": null
+          "description": "Why the event is being voided, such as duplicate entry."
         }
       }
     },
@@ -2458,11 +2431,7 @@
                 },
                 "source": {
                   "type": "string",
-                  "description": "Manufacturer",
-                  "restaurant": null,
-                  "USDA": null,
-                  "label": null,
-                  "or other citation.": null
+                  "description": "Manufacturer, restaurant, USDA, label, or other citation."
                 }
               }
             },

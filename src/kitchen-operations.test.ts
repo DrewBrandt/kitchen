@@ -1,5 +1,8 @@
 // @vitest-environment node
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import Ajv from 'ajv';
 import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import yaml from '../docs/pantry-gpt-openapi.yaml?raw';
@@ -25,6 +28,22 @@ function fixture(respond: typeof fetch=async()=>Response.json({status:'saved',id
   return {calls,fetcher,audit};
 }
 describe('Kitchen operation contracts',()=>{
+  it('advertises valid schemas without description fragments becoming keywords',async()=>{
+    const server=new McpServer({name:'schema-check',version:'1'});
+    registerTools(server,operationTools,{supabaseUrl:'https://synthetic.invalid',pantryToken:'unused',requestId:'schema-check',audit:()=>{},fetch:async()=>{throw new Error('No API call expected');}});
+    const client=new Client({name:'schema-reader',version:'1'});const [a,b]=InMemoryTransport.createLinkedPair();
+    await server.connect(a);await client.connect(b);
+    try {
+      const {tools}=await client.listTools();
+      const ajv=new Ajv({strictSchema:true,strictTypes:false,validateFormats:false});
+      for(const tool of tools)expect(()=>ajv.compile(tool.inputSchema),tool.name).not.toThrow();
+      const log=tools.find(tool=>tool.name==='log_manual_consumption')!;
+      expect((log.inputSchema.properties!.nutritionEstimate as Record<string,unknown>).description).toBe('Required when nutrition.estimated is true; include confidence, rationale, and optional per-nutrient min/max ranges.');
+      expect(log.annotations).toMatchObject({readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false});
+      const undo=tools.find(tool=>tool.name==='void_consumption')!;
+      expect((undo.inputSchema.properties!.reason as Record<string,unknown>).description).toBe('Why the event is being voided, such as duplicate entry.');
+    } finally {await client.close();await server.close();}
+  });
   it('keeps generated argument contracts synchronized with the existing OpenAPI',()=>{
     const contract=parse(yaml);
     for(const tool of generated){const original=structuredClone(contract.paths[tool.path][tool.method.toLowerCase()].requestBody.content['application/json'].schema);
