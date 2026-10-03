@@ -15,6 +15,11 @@ const argumentsSchema = z.object({
 export function createHandler(config: Config, deps: Dependencies) {
   const resource = new URL(config.resource);
   const metadataUrl = new URL('./.well-known/oauth-protected-resource', resource).href;
+  // Supabase gateways may strip /functions/v1 and/or the function slug.
+  // These aliases affect routing only; the signed audience stays the full public URL.
+  const routedPaths = (path: string) => [path, path.replace(/^\/functions\/v1/, ''), path.replace(/^\/functions\/v1\/kitchen-mcp/, '')];
+  const resourcePaths = routedPaths(resource.pathname);
+  const metadataPaths = routedPaths(new URL(metadataUrl).pathname);
   const ready = Boolean(isUuid(config.ownerId) && isUuid(config.clientId) && config.pantryToken &&
     resource.protocol === 'https:' && config.issuer === `${config.supabaseUrl}/auth/v1` &&
     config.resource === `${config.supabaseUrl}/functions/v1/kitchen-mcp/mcp`);
@@ -32,11 +37,11 @@ export function createHandler(config: Config, deps: Dependencies) {
     const url = new URL(request.url);
     if (request.headers.has('origin') && request.headers.get('origin') !== 'https://chatgpt.com')
       return json({ error: 'Forbidden' }, 403);
-    if (url.pathname === new URL(metadataUrl).pathname && request.method === 'GET') {
+    if (metadataPaths.includes(url.pathname) && request.method === 'GET') {
       return json({ resource: config.resource, authorization_servers: [config.issuer],
         scopes_supported: ['openid'], bearer_methods_supported: ['header'], resource_name: 'Kitchen inventory' }, 200);
     }
-    if (url.pathname !== resource.pathname) return json({ error: 'Not found' }, 404);
+    if (!resourcePaths.includes(url.pathname)) return json({ error: 'Not found' }, 404);
     const challenge = { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid"` };
     const token = /^Bearer ([^\s]+)$/i.exec(request.headers.get('authorization') ?? '')?.[1] ?? '';
     try {

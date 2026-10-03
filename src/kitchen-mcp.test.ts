@@ -54,6 +54,20 @@ function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: bo
 }
 
 describe('Kitchen MCP synthetic contract', () => {
+  it.each(['/functions/v1/kitchen-mcp', '/kitchen-mcp', ''])('routes gateway prefix %s without changing the public audience', async prefix => {
+    const f = fixture();
+    const metadata = await f.handler(new Request(`https://synthetic.supabase.co${prefix}/.well-known/oauth-protected-resource`));
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toMatchObject({ resource: config.resource });
+    const request = (bearer?: string) => new Request(`https://synthetic.supabase.co${prefix}/mcp`, { method: 'POST', headers: {
+      'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+    }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    expect((await f.handler(request())).status).toBe(401);
+    expect((await f.handler(request(token({ aud: `https://synthetic.supabase.co${prefix}/mcp?wrong` })))).status).toBe(401);
+    const result = await f.handler(request(token()));
+    expect(result.status).toBe(200);
+    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual(['get_inventory']);
+  });
   it('interoperates with the official client: initialize, discovery, bounded pages and continuation', async () => {
     const f = fixture();
     const client = new Client({ name: 'synthetic-test', version: '1' });

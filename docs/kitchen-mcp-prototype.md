@@ -1,6 +1,16 @@
 # Kitchen owner OAuth MCP prototype
 
-Local prototype only. Nothing pushed, deployed, activated, or connected.
+Setup approved on 2026-10-03. OAuth/public client and consent redirect are configured;
+the concrete hook migration is installed, awaiting dashboard activation. MCP and
+Pages publication are in progress. No owner grant or connected inventory read yet.
+
+Verified public owner UUID: `d075c538-3eca-4b08-bf5f-525f4947b3f3`.
+Public client ID: `555528c5-3333-4ec1-91d6-7fd18e9000f3`.
+Exact ChatGPT callback: `https://chatgpt.com/connector/oauth/_fJUf8WQ-Qg6`.
+Site URL unchanged; active signing is ECC P-256; no previous hook was configured.
+Migration `202610030001_kitchen_oauth_audience.sql` passed deployed logic and ACL
+assertions through the management role. The hosted interface disallowed SET ROLE;
+execution as supabase_auth_admin was verified in isolated Postgres instead.
 
 ## Recommended configuration
 
@@ -64,7 +74,7 @@ References:
 
 ## Concrete approval items before live setup
 
-No following action is authorized by local implementation approval alone.
+The user separately approved the following setup; final ChatGPT consent remains theirs.
 
 1. Verify the existing immutable owner UUID, current hook, Site URL, asymmetric
    signing configuration, and ChatGPT's exact callback through approved setup
