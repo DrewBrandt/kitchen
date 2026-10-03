@@ -26,7 +26,7 @@ authority already accepted by the user, including possible profile updates.
 It is not a read-only credential. Existing owner policies and old GPT stay unchanged.
 
 Require `openid`; allow its standard identity companions `email`, `profile`, and
-`phone` in any order. ChatGPT requests advertised OIDC scopes by default. Consent
+`phone`, plus `offline_access` for refresh, in any order. ChatGPT requests advertised OIDC scopes by default. Consent
 shows the actual requested scopes and rejects unknown scopes or missing openid.
 MCP still requires openid and exact issuer, audience, client, immutable owner,
 nonanonymous authenticated role, signature/time/session checks and live owner RPC.
@@ -87,7 +87,7 @@ The user separately approved the following setup; final ChatGPT consent remains 
    sign-in redirects while preserving existing entries.
 3. Register one public Kitchen ChatGPT client, authentication method `none`, exact
    callback only, using S256 PKCE. Enable the advertised standard OIDC scopes
-   (openid/email/profile/phone); no unknown/custom action scopes. Enter only its
+   (openid/email/profile/phone/offline_access); no unknown/custom action scopes. Enter only its
    public client ID in ChatGPT's OAuth configuration. No client secret to create.
 4. Replace the SQL template's `__OWNER_UUID__` and `__CLIENT_UUID__` with those
    verified public IDs, review the concrete SQL, and install/version it as a

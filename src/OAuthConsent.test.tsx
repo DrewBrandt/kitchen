@@ -30,7 +30,7 @@ beforeEach(() => {
 const mount = () => render(<StrictMode><OAuthConsent config={config} redirect={redirect} /></StrictMode>);
 
 describe('Kitchen owner consent', () => {
-  it.each(['openid email profile phone', 'profile openid email', 'openid phone'])('accepts and displays OIDC scopes: %s', async scope => {
+  it.each(['openid email profile phone offline_access', 'profile openid email', 'openid phone'])('accepts and displays OIDC scopes: %s', async scope => {
     mocks.getAuthorizationDetails.mockResolvedValue({ data: { ...details, scope }, error: null });
     mount();
     await screen.findByRole('button', { name: 'Connect with owner access' });

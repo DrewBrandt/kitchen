@@ -1,17 +1,12 @@
--- Approval-only template, deliberately outside automatic migrations.
--- Replace both UUID placeholders with reviewed public identifiers before installation.
-begin;
-create schema kitchen_oauth;
-revoke all on schema kitchen_oauth from public, anon, authenticated;
-grant usage on schema kitchen_oauth to supabase_auth_admin;
-create function kitchen_oauth.custom_access_token(event jsonb)
+-- Live discovery advertises offline_access for the approved refresh flow.
+create or replace function kitchen_oauth.custom_access_token(event jsonb)
 returns jsonb
 language plpgsql stable security invoker
 set search_path = ''
 as $$
 declare
-  owner_id constant uuid := '__OWNER_UUID__';
-  client_id constant uuid := '__CLIENT_UUID__';
+  owner_id constant uuid := 'd075c538-3eca-4b08-bf5f-525f4947b3f3';
+  client_id constant uuid := '555528c5-3333-4ec1-91d6-7fd18e9000f3';
   claims jsonb := event->'claims';
   scopes text[];
 begin
@@ -36,6 +31,3 @@ begin
     '"https://xaetuqdtnolzspfvqvja.supabase.co/functions/v1/kitchen-mcp/mcp"'::jsonb));
 end;
 $$;
-revoke all on function kitchen_oauth.custom_access_token(jsonb) from public, anon, authenticated;
-grant execute on function kitchen_oauth.custom_access_token(jsonb) to supabase_auth_admin;
-commit;

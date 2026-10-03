@@ -47,5 +47,5 @@ export function validConsentDetails(details: OAuthAuthorizationDetails, authoriz
   const scopes = details.scope.trim().split(/ +/);
   return details.authorization_id === authorizationId && details.client.id === config.clientId &&
     details.user.id === config.ownerId && details.redirect_uri === config.redirectUri && scopes.includes('openid') &&
-    scopes.every(scope => ['openid', 'email', 'profile', 'phone'].includes(scope));
+    scopes.every(scope => ['openid', 'email', 'profile', 'phone', 'offline_access'].includes(scope));
 }

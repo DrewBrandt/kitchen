@@ -2,7 +2,7 @@
 set role supabase_auth_admin;
 do $$
 declare
-  claims jsonb := '{"sub":"10000000-0000-4000-8000-000000000001","client_id":"10000000-0000-4000-8000-000000000002","iss":"https://xaetuqdtnolzspfvqvja.supabase.co/auth/v1","aud":"authenticated","role":"authenticated","scope":"openid email profile phone","is_anonymous":false,"session_id":"10000000-0000-4000-8000-000000000003","iat":1790000000,"exp":1800000000,"aal":"aal1","email":"synthetic@example.test","phone":"","user_metadata":{"unchanged":true}}';
+  claims jsonb := '{"sub":"10000000-0000-4000-8000-000000000001","client_id":"10000000-0000-4000-8000-000000000002","iss":"https://xaetuqdtnolzspfvqvja.supabase.co/auth/v1","aud":"authenticated","role":"authenticated","scope":"openid email profile phone offline_access","is_anonymous":false,"session_id":"10000000-0000-4000-8000-000000000003","iat":1790000000,"exp":1800000000,"aal":"aal1","email":"synthetic@example.test","phone":"","user_metadata":{"unchanged":true}}';
   event jsonb;
   actual jsonb;
   change jsonb;
