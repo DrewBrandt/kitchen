@@ -405,6 +405,10 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
+[functions.kitchen-mcp]
+# OAuth user JWTs are checked by the handler; metadata is public, inventory is not.
+verify_jwt = false
+
 [experimental.pgdelta]
 enabled = true
 # Directory under `supabase/` where declarative files are written.
