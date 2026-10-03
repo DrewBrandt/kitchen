@@ -25,6 +25,7 @@ export const readTools: ToolSpec[] = [
 
 export function safeFailure(status: number, error: unknown) {
   const text = typeof error === 'string' ? error : '';
+  if (status === 401 || status === 403) return 'Kitchen upstream authorization is unavailable. Stop and report the connection failure; do not repeat writes.';
   if (status === 404) return 'Record not found. Read current IDs before continuing.';
   if (status === 409) return 'Conflicting state. Read the affected records and resolve the conflict before another write.';
   if (status === 400 || status === 422) {

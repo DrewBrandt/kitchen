@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createHandler, type Config } from '../supabase/functions/kitchen-mcp/handler';
+import { operationTools } from '../supabase/functions/kitchen-mcp/operations';
 import { readTools } from '../supabase/functions/kitchen-mcp/tools';
 import { createIdentityProvider } from '../supabase/functions/kitchen-mcp/identity';
 
@@ -55,6 +56,18 @@ function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: bo
 }
 
 describe('Kitchen MCP synthetic contract', () => {
+  it('requires owner authentication for writes and preserves the domain retry ID', async () => {
+    const f=fixture(); const args={requestId:'10000000-0000-4000-8000-000000000011',batchId:'10000000-0000-4000-8000-000000000012',servings:1,timestamp:'2026-10-04T12:30:00-04:00',timePrecision:'exact'};
+    const params={name:'consume_prepared',arguments:args};
+    expect((await f.rpc('tools/call',params,null)).status).toBe(401);
+    expect((await f.rpc('tools/call',params,token({sub:'10000000-0000-4000-8000-000000000099'}))).status).toBe(401);
+    expect(f.upstream).not.toHaveBeenCalled();
+    f.upstream.mockResolvedValue(Response.json({status:'consumed',id:'synthetic-event'}));
+    const reply=await f.rpc('tools/call',params);expect(reply.status).toBe(200);
+    expect((await reply.json()).result.structuredContent.result.status).toBe('consumed');
+    expect(f.upstream).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(f.upstream.mock.calls[0][1]?.body))).toEqual(args);
+  });
   it.each(['/functions/v1/kitchen-mcp', '/kitchen-mcp', ''])('routes gateway prefix %s without changing the public audience', async prefix => {
     const f = fixture();
     const metadata = await f.handler(new Request(`https://synthetic.supabase.co${prefix}/.well-known/oauth-protected-resource`));
@@ -67,7 +80,7 @@ describe('Kitchen MCP synthetic contract', () => {
     expect((await f.handler(request(token({ aud: `https://synthetic.supabase.co${prefix}/mcp?wrong` })))).status).toBe(401);
     const result = await f.handler(request(token()));
     expect(result.status).toBe(200);
-    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual([...readTools.map(t => t.name), 'get_inventory']);
+    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), 'get_inventory']);
   });
   it('interoperates with the official client: initialize, discovery, bounded pages and continuation', async () => {
     const f = fixture();
@@ -79,7 +92,7 @@ describe('Kitchen MCP synthetic contract', () => {
     await client.connect(transport);
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toEqual([...readTools.map(t => t.name), 'get_inventory']);
+      expect(tools.tools.map(t => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), 'get_inventory']);
       expect(tools.tools[0].annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       const first = await client.callTool({ name: 'get_inventory', arguments: { limit: 50 } });
       const firstPage = first.structuredContent as Record<string, unknown>;
@@ -130,7 +143,7 @@ describe('Kitchen MCP synthetic contract', () => {
     const body = await response.json(); expect(body.error || body.result?.isError).toBeTruthy();
     expect(f.upstream).not.toHaveBeenCalled();
   });
-  it('has no write tools and defaults to a bounded active page', async () => {
+  it('rejects unknown tools and defaults inventory to a bounded active page', async () => {
     const f = fixture(); const unknown = await f.rpc('tools/call', { name: 'update_inventory', arguments: {} });
     const body = await unknown.json(); expect(body.error || body.result?.isError).toBeTruthy();
     expect(f.upstream).not.toHaveBeenCalled();

@@ -796,6 +796,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
     const message = error instanceof Error ? error.message : "Unexpected error";
-    console.error(JSON.stringify({ status, message })); return reply({ error: message }, status);
+    // Database errors can contain caller-supplied text; never log raw messages.
+    console.error(JSON.stringify({ status, event: 'api_error' })); return reply({ error: message }, status);
   }
 });

@@ -1,0 +1,2515 @@
+[
+  {
+    "name": "reconcile_inventory",
+    "path": "/v1/inventory",
+    "method": "POST",
+    "description": "Atomically replace live lots for selected foods using auditable adjustments Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "replacements"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "source": {
+          "type": "string"
+        },
+        "replacements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "foodId",
+              "lots"
+            ],
+            "properties": {
+              "foodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "lots": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "productId",
+                    "quantity",
+                    "unit",
+                    "totalPrice",
+                    "outOfPocketCost",
+                    "paidBy",
+                    "costIsEstimated",
+                    "priceAsOf",
+                    "acquiredAt",
+                    "acquiredTimePrecision"
+                  ],
+                  "properties": {
+                    "productId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "quantity": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string",
+                      "enum": [
+                        "pantry",
+                        "fridge",
+                        "freezer"
+                      ]
+                    },
+                    "bestBy": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "totalPrice": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "outOfPocketCost": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "paidBy": {
+                      "type": "string"
+                    },
+                    "costIsEstimated": {
+                      "type": "boolean"
+                    },
+                    "priceAsOf": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "acquiredAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "acquiredTimePrecision": {
+                      "type": "string",
+                      "enum": [
+                        "exact",
+                        "estimated",
+                        "dateOnly"
+                      ]
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": true
+  },
+  {
+    "name": "save_food",
+    "path": "/v1/foods",
+    "method": "POST",
+    "description": "Create a canonical food or return the existing exact match No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "measureStyle",
+        "displayUnit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "plural": {
+          "type": "string"
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "measureStyle": {
+          "type": "string",
+          "enum": [
+            "discrete",
+            "weight",
+            "volume"
+          ]
+        },
+        "displayUnit": {
+          "type": "string",
+          "description": "Unit UUID",
+          "full name": null,
+          "or short name.": null
+        },
+        "groceryCategory": {
+          "type": "string"
+        },
+        "ingredientRole": {
+          "type": "string",
+          "enum": [
+            "main",
+            "supporting",
+            "staple"
+          ]
+        },
+        "alwaysAvailable": {
+          "type": "boolean",
+          "description": "Exclude this food from recipe stock deductions and generated grocery shortages."
+        },
+        "storeAisle": {
+          "type": "string"
+        },
+        "gPerFlOz": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "gPerCount": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nutrition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basisQuantity",
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": false,
+    "deduplicated": false
+  },
+  {
+    "name": "edit_food",
+    "path": "/v1/foods/{id}",
+    "method": "PATCH",
+    "description": "Correct selected fields on an existing canonical food No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact existing record ID returned by a read."
+        },
+        "name": {
+          "type": "string"
+        },
+        "plural": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "emoji": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "measureStyle": {
+          "type": "string",
+          "enum": [
+            "discrete",
+            "weight",
+            "volume"
+          ]
+        },
+        "displayUnit": {
+          "type": "string"
+        },
+        "groceryCategory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ingredientRole": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "main",
+            "supporting",
+            "staple",
+            null
+          ]
+        },
+        "alwaysAvailable": {
+          "type": "boolean",
+          "description": "Exclude this food from recipe stock deductions and generated grocery shortages."
+        },
+        "storeAisle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gPerFlOz": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "gPerCount": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archive": {
+          "type": "boolean",
+          "description": "Set true only to archive an unused definition after checking references."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Required when archiving."
+        },
+        "nutrition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basisQuantity",
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "save_product",
+    "path": "/v1/products",
+    "method": "POST",
+    "description": "Create a product or return the existing exact normalized or barcode match No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "foodId",
+        "name",
+        "packageQuantity",
+        "packageUnit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "foodId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "brand": {
+          "type": "string"
+        },
+        "barcode": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "packageQuantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "packageUnit": {
+          "type": "string"
+        },
+        "servingQuantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Printed serving quantity; supply servingUnit with it."
+        },
+        "servingUnit": {
+          "type": "string",
+          "description": "Printed serving unit",
+          "independent of packageUnit.": null
+        },
+        "servingLabel": {
+          "type": "string",
+          "description": "Printed portion such as 1/3 cup or 16 crackers."
+        },
+        "servingsPerPackage": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Printed servings per container; authoritative for proportional whole-package totals."
+        },
+        "estimatedCost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Current estimated price for one complete product package. Supply costSource and costAsOf with it."
+        },
+        "costSource": {
+          "type": "string"
+        },
+        "costAsOf": {
+          "type": "string",
+          "format": "date"
+        },
+        "nutrition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basisQuantity",
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": false,
+    "deduplicated": false
+  },
+  {
+    "name": "edit_product",
+    "path": "/v1/products/{id}",
+    "method": "PATCH",
+    "description": "Correct selected fields on an existing product without creating another No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact existing record ID returned by a read."
+        },
+        "name": {
+          "type": "string"
+        },
+        "brand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "barcode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "emoji": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "packageQuantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Supply together with packageUnit."
+        },
+        "packageUnit": {
+          "type": "string",
+          "description": "Supply together with packageQuantity."
+        },
+        "servingQuantity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "description": "Supply together with servingUnit."
+        },
+        "servingUnit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Supply together with servingQuantity."
+        },
+        "servingLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "servingsPerPackage": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "nutrition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basisQuantity",
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "estimatedCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "costSource": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "costAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "mergeIntoProductId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Retained product ID when this product is a duplicate."
+        },
+        "archiveSourceFood": {
+          "type": "boolean",
+          "description": "When merging",
+          "also archive this product's source food if it becomes unused.": null
+        },
+        "archive": {
+          "type": "boolean",
+          "description": "Set true only to archive an unused product after checking references."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Required when merging or archiving."
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "add_grocery_haul",
+    "path": "/v1/groceries",
+    "method": "POST",
+    "description": "Atomically add reviewed product lots to inventory Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "source",
+        "items"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "source": {
+          "type": "string",
+          "description": "Receipt",
+          "retailer listing": null,
+          "or other provenance shared by these prices.": null
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "productId",
+              "quantity",
+              "unit",
+              "totalPrice",
+              "outOfPocketCost",
+              "paidBy",
+              "costIsEstimated",
+              "priceAsOf",
+              "acquiredAt",
+              "acquiredTimePrecision"
+            ],
+            "properties": {
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "unit": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string",
+                "enum": [
+                  "pantry",
+                  "fridge",
+                  "freezer"
+                ]
+              },
+              "bestBy": {
+                "type": "string",
+                "format": "date"
+              },
+              "totalPrice": {
+                "type": "number",
+                "minimum": 0
+              },
+              "outOfPocketCost": {
+                "type": "number",
+                "minimum": 0
+              },
+              "paidBy": {
+                "type": "string"
+              },
+              "costIsEstimated": {
+                "type": "boolean"
+              },
+              "priceAsOf": {
+                "type": "string",
+                "format": "date"
+              },
+              "acquiredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "acquiredTimePrecision": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "estimated",
+                  "dateOnly"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": false,
+    "deduplicated": true
+  },
+  {
+    "name": "save_recipe",
+    "path": "/v1/recipes",
+    "method": "POST",
+    "description": "Save a recipe; use editRecipe for existing recipes. Create recipes. Existing-id updates preserve omitted metadata and matched ingredient identity, notes and product pins. For ingredient removals, replacements or ambiguous matches, use editRecipe (PATCH) with ingredient IDs. Returns status saved and recipe id. No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "servings",
+        "ingredients"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "servings": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sourceUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "sourceNote": {
+          "type": "string"
+        },
+        "promptForFeedback": {
+          "type": "boolean"
+        },
+        "nutrition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basisQuantity",
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "portions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "preparationRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "ingredients": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "foodId",
+              "quantity",
+              "unit"
+            ],
+            "properties": {
+              "foodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "unit": {
+                "type": "string"
+              },
+              "sortOrder": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "pieceBasis": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Recipe-local piece estimate. Canonical quantity/unit must equal grams. Omit to preserve; null clears. At most one anchor per recipe.",
+                "required": [
+                  "count",
+                  "grams",
+                  "label",
+                  "sourceQuantity",
+                  "sourceUnit",
+                  "provenance"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "multipleOf": 0.25
+                  },
+                  "grams": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sourceQuantity": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "sourceUnit": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "provenance": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "anchor": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "edit_recipe",
+    "path": "/v1/recipes/{id}",
+    "method": "PATCH",
+    "description": "Correct selected recipe fields and optionally replace all ingredients. Edit existing recipes; read findRecipes first. Omitted fields are preserved. Omit ingredients for metadata-only edits; otherwise send the complete desired list with existing row IDs. Use id: null for new rows. Product pins are read-only. See field descriptions for mapping and nutrition rules. No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact existing record ID returned by a read."
+        },
+        "name": {
+          "type": "string"
+        },
+        "emoji": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "servings": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sourceUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "sourceNote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "promptForFeedback": {
+          "type": "boolean"
+        },
+        "nutrition": {
+          "description": "Omit to preserve stored values and basis; null clears the override. Supply whole-recipe nutrient totals using resulting servings as basis; basisQuantity is ignored.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "calories",
+            "proteinG",
+            "carbsG",
+            "fatG",
+            "fiberG",
+            "sugarG",
+            "sodiumMg"
+          ],
+          "properties": {
+            "basisQuantity": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "deprecated": true,
+              "description": "Legacy optional field; ignored. Send whole-recipe nutrient totals; the resulting recipe servings set the stored basis."
+            },
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "portions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "preparationRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "ingredients": {
+          "description": "Omit for metadata-only edits; otherwise send the complete desired list. Map ingredient to foodId, qty to quantity, piece_basis to pieceBasis, sort_order to sortOrder, and unit.id to unit. Product pins cannot be edited here.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "foodId",
+              "quantity",
+              "unit"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Retain the existing row UUID to preserve identity, notes and product pins, including duplicates and reordering. Explicit null creates a new row; omitted id uses legacy matching and may reject ambiguous duplicates."
+              },
+              "foodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "unit": {
+                "type": "string"
+              },
+              "sortOrder": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "pieceBasis": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Recipe-local piece estimate. Canonical quantity/unit must equal grams. Omit to preserve; null clears. At most one anchor per recipe.",
+                "required": [
+                  "count",
+                  "grams",
+                  "label",
+                  "sourceQuantity",
+                  "sourceUnit",
+                  "provenance"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "multipleOf": 0.25
+                  },
+                  "grams": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sourceQuantity": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "sourceUnit": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "provenance": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "anchor": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Omit to retain the existing note; null or an empty string clears it."
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "edit_inventory_lot",
+    "path": "/v1/lots/{id}",
+    "method": "PATCH",
+    "description": "Correct inventory-lot quantity, location, date, acquisition classification, or cost No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact existing record ID returned by a read."
+        },
+        "remainingQuantity": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Corrected remaining base quantity; records a ledger adjustment."
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "pantry",
+            "fridge",
+            "freezer",
+            null
+          ]
+        },
+        "bestBy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "acquiredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "acquiredTimePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "totalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Full price or value of the complete acquired lot",
+          "regardless of payer.": null
+        },
+        "outOfPocketCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Amount the owner personally paid."
+        },
+        "paidBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "costIsEstimated": {
+          "type": "boolean"
+        },
+        "costSource": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "acquisitionType": {
+          "type": "string",
+          "enum": [
+            "grocery",
+            "restaurant",
+            "takeout",
+            "office",
+            "gift",
+            "home",
+            "other"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "prepare_batch",
+    "path": "/v1/prepare/recipe",
+    "method": "POST",
+    "description": "Create a prepared batch from a saved recipe or from directly described leftovers Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action. Cooking does not mean eating. Use consume_prepared separately. This does not fulfill a specific plan entry or support preparation undo/discard.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "sourceType",
+        "servings",
+        "location",
+        "preparedAt",
+        "timePrecision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "recipe",
+            "manual"
+          ]
+        },
+        "recipeId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "description": "Required for sourceType recipe; null for manual."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Required for sourceType manual."
+        },
+        "servings": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "location": {
+          "type": "string",
+          "enum": [
+            "fridge",
+            "freezer"
+          ]
+        },
+        "bestBy": {
+          "type": "string",
+          "format": "date"
+        },
+        "preparedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the batch was actually prepared; required for historical backfills."
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "nutrition": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "calories": {
+              "type": "number",
+              "minimum": 0
+            },
+            "proteinG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "carbsG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fatG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "fiberG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sugarG": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sodiumMg": {
+              "type": "number",
+              "minimum": 0
+            },
+            "source": {
+              "type": "string"
+            },
+            "estimated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "nutritionEstimate": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true,
+          "description": "Required when nutrition.estimated is true; include confidence",
+          "rationale": null,
+          "and optional nutrient min/max ranges.": null
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "portionLabel": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "acquisitionType": {
+          "type": "string",
+          "enum": [
+            "grocery",
+            "restaurant",
+            "takeout",
+            "office",
+            "gift",
+            "home",
+            "other"
+          ]
+        },
+        "totalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "outOfPocketCost": {
+          "type": "number",
+          "minimum": 0
+        },
+        "paidBy": {
+          "type": "string"
+        },
+        "costIsEstimated": {
+          "type": "boolean"
+        },
+        "costSource": {
+          "type": "string"
+        },
+        "priceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": true
+  },
+  {
+    "name": "consume_prepared",
+    "path": "/v1/consume/prepared",
+    "method": "POST",
+    "description": "Atomically consume a prepared batch and log nutrition Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "batchId",
+        "servings",
+        "timestamp",
+        "timePrecision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "batchId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "servings": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": true
+  },
+  {
+    "name": "consume_inventory",
+    "path": "/v1/consume/inventory",
+    "method": "POST",
+    "description": "Atomically deduct one food from a known lot or FEFO and log nutrition Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "foodId",
+        "quantity",
+        "unit",
+        "timestamp",
+        "timePrecision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "foodId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "lotId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact inventory lot to deduct when the user identifies a package; omit only when FEFO selection is intended."
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit UUID",
+          "full name": null,
+          "or short name from food lookup.": null
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": true
+  },
+  {
+    "name": "consume_purchased_product",
+    "path": "/v1/consume/product",
+    "method": "POST",
+    "description": "Atomically acquire a product lot, consume any reported portion, and retain the remainder Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "productId",
+        "purchasedQuantity",
+        "consumedQuantity",
+        "quantityUnit",
+        "acquisitionType",
+        "totalPrice",
+        "outOfPocketCost",
+        "paidBy",
+        "costIsEstimated",
+        "costSource",
+        "priceAsOf",
+        "timestamp",
+        "timePrecision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "productId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "purchasedQuantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Total quantity acquired",
+          "expressed in quantityUnit. Use 1 ct for one package only when the product's base food is discrete.": null
+        },
+        "consumedQuantity": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Quantity eaten in the same quantityUnit; must not exceed purchasedQuantity."
+        },
+        "quantityUnit": {
+          "type": "string",
+          "description": "Explicit unit shared by purchasedQuantity and consumedQuantity",
+          "such as ct": null,
+          "oz": null,
+          "g": null,
+          "fl oz": null,
+          "or mL. Never pass an undocumented canonical/base amount.": null
+        },
+        "acquisitionType": {
+          "type": "string",
+          "enum": [
+            "grocery",
+            "restaurant",
+            "takeout",
+            "office",
+            "gift",
+            "home",
+            "other"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "enum": [
+            "pantry",
+            "fridge",
+            "freezer"
+          ],
+          "description": "Where the remainder was stored; required when consumedQuantity is less than purchasedQuantity."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "totalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Full retail/menu price or estimated value; null only when genuinely unavailable for a free",
+          "office": null,
+          "or gifted item.": null
+        },
+        "outOfPocketCost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount the owner personally paid; explicitly use zero when someone else covered it."
+        },
+        "paidBy": {
+          "type": "string",
+          "description": "Who covered the item",
+          "such as self": null,
+          "parents": null,
+          "or employer.": null
+        },
+        "costIsEstimated": {
+          "type": "boolean",
+          "description": "True for researched current-price estimates; false for receipts or user-provided exact prices."
+        },
+        "costSource": {
+          "type": "string",
+          "description": "Receipt",
+          "user statement": null,
+          "or retailer listing supporting the price and payer fields.": null
+        },
+        "priceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Observation date for totalPrice; null only when totalPrice is null."
+        },
+        "label": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": true
+  },
+  {
+    "name": "log_manual_consumption",
+    "path": "/v1/consume/manual",
+    "method": "POST",
+    "description": "Log a one-off meal or snack without creating a product, lot, or inventory deduction Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "label",
+        "timestamp",
+        "timePrecision",
+        "components",
+        "acquisitionType",
+        "totalPrice",
+        "outOfPocketCost",
+        "paidBy",
+        "costIsEstimated",
+        "costSource",
+        "priceAsOf"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable UUID for this user-approved write; reuse the same value on every retry."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable description of what was eaten."
+        },
+        "portionLabel": {
+          "type": "string",
+          "description": "Free-form consumed portion such as one large plate."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ],
+          "description": "Use dateOnly when the clock time is unknown; timestamp then uses local noon only as a sorting anchor."
+        },
+        "nutrition": {
+          "description": "Total nutrition for the consumed portion. Omit unknown nutrients; omit the object when all nutrition is unknown.",
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "calories": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "proteinG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "carbsG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fatG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fiberG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sugarG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sodiumMg": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "source": {
+                  "type": "string"
+                },
+                "estimated": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nutritionEstimate": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true,
+          "description": "Required when nutrition.estimated is true; include confidence",
+          "rationale": null,
+          "and optional per-nutrient min/max ranges.": null
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Structured parts of a combined meal; nutrition remains the whole-event total.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "portionLabel": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "acquisitionType": {
+          "type": "string",
+          "enum": [
+            "grocery",
+            "restaurant",
+            "takeout",
+            "office",
+            "gift",
+            "home",
+            "other"
+          ]
+        },
+        "totalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Full price/value regardless of payer; null when genuinely unknown."
+        },
+        "outOfPocketCost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount the owner personally paid; zero is valid when covered or free."
+        },
+        "paidBy": {
+          "type": "string"
+        },
+        "costIsEstimated": {
+          "type": "boolean"
+        },
+        "costSource": {
+          "type": "string"
+        },
+        "priceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": false,
+    "deduplicated": true
+  },
+  {
+    "name": "void_consumption",
+    "path": "/v1/history/void",
+    "method": "POST",
+    "description": "Auditably void one duplicate or incorrect consumption and reverse its inventory effects No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first. Use the exact event ID and reason. Never create a cancelling event.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Existing history event ID returned by getMealHistory."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the event is being voided",
+          "such as duplicate entry.": null
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "edit_consumption",
+    "path": "/v1/history/{id}",
+    "method": "PATCH",
+    "description": "Correct an existing consumption, including manual portions, nutrition, and direct cost, without relogging it No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Exact existing record ID returned by a read."
+        },
+        "label": {
+          "type": "string"
+        },
+        "portionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timePrecision": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "estimated",
+            "dateOnly"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nutrition": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "calories": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "proteinG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "carbsG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fatG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fiberG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sugarG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sodiumMg": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "source": {
+                  "type": "string"
+                },
+                "estimated": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nutritionEstimate": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "portionLabel": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "acquisitionType": {
+          "type": "string",
+          "enum": [
+            "grocery",
+            "restaurant",
+            "takeout",
+            "office",
+            "gift",
+            "home",
+            "other"
+          ]
+        },
+        "totalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Corrected full price on a manual event."
+        },
+        "outOfPocketCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Corrected amount personally paid on a manual event."
+        },
+        "paidBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "purchaseTotalPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Corrected full price of the linked originating purchase lot."
+        },
+        "purchaseOutOfPocketCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "purchasePaidBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "purchasePriceAsOf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "costIsEstimated": {
+          "type": "boolean"
+        },
+        "costSource": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "save_meal_plan",
+    "path": "/v1/plans",
+    "method": "POST",
+    "description": "Append plan entries or atomically replace seven days, then rebuild generated groceries No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first. Append for one addition; replaceWeek only for an explicitly requested complete week replacement. Read back get_plan and get_groceries.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "entries"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "append",
+            "replaceWeek"
+          ],
+          "description": "Append preserves every existing plan entry. replaceWeek replaces the seven days beginning at weekStart."
+        },
+        "weekStart": {
+          "type": "string",
+          "format": "date"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "date",
+              "slot",
+              "source",
+              "sourceId",
+              "scaleFactor",
+              "plannedServings"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "breakfast",
+                  "brunch",
+                  "lunch",
+                  "dinner",
+                  "snack",
+                  "dessert"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "recipe",
+                  "meal",
+                  "product",
+                  "inventoryLot"
+                ]
+              },
+              "sourceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "scaleFactor": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "plannedServings": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Expected servings eaten at this meal; independent of preparation scale."
+              },
+              "consumeFromInventory": {
+                "type": "boolean",
+                "description": "Required for product; true deducts pantry stock and false logs the reusable outside-pantry product without a lot. Exact inventoryLot sources are always true."
+              },
+              "scheduledTime": {
+                "type": "string"
+              },
+              "groupId": {
+                "type": "string"
+              },
+              "sourceMealPlanId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Required for future leftovers; references the exact preparation plan for this recipe. Use inventoryLot for already cooked food."
+              },
+              "leftoverOfGroupId": {
+                "type": "string",
+                "description": "Legacy display grouping only."
+              },
+              "intent": {
+                "type": "string",
+                "enum": [
+                  "prepare",
+                  "leftover",
+                  "consume"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "emoji": {
+                "type": "string"
+              },
+              "preparationTasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": true,
+    "deduplicated": false
+  },
+  {
+    "name": "preview_daily_nutrition",
+    "path": "/v1/plans/preview",
+    "method": "POST",
+    "description": "Preview one candidate against logged and planned nutrition for any date without saving anything Read-only what-if: never saves a plan, food, inventory or history.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "candidate"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label",
+            "sourceType",
+            "servings"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "Human-readable candidate name."
+            },
+            "sourceType": {
+              "type": "string",
+              "enum": [
+                "product",
+                "recipe",
+                "custom"
+              ],
+              "description": "Use custom for researched food that has not been saved."
+            },
+            "sourceId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Required for product or recipe; omit for custom."
+            },
+            "servings": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "nutritionPerServing": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "estimated",
+                "source"
+              ],
+              "properties": {
+                "calories": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "proteinG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "carbsG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fatG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fiberG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sugarG": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sodiumMg": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "estimated": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Manufacturer",
+                  "restaurant": null,
+                  "USDA": null,
+                  "label": null,
+                  "or other citation.": null
+                }
+              }
+            },
+            "estimatedCostPerServing": {
+              "type": "number",
+              "minimum": 0
+            },
+            "costSource": {
+              "type": "string"
+            },
+            "priceAsOf": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        }
+      }
+    },
+    "readOnly": true,
+    "destructive": false,
+    "deduplicated": false
+  },
+  {
+    "name": "add_grocery_item",
+    "path": "/v1/grocery-items",
+    "method": "POST",
+    "description": "Add one durable manual grocery item No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "quantityLabel": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "readOnly": false,
+    "destructive": false,
+    "deduplicated": false
+  }
+]

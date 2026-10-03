@@ -1,8 +1,15 @@
 # Kitchen owner OAuth MCP prototype
 
-Setup approved on 2026-10-03. OAuth/public client and consent redirect are configured;
-the concrete hook migration is installed, awaiting dashboard activation. MCP and
-Pages publication are in progress. No owner grant or connected inventory read yet.
+Connected inventory proof passed on 2026-10-03. Hook activated, ordinary owner
+Google sign-in/reload passed, and the user granted openid/offline_access. ChatGPT
+installed Kitchen and discovered get_inventory. Independent OAuth refresh remains
+untested. Two tool calls matched Supabase server evidence (total 67, hasMore true):
+
+- 23:06:56 UTC: `59d6b140-3cef-44e7-972f-2da9ac5d8ded`, HTTP 200, count 2, offset 0, next 2.
+- 23:08:15 UTC: `55957f23-7b20-46fc-abaa-c2cfadee041a`, HTTP 200, count 2, offset 2, next 4.
+
+The user subsequently approved ordinary read/write expansion; see
+[Kitchen tools](kitchen-mcp-tools.md) for the shipped contract and remaining gaps.
 
 Verified public owner UUID: `d075c538-3eca-4b08-bf5f-525f4947b3f3`.
 Public client ID: `555528c5-3333-4ec1-91d6-7fd18e9000f3`.
@@ -20,7 +27,7 @@ Register one **public** OAuth client manually (`token_endpoint_auth_method: none
 with authorization code + S256 PKCE, refresh, and the exact HTTPS callback shown
 by ChatGPT. Disable dynamic registration. No client secret or separate provider.
 
-The single MCP tool `get_inventory` is read-only, bounded to 1–50 rows, with
+The original MCP tool `get_inventory` is read-only, bounded to 1-50 rows, with
 `nextOffset` continuation. Its OAuth credential has the broader Supabase owner
 authority already accepted by the user, including possible profile updates.
 It is not a read-only credential. Existing owner policies and old GPT stay unchanged.
@@ -134,4 +141,5 @@ and a production build with synthetic nonempty settings. The obsolete HTTP-hook
 tests from that count have been removed. Current focused results are recorded in
 the implementation handoff. Local tests do not prove hosted OAuth issuance,
 Deno/gateway deployment, actual signing configuration or connected ChatGPT success.
-The actual connected test remains gated on the setup approvals above.
+The original connected inventory test subsequently passed as recorded above;
+new tool end-to-end browser checks are separate from that proof.

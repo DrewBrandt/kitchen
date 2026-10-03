@@ -24,7 +24,10 @@ function fixture() {
         return Promise.resolve({ data: record.range ? rows.slice(record.range[0],record.range[1]+1) : rows, count: counted ? rows.length : null, error: null }).then(yes,no);
       };
       return (...args: any[]) => {
-        if(key === 'select') counted = args[1]?.count === 'exact';
+        if(key === 'select') {
+          counted = args[1]?.count === 'exact';
+          if(args[0].includes('preps!inner')) rows=rows.filter(row=>tables.preps.some(prep=>prep.id===row.prep)).map(row=>({...row,'preps.voided_at':tables.preps.find(prep=>prep.id===row.prep)?.voided_at}));
+        }
         if(key === 'range') record.range = args;
         if(key === 'order') orders.push(args[0]);
         if(['eq','in','is','gt','gte','lte','ilike'].includes(String(key))) {
@@ -61,6 +64,19 @@ describe('bounded Kitchen API reads', () => {
   it('never silently truncates related records',async()=>{
     const f=fixture();f.tables.recipe_ingredients=Array.from({length:1001},(_,i)=>({id:uid(i+5000),recipe:uid(1)}));
     await expect(f.read('/v1/recipes?limit=1')).rejects.toThrow('safe read bound');
+  });
+  it('filters voided prepared batches before paging and preserves manual leftovers',async()=>{
+    const f=fixture();f.tables.preps=[{id:uid(601),label:'Synthetic leftovers',servings:4,voided_at:null},{id:uid(602),label:'Voided',voided_at:'2026-10-03'}];
+    f.tables.inventory_lots=[{id:uid(701),prep:uid(601),remaining_qty:2,initial_qty:4},{id:uid(702),prep:uid(602),remaining_qty:2,initial_qty:4}];
+    expect(await f.read('/v1/prepared-batches?limit=1')).toMatchObject({batches:[{name:'Synthetic leftovers',sourceType:'manual',servingsRemaining:2}],total:1,hasMore:false});
+    expect(await f.read('/v1/prepared-batches?limit=1&includeVoided=true')).toMatchObject({total:2,hasMore:true,nextOffset:1});
+  });
+  it('hydrates history provenance only for the selected events',async()=>{
+    const f=fixture();f.tables.food_logs=[{id:uid(801),occurred_at:new Date().toISOString(),voided_at:null}];
+    f.tables.inventory_events=[{id:uid(802),food_log:uid(801),lot:uid(803),quantity_delta:-1}];
+    f.tables.inventory_lots=[{id:uid(803),initial_qty:2,total_cost:8,out_of_pocket_cost:0,paid_by:'Gift giver',acquisition_type:'gift'}];
+    f.tables.inventory_event_costs=[{inventory_event_id:uid(802),cost:4}];
+    expect(await f.read('/v1/history?limit=1')).toMatchObject({total:1,events:[{totalPrice:4,outOfPocketCost:0,cost:4,paidBy:'Gift giver',acquisitionType:'gift'}]});
   });
   it.each(['limit=0','limit=51','offset=-1','limit=2&days=0'])('rejects invalid bounds %s',async params=>{await expect(fixture().read('/v1/history?'+params)).rejects.toThrow();});
   it('provides honest empty histories, batches, foods and products',async()=>{

@@ -41,3 +41,4 @@
 
 - Kitchen OAuth SQL hook checks use `sh supabase/tests/run_oauth_isolated.sh` through the same scoped WSL/Docker setup. This standalone harness needs no Supabase link; it installs only the approval-only hook template with synthetic IDs into a disposable network-disabled Postgres container.
 - Edge Function Deno import maps must map MCP SDK subpaths explicitly; Supabase's remote bundler rejects the npm trailing-slash prefix mapping even when Node tests pass.
+- Regenerate MCP operation argument schemas with `node scripts/generate-kitchen-tools.mjs` after changing the mapped OpenAPI bodies. Focused expansion checks: `npm test -- src/kitchen-read-api.test.ts src/kitchen-tools.test.ts src/kitchen-operations.test.ts src/kitchen-mcp.test.ts`; serializer parity uses `src/inventory-api-parity.test.ts` and `src/gpt-recipe-parity.test.ts`. No live credentials are required.
