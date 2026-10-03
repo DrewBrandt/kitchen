@@ -2,9 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { authorize, isUuid, type AuthConfig, type IdentityProvider } from './auth.ts';
+import { operatingRules, readTools, registerTools } from './tools.ts';
 
 export type Config = AuthConfig & { supabaseUrl: string; pantryToken: string };
-type Audit = { requestId: string; event: 'inventory_read' | 'request'; status: number; count?: number };
+type Audit = { requestId: string; event: 'inventory_read' | 'request' | 'tool_call'; tool?: string; status: number; count?: number };
 type Dependencies = { identity: IdentityProvider; fetch: typeof fetch; audit: (event: Audit) => void };
 const argumentsSchema = z.object({
   limit: z.number().int().min(1).max(50).default(20),
@@ -49,7 +50,8 @@ export function createHandler(config: Config, deps: Dependencies) {
     } catch { return json({ error: 'Unauthorized' }, 401, challenge); }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, { allow: 'POST' });
 
-    const server = new McpServer({ name: 'kitchen-inventory', version: '0.1.0' });
+    const server = new McpServer({ name: 'kitchen', version: '0.2.0' }, { instructions: operatingRules });
+    registerTools(server, readTools, { ...config, fetch: deps.fetch, requestId, audit: deps.audit });
     server.registerTool('get_inventory', {
       title: 'Read Kitchen inventory',
       description: 'Read product-backed inventory lots, at most 50 per page. Use nextOffset until hasMore is false. Prepared lots are excluded. Pages are live, not a snapshot; restart if inventory changes. Never interpret a partial page as the full inventory.',

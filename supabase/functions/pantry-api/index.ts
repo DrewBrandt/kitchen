@@ -119,8 +119,8 @@ async function resolveUnitId(db: Supabase, input: unknown) {
 const normalizeSearch = (value: unknown) => String(value ?? "").normalize("NFKD")
   .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-async function foods(db: Supabase, query?: string, id?: string) {
-  const [foodResult, productResult, unitResult] = await Promise.all([
+async function foods(db: Supabase, query?: string, id?: string, loaded?: { data: Json[]; error: null }[]) {
+  const [foodResult, productResult, unitResult] = loaded ?? await Promise.all([
     db.from("base_foods").select("*").order("name"),
     db.from("products").select("*").order("name"),
     db.from("measure_conversions").select("*").order("full_name"),
@@ -194,6 +194,90 @@ function inventoryPage(params: URLSearchParams): InventoryPage | undefined {
   return { limit: integer('limit', 20, 1, 50), offset: integer('offset', 0, 0, 2147483647) };
 }
 
+// Bounded MCP reads reuse the existing serializers; legacy unpaged callers retain their contract.
+async function boundedRead(db: Supabase, path: string, params: URLSearchParams) {
+  const page = inventoryPage(params)!;
+  const wrap = (...rows: Json[][]) => rows.map(data => ({ data, error: null }));
+  const ids = (rows: Json[], key = 'id') => [...new Set(rows.map(row => row[key]).filter(value => typeof value === 'string'))] as string[];
+  const related = async (table: string, key: string, values: string[]) => {
+    if (!values.length) return [] as Json[];
+    const result = await db.from(table).select('*', { count: 'exact' }).in(key, values).order(table === 'inventory_event_costs' ? 'inventory_event_id' : 'id').range(0, 999);
+    const rows = unwrap(result) as Json[];
+    if (result.count === null || result.count !== rows.length) throw new ApiError('Related records exceed the safe read bound; use a smaller page', 422);
+    return rows;
+  };
+  const tables: Record<string, string> = { '/v1/foods': 'base_foods', '/v1/products': 'products', '/v1/recipes': 'recipes', '/v1/prepared-batches': 'inventory_lots', '/v1/plans': params.get('collection') === 'groceries' ? 'shopping_items' : 'meal_plans', '/v1/history': 'food_logs' };
+  const table = tables[path];
+  let query = db.from(table).select(path === '/v1/prepared-batches' ? '*,preps!inner(id,voided_at)' : '*', { count: 'exact' });
+  const id = params.get('id');
+  if (id) query = query.eq('id', id);
+  const search = params.get('q');
+  if (search) {
+    if (search.length > 200) throw new ApiError('q must be at most 200 characters');
+    // Quote filter values; wildcard and filter syntax are not caller-controlled.
+    const text = search.replace(/[^\p{L}\p{N}\s-]/gu, ' ').trim();
+    if (!text) throw new ApiError('q must contain letters or numbers');
+    query = path === '/v1/products' ? query.or(`name.ilike."*${text}*",brand.ilike."*${text}*",barcode.eq."${text}"`) : query.ilike('name', `%${text}%`);
+  }
+  if (path === '/v1/foods' || path === '/v1/products') {
+    if (!id) query = query.is('archived_at', null);
+    if (path === '/v1/products' && params.get('barcode')) query = query.eq('barcode', params.get('barcode')!);
+    query = query.order('name');
+  }
+  if (path === '/v1/recipes') query = query.order('name');
+  if (path === '/v1/prepared-batches') {
+    if (!queryBoolean(params.get('includeDepleted'))) query = query.gt('remaining_qty', INVENTORY_QUANTITY_EPSILON);
+    if (!queryBoolean(params.get('includeVoided'))) query = query.is('preps.voided_at', null);
+    query = query.order('use_by', { nullsFirst: false });
+  }
+  if (path === '/v1/plans') {
+    if (table === 'shopping_items') query = query.is('lot', null).order('created_at');
+    else {
+      for (const key of ['from', 'to']) if (params.has(key) && !/^\d{4}-\d{2}-\d{2}$/.test(params.get(key)!)) throw new ApiError(`${key} must be a local YYYY-MM-DD date`);
+      if (params.get('from')) query = query.gte('plan_date', params.get('from')!);
+      if (params.get('to')) query = query.lte('plan_date', params.get('to')!);
+      query = query.order('plan_date').order('scheduled_time');
+    }
+  }
+  const days = Number(params.get('days') ?? 30);
+  if (path === '/v1/history') {
+    if (!Number.isInteger(days) || days < 1 || days > 365) throw new ApiError('days must be an integer from 1 to 365');
+    query = query.gte('occurred_at', new Date(Date.now() - days * 86400000).toISOString()).order('occurred_at', { ascending: false });
+    if (!queryBoolean(params.get('includeVoided'))) query = query.is('voided_at', null);
+  }
+  const response = await query.order('id').range(page.offset, page.offset + page.limit - 1);
+  const rows = unwrap(response) as Json[];
+  const total = response.count;
+  if (total === null || !Number.isSafeInteger(total) || rows.length > page.limit || (rows.length < page.limit && page.offset + rows.length < total)) throw new ApiError('Read was truncated; retry with a smaller page', 422);
+  let result: Json;
+  if (path === '/v1/foods') {
+    const products = (await related('products', 'food', ids(rows))).filter(row => row.archived_at == null || id);
+    const units = await related('measure_conversions', 'id', ids(rows, 'display_unit'));
+    result = { foods: await foods(db, undefined, id ?? undefined, wrap(rows, products, units)) };
+  } else if (path === '/v1/products') {
+    result = { products: rows, foods: await related('base_foods', 'id', ids(rows, 'food')) };
+  } else if (path === '/v1/recipes') {
+    const ingredients = await related('recipe_ingredients', 'recipe', ids(rows));
+    ingredients.sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+    result = { recipes: await recipes(db, undefined, undefined, wrap(rows, ingredients, await related('base_foods', 'id', ids(ingredients, 'ingredient')), await related('measure_conversions', 'id', ids(ingredients, 'unit')))) };
+  } else if (path === '/v1/prepared-batches') {
+    const preps = await related('preps', 'id', ids(rows, 'prep'));
+    result = { batches: await prepared(db, true, true, wrap(rows, preps, await related('recipes', 'id', ids(preps, 'recipe')))) };
+  } else if (path === '/v1/plans') {
+    if (table === 'shopping_items') result = { groceries: rows };
+    else {
+      const lots = await related('inventory_lots', 'id', ids(rows, 'inventory_lot'));
+      const data = await planning(db, wrap(rows, await related('planned_consumptions', 'meal_plan', ids(rows)), [], await related('recipes', 'id', ids(rows, 'recipe')), await related('meals', 'id', ids(rows, 'meal')), await related('products', 'id', [...ids(rows, 'product'), ...ids(lots, 'product')]), lots));
+      result = { entries: data.entries };
+    }
+  } else {
+    const events = await related('inventory_events', 'food_log', ids(rows));
+    result = await history(db, days, true, { logs: rows, events, lots: await related('inventory_lots', 'id', ids(events, 'lot')), costs: await related('inventory_event_costs', 'inventory_event_id', ids(events)) });
+  }
+  const hasMore = page.offset + rows.length < total;
+  return { ...result, ...page, total, hasMore, nextOffset: hasMore ? page.offset + rows.length : null };
+}
+
 async function inventory(db: Supabase, includeDepleted = false, page?: InventoryPage) {
   let lots: Json[], products: Json[], foodRows: Json[], units: Json[];
   let total = 0;
@@ -258,8 +342,8 @@ async function inventory(db: Supabase, includeDepleted = false, page?: Inventory
   return { ...body, ...page, total, hasMore, nextOffset: hasMore ? page.offset + body.lots.length : null };
 }
 
-async function recipes(db: Supabase, query?: string, id?: string) {
-  const [recipeResult, ingredientResult, foodResult, unitResult] = await Promise.all([
+async function recipes(db: Supabase, query?: string, id?: string, loaded?: { data: Json[]; error: null }[]) {
+  const [recipeResult, ingredientResult, foodResult, unitResult] = loaded ?? await Promise.all([
     db.from("recipes").select("*").order("name"), db.from("recipe_ingredients").select("*").order("sort_order"),
     db.from("base_foods").select("id,name"), db.from("measure_conversions").select("id,full_name,short_name"),
   ]);
@@ -273,8 +357,8 @@ async function recipes(db: Supabase, query?: string, id?: string) {
   })) }));
 }
 
-async function prepared(db: Supabase, includeDepleted = false, includeVoided = false) {
-  const [lotResult, prepResult, recipeResult] = await Promise.all([
+async function prepared(db: Supabase, includeDepleted = false, includeVoided = false, loaded?: { data: Json[]; error: null }[]) {
+  const [lotResult, prepResult, recipeResult] = loaded ?? await Promise.all([
     (() => {
       const query = db.from("inventory_lots").select("*").not("prep", "is", null).order("use_by");
       return includeDepleted ? query : query.gt("remaining_qty", INVENTORY_QUANTITY_EPSILON);
@@ -303,8 +387,8 @@ async function prepared(db: Supabase, includeDepleted = false, includeVoided = f
   }).filter((row) => row.prepId);
 }
 
-async function planning(db: Supabase) {
-  const [planResult, consumptionResult, groceryResult, recipeResult, mealResult, productResult, lotResult] = await Promise.all([
+async function planning(db: Supabase, loaded?: { data: Json[]; error: null }[]) {
+  const [planResult, consumptionResult, groceryResult, recipeResult, mealResult, productResult, lotResult] = loaded ?? await Promise.all([
     db.from("meal_plans").select("*").order("plan_date").order("scheduled_time"),
     db.from("planned_consumptions").select("*"),
     db.from("shopping_items").select("*").is("lot", null).order("created_at"),
@@ -332,16 +416,16 @@ async function planning(db: Supabase) {
   }), groceries: unwrap(groceryResult) };
 }
 
-async function history(db: Supabase, days: number, includeVoided = false) {
+async function history(db: Supabase, days: number, includeVoided = false, loaded?: { logs: Json[]; events: Json[]; lots: Json[]; costs: Json[] }) {
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
   let logQuery = db.from("food_logs").select("*").gte("occurred_at", cutoff).order("occurred_at", { ascending: false });
   if (!includeVoided) logQuery = logQuery.is("voided_at", null);
-  const logs = unwrap(await logQuery) as Json[];
+  const logs = loaded?.logs ?? unwrap(await logQuery) as Json[];
   if (!logs.length) return { exportedAt: new Date().toISOString(), days, events: [] };
   const logIds = logs.map((log) => String(log.id));
-  const inventoryEvents = unwrap(await db.from("inventory_events").select("*").in("food_log", logIds)) as Json[];
+  const inventoryEvents = loaded?.events ?? unwrap(await db.from("inventory_events").select("*").in("food_log", logIds)) as Json[];
   const lotIds = [...new Set(inventoryEvents.map((event) => String(event.lot)))];
-  const [lotResult, costResult] = await Promise.all([
+  const [lotResult, costResult] = loaded ? [{ data: loaded.lots, error: null }, { data: loaded.costs, error: null }] : await Promise.all([
     lotIds.length ? db.from("inventory_lots").select("*").in("id", lotIds) : Promise.resolve({ data: [], error: null }),
     lotIds.length ? db.from("inventory_event_costs").select("*").in("inventory_event_id", inventoryEvents.map((event) => String(event.id))) : Promise.resolve({ data: [], error: null }),
   ]);
@@ -482,6 +566,15 @@ async function route(request: Request, db: Supabase) {
   const url = new URL(request.url); const marker = "/pantry-api"; const offset = url.pathname.indexOf(marker);
   const path = (offset >= 0 ? url.pathname.slice(offset + marker.length) : url.pathname).replace(/\/$/, "") || "/";
   const method = request.method;
+  if (method === "GET" && ["/v1/foods", "/v1/products", "/v1/recipes", "/v1/prepared-batches", "/v1/plans", "/v1/history"].includes(path) && (url.searchParams.has("limit") || url.searchParams.has("offset")))
+    return reply(await boundedRead(db, path, url.searchParams));
+  if (method === "GET" && /^\/v1\/(recipes|foods)\/[0-9a-f-]{36}$/i.test(path)) {
+    const parts = path.split("/");
+    const result = await boundedRead(db, `/v1/${parts[2]}`, new URLSearchParams({ limit: "1", id: parts[3] }));
+    const rows = result[parts[2]] as Json[];
+    if (!rows.length) throw new ApiError("Record does not exist", 404);
+    return reply({ [parts[2] === "recipes" ? "recipe" : "food"]: rows[0] });
+  }
   if (method === "GET" && path === "/v1/inventory") return reply(await inventory(db, queryBoolean(url.searchParams.get("includeDepleted")), inventoryPage(url.searchParams)));
   if (method === "POST" && path === "/v1/inventory") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_reconcile_inventory", {

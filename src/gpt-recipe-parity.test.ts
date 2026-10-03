@@ -22,7 +22,7 @@ function fixture() {
   // Run actual route/serializer source with a stub database. No Deno listener,
   // credentials, external client, or HTTP connection is created by this test.
   const source = edgeSource.replace(/^import .*\r?\n/, '').split('Deno.serve(')[0];
-  const context = createContext({ Request, Response, URL });
+  const context = createContext({ Request, Response, URL, URLSearchParams });
   // Node supports transform mode; the locked Node typings currently expose only strip.
   const transform = stripTypeScriptTypes as unknown as (code: string, options: { mode: 'transform' }) => string;
   runInContext(transform(source, { mode: 'transform' }), context);
@@ -35,10 +35,15 @@ function fixture() {
     base_foods: [{ id: uuid(3), name: 'Flour' }], measure_conversions: [{ id: uuid(4), short_name: 'g', full_name: 'grams' }],
   };
   const rpc = vi.fn(async (_name: string, _args: unknown): Promise<{ data: unknown; error: { message: string } | null }> => ({ data: { status: 'updated' }, error: null }));
-  const db = { rpc, from: (table: string) => ({ select: () => {
-    const result = { data: tables[table], error: null };
-    return { ...result, order: () => result };
-  } }) };
+  const db = { rpc, from: (table: string) => {
+    let data = tables[table] as Record<string, unknown>[]; let count: number | null = null;
+    const query = { select: (_fields?: string, options?: { count?: string }) => { if (options?.count) count = data.length; return query; },
+      order: () => query, eq: (key: string, value: unknown) => { data = data.filter(row => row[key] === value); count = data.length; return query; },
+      in: (key: string, values: unknown[]) => { data = data.filter(row => values.includes(row[key])); count = data.length; return query; },
+      range: (from: number, to: number) => { data = data.slice(from, to + 1); return query; },
+      then: (resolve: (result: unknown) => unknown) => Promise.resolve({ data, error: null, count }).then(resolve) };
+    return query;
+  } };
   const request = async (method: string, body?: unknown, path = `/v1/recipes/${uuid(1)}`) => context.route(
     new Request(`https://local.invalid${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), db,
   ) as Promise<Response>;

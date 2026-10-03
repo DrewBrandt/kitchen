@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createHandler, type Config } from '../supabase/functions/kitchen-mcp/handler';
+import { readTools } from '../supabase/functions/kitchen-mcp/tools';
 import { createIdentityProvider } from '../supabase/functions/kitchen-mcp/identity';
 
 const config: Config = {
@@ -66,7 +67,7 @@ describe('Kitchen MCP synthetic contract', () => {
     expect((await f.handler(request(token({ aud: `https://synthetic.supabase.co${prefix}/mcp?wrong` })))).status).toBe(401);
     const result = await f.handler(request(token()));
     expect(result.status).toBe(200);
-    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual(['get_inventory']);
+    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual([...readTools.map(t => t.name), 'get_inventory']);
   });
   it('interoperates with the official client: initialize, discovery, bounded pages and continuation', async () => {
     const f = fixture();
@@ -78,7 +79,7 @@ describe('Kitchen MCP synthetic contract', () => {
     await client.connect(transport);
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toEqual(['get_inventory']);
+      expect(tools.tools.map(t => t.name)).toEqual([...readTools.map(t => t.name), 'get_inventory']);
       expect(tools.tools[0].annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       const first = await client.callTool({ name: 'get_inventory', arguments: { limit: 50 } });
       const firstPage = first.structuredContent as Record<string, unknown>;
