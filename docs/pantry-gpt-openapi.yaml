@@ -11,10 +11,13 @@ paths:
   /v1/inventory:
     get:
       operationId: getPantryInventory
+      description: Request limit=20 and offset=0; follow nextOffset while hasMore is true. Paging defaults to 20 lots, capped at 50, ordered by use-by date then lot ID. Omit both parameters for the legacy unpaged response. Pages reflect current stock; restart after inventory changes.
       summary: Read inventory lots with exact IDs and acquisition/payment provenance
       parameters:
         - {in: query, name: includeDepleted, required: false, schema: {type: boolean, default: false}, description: Include zero-remaining lots for audit and correction.}
-      responses: {'200': {$ref: '#/components/responses/Inventory'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+        - {in: query, name: limit, required: false, schema: {type: integer, minimum: 1, maximum: 50}, description: Page size; defaults to 20 when either pagination parameter is supplied.}
+        - {in: query, name: offset, required: false, schema: {type: integer, minimum: 0, maximum: 2147483647}, description: Zero-based offset; defaults to 0 when paging. Use nextOffset from the preceding page.}
+      responses: {'200': {$ref: '#/components/responses/Inventory'}, '401': {$ref: '#/components/responses/Unauthorized'}, '422': {$ref: '#/components/responses/Invalid'}}
     post:
       operationId: reconcilePantryInventory
       summary: Atomically replace live lots for selected foods using auditable adjustments
@@ -929,11 +932,17 @@ components:
   schemas:
     InventoryResponse:
       type: object
+      description: Pagination metadata is present only when limit or offset is supplied. Total counts matching product-backed lots after includeDepleted filtering.
       additionalProperties: false
       required:
         - exportedAt
         - lots
       properties:
+        limit: {type: integer, minimum: 1, maximum: 50}
+        offset: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0}
+        hasMore: {type: boolean}
+        nextOffset: {type: [integer, 'null'], minimum: 0, description: Offset of the next page; null when no more lots remain.}
         exportedAt:
           type: string
           format: date-time

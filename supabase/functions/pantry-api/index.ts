@@ -179,18 +179,56 @@ function inventoryValuation(lot: Json, product: Json | undefined, baseUnit: stri
   };
 }
 
-async function inventory(db: Supabase, includeDepleted = false) {
-  const [lotResult, productResult, foodResult, unitResult] = await Promise.all([
-    (() => {
-      const query = db.from("inventory_lots").select("*").order("use_by");
-      return includeDepleted ? query : query.gt("remaining_qty", INVENTORY_QUANTITY_EPSILON);
-    })(),
-    db.from("products").select("*"),
-    db.from("base_foods").select("*"), db.from("measure_conversions").select("*"),
-  ]);
-  const lots = unwrap(lotResult) as Json[]; const products = unwrap(productResult) as Json[];
-  const foodRows = unwrap(foodResult) as Json[]; const units = unwrap(unitResult) as Json[];
-  return { exportedAt: new Date().toISOString(), lots: lots.map((lot) => {
+type InventoryPage = { limit: number; offset: number };
+function inventoryPage(params: URLSearchParams): InventoryPage | undefined {
+  if (!params.has('limit') && !params.has('offset')) return undefined;
+  const integer = (name: string, fallback: number, min: number, max: number) => {
+    const raw = params.get(name);
+    if (raw === null) return fallback;
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new ApiError(`${name} must be an integer from ${min} to ${max}`);
+    }
+    return value;
+  };
+  return { limit: integer('limit', 20, 1, 50), offset: integer('offset', 0, 0, 2147483647) };
+}
+
+async function inventory(db: Supabase, includeDepleted = false, page?: InventoryPage) {
+  let lots: Json[], products: Json[], foodRows: Json[], units: Json[];
+  let total = 0;
+  if (page) {
+    // Product-backed lots have food foreign keys; exclude prepared lots before
+    // counting/ranging so continuation offsets cover precisely the returned set.
+    let query = db.from('inventory_lots').select('*', { count: 'exact' })
+      .not('product', 'is', null)
+      .order('use_by', { ascending: true, nullsFirst: false }).order('id', { ascending: true });
+    if (!includeDepleted) query = query.gt('remaining_qty', INVENTORY_QUANTITY_EPSILON);
+    const lotResult = await query.range(page.offset, page.offset + page.limit - 1);
+    lots = unwrap(lotResult) as Json[];
+    if (lotResult.count === null) throw new ApiError('Inventory count unavailable', 500);
+    total = lotResult.count;
+    const productIds = [...new Set(lots.map((lot) => String(lot.product)))];
+    const [productResult, unitResult] = await Promise.all([
+      productIds.length ? db.from('products').select('*').in('id', productIds) : Promise.resolve({ data: [], error: null }),
+      db.from('measure_conversions').select('*'),
+    ]);
+    products = unwrap(productResult) as Json[]; units = unwrap(unitResult) as Json[];
+    const foodIds = [...new Set(products.map((product) => String(product.food)))];
+    foodRows = foodIds.length ? unwrap(await db.from('base_foods').select('*').in('id', foodIds)) as Json[] : [];
+  } else {
+    const [lotResult, productResult, foodResult, unitResult] = await Promise.all([
+      (() => {
+        const query = db.from("inventory_lots").select("*").order("use_by");
+        return includeDepleted ? query : query.gt("remaining_qty", INVENTORY_QUANTITY_EPSILON);
+      })(),
+      db.from("products").select("*"),
+      db.from("base_foods").select("*"), db.from("measure_conversions").select("*"),
+    ]);
+    lots = unwrap(lotResult) as Json[]; products = unwrap(productResult) as Json[];
+    foodRows = unwrap(foodResult) as Json[]; units = unwrap(unitResult) as Json[];
+  }
+  const body = { exportedAt: new Date().toISOString(), lots: lots.map((lot) => {
     const product = products.find((row) => row.id === lot.product);
     const food = foodRows.find((row) => row.id === product?.food);
     const unit = units.find((row) => row.id === food?.display_unit);
@@ -215,6 +253,9 @@ async function inventory(db: Supabase, includeDepleted = false) {
       location: lot.location, bestBy: lot.use_by, acquiredAt: lot.acquired_at,
       acquiredTimePrecision: lot.acquired_time_precision, note: lot.note };
   }).filter((row) => row.foodId) };
+  if (!page) return body;
+  const hasMore = page.offset + body.lots.length < total;
+  return { ...body, ...page, total, hasMore, nextOffset: hasMore ? page.offset + body.lots.length : null };
 }
 
 async function recipes(db: Supabase, query?: string, id?: string) {
@@ -441,7 +482,7 @@ async function route(request: Request, db: Supabase) {
   const url = new URL(request.url); const marker = "/pantry-api"; const offset = url.pathname.indexOf(marker);
   const path = (offset >= 0 ? url.pathname.slice(offset + marker.length) : url.pathname).replace(/\/$/, "") || "/";
   const method = request.method;
-  if (method === "GET" && path === "/v1/inventory") return reply(await inventory(db, queryBoolean(url.searchParams.get("includeDepleted"))));
+  if (method === "GET" && path === "/v1/inventory") return reply(await inventory(db, queryBoolean(url.searchParams.get("includeDepleted")), inventoryPage(url.searchParams)));
   if (method === "POST" && path === "/v1/inventory") { const input = await bodyObject(request);
     return reply(unwrap(await db.rpc("gpt_reconcile_inventory", {
       p_replacements: requiredArray(input.replacements, "replacements"), p_source: input.source ?? null,
