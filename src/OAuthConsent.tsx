@@ -114,7 +114,7 @@ export function OAuthConsent({ config = configuration, redirect = navigate }: {
     {state === 'consent' && <>
       <p>Connect <strong>{details?.client.name || 'Kitchen'}</strong> using your verified Kitchen owner account.</p>
       <p>The first connection test exposes inventory reading only. Your Supabase login token can also authorize other owner operations, including account or profile changes. This is owner access, not a read-only credential.</p>
-      <p>Requested identity scope: <strong>openid</strong>.</p>
+      <p>Requested identity scopes: <strong>{details?.scope}</strong>.</p>
       <button className="button" disabled={busy} onClick={() => void decide(true)}>Connect with owner access</button>
       <button className="button" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
     </>}

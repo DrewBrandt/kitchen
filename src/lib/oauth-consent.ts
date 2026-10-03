@@ -44,6 +44,8 @@ export function approvedRedirect(value: string, expected: string): boolean {
 }
 
 export function validConsentDetails(details: OAuthAuthorizationDetails, authorizationId: string, config: ConsentConfig) {
+  const scopes = details.scope.trim().split(/ +/);
   return details.authorization_id === authorizationId && details.client.id === config.clientId &&
-    details.user.id === config.ownerId && details.redirect_uri === config.redirectUri && details.scope === 'openid';
+    details.user.id === config.ownerId && details.redirect_uri === config.redirectUri && scopes.includes('openid') &&
+    scopes.every(scope => ['openid', 'email', 'profile', 'phone'].includes(scope));
 }

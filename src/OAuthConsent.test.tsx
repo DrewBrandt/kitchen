@@ -30,6 +30,13 @@ beforeEach(() => {
 const mount = () => render(<StrictMode><OAuthConsent config={config} redirect={redirect} /></StrictMode>);
 
 describe('Kitchen owner consent', () => {
+  it.each(['openid email profile phone', 'profile openid email', 'openid phone'])('accepts and displays OIDC scopes: %s', async scope => {
+    mocks.getAuthorizationDetails.mockResolvedValue({ data: { ...details, scope }, error: null });
+    mount();
+    await screen.findByRole('button', { name: 'Connect with owner access' });
+    expect(screen.getByText(scope)).toBeInTheDocument();
+    expect(mocks.approveAuthorization).not.toHaveBeenCalled();
+  });
   it('discloses owner authority and waits for an explicit click before approving', async () => {
     mount(); const button = await screen.findByRole('button', { name: 'Connect with owner access' });
     expect(screen.getByText(/not a read-only credential/)).toBeInTheDocument();
@@ -58,7 +65,8 @@ describe('Kitchen owner consent', () => {
     expect(mocks.getAuthorizationDetails).not.toHaveBeenCalled();
   });
   it.each([
-    { ...details, client: { id: 'other-client' } }, { ...details, scope: 'openid profile' },
+    { ...details, client: { id: 'other-client' } }, { ...details, scope: 'openid inventory.write' },
+    { ...details, scope: 'email profile' },
     { ...details, user: { id: 'other-user' } }, { ...details, redirect_uri: 'https://other.invalid/callback' },
     { ...details, authorization_id: 'other-authorization' },
   ])('rejects mismatched authorization details (%j)', async (value) => {
