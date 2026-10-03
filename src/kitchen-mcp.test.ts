@@ -9,7 +9,7 @@ import { createIdentityProvider } from '../supabase/functions/kitchen-mcp/identi
 const config: Config = {
   supabaseUrl: 'https://synthetic.supabase.co', issuer: 'https://synthetic.supabase.co/auth/v1',
   resource: 'https://synthetic.supabase.co/functions/v1/kitchen-mcp/mcp',
-  ownerId: '10000000-0000-4000-8000-000000000001', clientId: 'synthetic-client', pantryToken: 'synthetic-server-secret',
+  ownerId: '10000000-0000-4000-8000-000000000001', clientId: '10000000-0000-4000-8000-000000000002', pantryToken: 'synthetic-server-secret',
 };
 const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: 'jwk' }), alg: 'RS256', use: 'sig', kid: 'fixture-key' };
@@ -18,15 +18,19 @@ function token(overrides: Record<string, unknown> = {}) {
   const data = `${encode({ alg: 'RS256', typ: 'JWT', kid: jwk.kid })}.${encode({
     sub: config.ownerId, iss: config.issuer, aud: config.resource, role: 'authenticated',
     client_id: config.clientId, scope: 'openid', is_anonymous: false,
+    session_id: '10000000-0000-4000-8000-000000000003',
     iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600, ...overrides,
   })}`;
   return `${data}.${sign('RSA-SHA256', Buffer.from(data), privateKey).toString('base64url')}`;
 }
-function fixture(options: { owner?: boolean; anonymous?: boolean; config?: Partial<Config> } = {}) {
+function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: boolean; userId?: string; sessionMissing?: boolean; config?: Partial<Config> } = {}) {
   const authFetch = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     if (url.endsWith('/.well-known/jwks.json')) return Response.json({ keys: [jwk] });
-    if (url.endsWith('/user')) return Response.json({ id: config.ownerId, is_anonymous: options.anonymous ?? false });
+    if (url.endsWith('/user')) return options.sessionMissing
+      ? Response.json({ code: 'session_not_found', msg: 'Session missing' }, { status: 403 })
+      : Response.json({ id: options.userId ?? config.ownerId, is_anonymous: options.anonymous ?? false,
+        email_confirmed_at: options.confirmed === false ? null : '2026-10-01T00:00:00Z' });
     if (url.endsWith('/rpc/is_app_owner')) return Response.json(options.owner ?? true);
     throw new Error('Unexpected auth route');
   });
@@ -84,6 +88,9 @@ describe('Kitchen MCP synthetic contract', () => {
     ['expired', { exp: 1 }], ['future token', { nbf: 9999999999 }],
     ['anonymous identity', { is_anonymous: true }], ['privileged role', { role: 'service_role' }],
     ['missing scope', { scope: '' }],
+    ['missing session', { session_id: undefined }], ['invalid session', { session_id: 'not-a-session' }],
+    ['nil session', { session_id: '00000000-0000-0000-0000-000000000000' }],
+    ['future issuance', { iat: 9999999999 }], ['missing anonymous claim', { is_anonymous: undefined }],
   ])('rejects %s before reading inventory', async (_name, claims) => {
     const f = fixture(); const response = await f.rpc('tools/list', {}, token(claims));
     expect(response.status).toBe(401); expect(f.upstream).not.toHaveBeenCalled();
@@ -99,7 +106,7 @@ describe('Kitchen MCP synthetic contract', () => {
     expect(await metadata.json()).toMatchObject({ resource: config.resource, scopes_supported: ['openid'] });
     expect(f.upstream).not.toHaveBeenCalled();
   });
-  it.each([{ owner: false }, { anonymous: true }])('preserves live owner checks (%j)', async (options) => {
+  it.each([{ owner: false }, { anonymous: true }, { confirmed: false }, { userId: 'other-user' }, { sessionMissing: true }])('preserves live owner checks (%j)', async (options) => {
     const f = fixture(options); expect((await f.rpc('tools/list')).status).toBe(401);
     expect(f.upstream).not.toHaveBeenCalled();
   });

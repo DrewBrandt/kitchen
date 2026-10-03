@@ -37,6 +37,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://xaetuqdtnolzspfvqvja.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_nkixKnZK-C3UTEZv-A5JHQ_OyFFeRuk
+          VITE_KITCHEN_MCP_OWNER_ID: ${{ vars.KITCHEN_MCP_OWNER_ID }}
+          VITE_KITCHEN_MCP_CLIENT_ID: ${{ vars.KITCHEN_MCP_CLIENT_ID }}
+          VITE_KITCHEN_MCP_REDIRECT_URI: ${{ vars.KITCHEN_MCP_REDIRECT_URI }}
         run: |
           npm run build
           touch dist/.nojekyll

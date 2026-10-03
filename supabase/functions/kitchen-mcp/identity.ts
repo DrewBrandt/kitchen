@@ -13,7 +13,10 @@ export function createIdentityProvider(url: string, key: string, fetcher: typeof
     },
     async liveUser(token) {
       const { data, error } = await client(token).auth.getUser(token);
-      return error || !data.user ? null : { id: data.user.id, anonymous: data.user.is_anonymous === true };
+      return error || !data.user ? null : {
+        id: data.user.id, anonymous: data.user.is_anonymous !== false,
+        confirmed: Boolean(data.user.email_confirmed_at),
+      };
     },
     async isAppOwner(token) {
       const { data, error } = await client(token).rpc('is_app_owner');

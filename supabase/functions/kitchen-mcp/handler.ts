@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { authorize, type AuthConfig, type IdentityProvider } from './auth.ts';
+import { authorize, isUuid, type AuthConfig, type IdentityProvider } from './auth.ts';
 
 export type Config = AuthConfig & { supabaseUrl: string; pantryToken: string };
 type Audit = { requestId: string; event: 'inventory_read' | 'request'; status: number; count?: number };
@@ -15,7 +15,7 @@ const argumentsSchema = z.object({
 export function createHandler(config: Config, deps: Dependencies) {
   const resource = new URL(config.resource);
   const metadataUrl = new URL('./.well-known/oauth-protected-resource', resource).href;
-  const ready = Boolean(config.ownerId && config.clientId && config.pantryToken &&
+  const ready = Boolean(isUuid(config.ownerId) && isUuid(config.clientId) && config.pantryToken &&
     resource.protocol === 'https:' && config.issuer === `${config.supabaseUrl}/auth/v1` &&
     config.resource === `${config.supabaseUrl}/functions/v1/kitchen-mcp/mcp`);
   return async (request: Request): Promise<Response> => {
