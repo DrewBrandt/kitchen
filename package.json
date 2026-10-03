@@ -26,6 +26,7 @@
     "vite": "latest"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
     "@testing-library/user-event": "latest",
@@ -36,6 +37,7 @@
     "jsdom": "29.0.0",
     "supabase": "2.116.0",
     "vitest": "latest",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "zod": "4.6.5"
   }
 }

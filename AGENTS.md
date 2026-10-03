@@ -37,3 +37,4 @@
 
 - The disposable SQL harness accepts optional test filenames after the script path for focused validation (for example `recipe_piece_estimates.sql piece_cooking.sql`). On this host use `C:\Users\Snoopy\AppData\Local\Python\pythoncore-3.10-64\python.exe` when the Windows Store `python` alias is inaccessible.
 - Keep shell harnesses LF-terminated (`*.sh text eol=lf` in `.gitattributes`); CRLF causes WSL `sh` to reject `set -eu`.
+- Kitchen MCP prototype tests run with `npm test -- src/kitchen-mcp.test.ts src/inventory-api-parity.test.ts` after the normal locked restore. They use synthetic signed JWTs and in-process MCP transport, requiring no Supabase link or credentials. Do not infer a connected OAuth deployment from these tests; follow `docs/kitchen-mcp-prototype.md` before any live setup.
