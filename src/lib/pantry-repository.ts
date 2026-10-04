@@ -1,3 +1,4 @@
+import { groceryDemandNotice } from './grocery-demand-notice';
 import { cookingAttemptIdentity } from './cooking-stage';
 import type { PlanningRange } from './planning-week';
 import { preparedPlanAvailability } from './prepared-plan';
@@ -580,7 +581,7 @@ export async function loadPantryData(client: Client): Promise<PantryData> {
       requiredProductId: item.generated_product ?? undefined, requiredProductName: requiredProduct ? [requiredProduct.brand, requiredProduct.name].filter(Boolean).join(' · ') : undefined,
       foodId: item.food ?? undefined, pinnedProductId: item.pinned_product ?? undefined, unitId: item.unit ?? undefined,
       quantityNeeded: remainingDisplay ?? item.qty_needed ?? undefined, receiptLotId: item.lot ?? undefined,
-      demandNotice: item.generated_demand_changed && food && itemUnit ? `Plan now needs ${formatQuantity(fromFoodBase(food, shortageBase, itemUnit), itemUnit.short_name)} more. Your check and quantity were kept.` : undefined,
+      demandNotice: item.generated_demand_changed && food && itemUnit ? groceryDemandNotice(shortageBase, remainingBase, value => formatQuantity(fromFoodBase(food, value, itemUnit), itemUnit.short_name)) : undefined,
       ...(item.lot && remainingDisplay !== null ? { quantity: `${formatQuantity(remainingDisplay, itemUnit?.short_name)} outstanding` } : shoppingQuantityPresentation(item.quantity_label, item.qty_needed === null ? null : Number(item.qty_needed), itemUnit?.short_name, item.source === 'generated')),
       checked: Boolean(item.checked_at),
       cost: itemCost,

@@ -65,7 +65,7 @@ it('prevents duplicate undo clicks while an action is pending', async () => {
 });
 
 it('keeps checked changed demand visible and does not claim shopping is complete', async () => {
-  const notice = 'Plan now needs 200 g more. Your check and quantity were kept.';
+  const notice = 'Current plan shortage: 200 g total. Saved remaining list quantity: 100 g. Your check and quantity were kept.';
   render(<PantryDataProvider data={{ ...previewPantryData, grocerySections: [{ emoji: '', label: 'Pantry', items: [{ id: 'row', name: 'Rice', quantity: '100 g', checked: true, demandNotice: notice }] }] }}><App /></PantryDataProvider>);
   await userEvent.click(screen.getByRole('button', { name: 'Grocery list' }));
   expect(screen.getByText(notice)).toBeVisible();
