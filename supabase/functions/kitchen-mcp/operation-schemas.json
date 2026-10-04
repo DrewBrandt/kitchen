@@ -2218,7 +2218,7 @@
     "name": "save_meal_plan",
     "path": "/v1/plans",
     "method": "POST",
-    "description": "Append plan entries or atomically replace seven days, then rebuild generated groceries No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first. Append for one addition; replaceWeek only for an explicitly requested complete week replacement. Read back get_plan and get_groceries.",
+    "description": "Append plan entries or atomically replace seven days, then rebuild generated groceries No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first. Append for one addition; replaceWeek only for an explicitly requested complete week replacement. Cook-once and later leftovers require one definite preparation date and enough yield for all portions. Save the recipe preparation first with intent=prepare; read back its exact ID before appending intent=leftover entries with sourceMealPlanId for that same recipe. The preparation must precede leftovers. Do not substitute group IDs or invent IDs, and do not describe a second fresh preparation as leftovers. Already-cooked food uses source=inventoryLot and intent=consume after checking storage/age. Read back get_plan and get_groceries, verifying dates, intents, links and portions.",
     "schema": {
       "type": "object",
       "additionalProperties": false,

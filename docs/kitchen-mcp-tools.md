@@ -131,3 +131,31 @@ exact requests, no-op discard, void responses, bounds and sanitized failures.
 Existing disposable SQL tests cover plan linkage and partial waste, costs,
 unchanged nutrition, retry and reversal. These tests are not a connected ChatGPT
 write proof; no new live records were created for this increment.
+
+## Planning context correction
+
+Prepared reads already return preparedAt, timePrecision, location and bestBy.
+Their status=available means nonvoided quantity remains, not verified usability.
+MCP inventory/prepared results now put a locally authored planningContext before
+stock data. Tool descriptions and initialization instructions require stale or
+missing storage/date caveats BEFORE any recommendation, and offer fresh cooking
+or verified alternatives rather than relying on old refrigerated stock. No rows,
+dates or quantities are changed or silently filtered. Missing bestBy is not
+reassurance; dates alone are not a safety diagnosis. The narrow cooked meat/poultry
+refrigeration guidance and continuous-freezing distinction cite
+[FoodSafety.gov](https://www.foodsafety.gov/food-safety-charts/cold-food-storage-charts).
+There is no generalized shelf-life classifier or inferred freeze/thaw history.
+
+Plan reads and save_meal_plan discovery describe one preparation followed by
+linked leftovers: save/read back the prepare entry, then append later leftover
+entries referencing its exact ID and recipe. Group IDs are not source links.
+Already-cooked food uses inventoryLot/consume. MCP rejects missing/contradictory
+leftover source arguments before forwarding. Existing database validation still
+checks source existence and recipe; comparing source and leftover dates/portions
+requires reading the plan as instructed, not a new database constraint.
+
+Synthetic checks preserve old/fridge, frozen and unknown records while returning
+context first, verify serialization of original date/storage fields, and exercise
+rejected/valid linked-plan arguments. They do not prove model recommendation
+quality: repeat the focused dinner scenario in a fresh @Mise chat after refreshing
+tools. No live plan, cooking or inventory mutation was used for this correction.

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { authorize, isUuid, type AuthConfig, type IdentityProvider } from './auth.ts';
 import { operatingRules, readTools, registerTools } from './tools.ts';
 import { registerWorkflowTools } from './workflow-tools.ts';
+import { stockPlanningContext } from './planning-context.ts';
 import { operationTools } from './operations.ts';
 
 export type Config = AuthConfig & { supabaseUrl: string; pantryToken: string; anonKey: string };
@@ -57,7 +58,7 @@ export function createHandler(config: Config, deps: Dependencies) {
     registerWorkflowTools(server, { ...config, token, fetch: deps.fetch, requestId, audit: deps.audit });
     server.registerTool('get_inventory', {
       title: 'Read Mise inventory',
-      description: 'Read product-backed inventory lots, at most 50 per page. Use nextOffset until hasMore is false. Prepared lots are excluded. Pages are live, not a snapshot; restart if inventory changes. Never interpret a partial page as the full inventory.',
+      description: `Read product-backed inventory lots, at most 50 per page. Use nextOffset until hasMore is false. Prepared lots are excluded. Pages are live, not a snapshot; restart if inventory changes. Never interpret a partial page as the full inventory. ${stockPlanningContext.beforeRecommendation}`,
       inputSchema: argumentsSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       _meta: { securitySchemes: [{ type: 'oauth2', scopes: ['openid'] }] },
@@ -77,7 +78,7 @@ export function createHandler(config: Config, deps: Dependencies) {
             (body.hasMore ? body.lots.length === 0 || body.nextOffset !== page.offset + body.lots.length : body.nextOffset !== null))
           throw new Error('Invalid inventory page');
         // Do not relay upstream headers, errors or arbitrary top-level fields.
-        const result = { exportedAt: body.exportedAt, lots: body.lots, limit: page.limit, offset: page.offset,
+        const result = { planningContext: stockPlanningContext, exportedAt: body.exportedAt, lots: body.lots, limit: page.limit, offset: page.offset,
           total: body.total, hasMore: body.hasMore, nextOffset: body.nextOffset, requestId };
         deps.audit({ requestId, event: 'inventory_read', status: 200, count: body.lots.length });
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result };

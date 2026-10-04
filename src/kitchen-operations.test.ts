@@ -65,6 +65,21 @@ describe('Kitchen operation contracts',()=>{
     expect(f.calls.get(tool.name)!.config.annotations).toMatchObject({readOnlyHint:tool.readOnly,destructiveHint:tool.destructive,idempotentHint:tool.readOnly||tool.deduplicated,openWorldHint:false});
     if(!tool.readOnly)await expect(f.calls.get(tool.name)!.run({})).rejects.toThrow();
   });
+
+  it('requires an explicit recipe source plan for future leftovers before forwarding a write',async()=>{
+    const entry={date:'2026-10-05',slot:'dinner',source:'recipe',sourceId:id,scaleFactor:1,plannedServings:1,intent:'leftover'};
+    const f=fixture();const run=f.calls.get('save_meal_plan')!.run;
+    for(const invalid of [entry,{...entry,leftoverOfGroupId:id},{...entry,source:'inventoryLot',sourceMealPlanId:id},{...entry,intent:'prepare',sourceMealPlanId:id}]) {
+      await expect(run({mode:'append',entries:[invalid]})).rejects.toThrow('sourceMealPlanId');
+    }
+    expect(f.fetcher).not.toHaveBeenCalled();
+    const linked={...entry,sourceMealPlanId:'10000000-0000-4000-8000-000000000002'};
+    await run({mode:'append',entries:[linked]});
+    expect(JSON.parse(String(f.fetcher.mock.calls[0][1]?.body))).toEqual({mode:'append',entries:[linked]});
+    const preparedLot={...entry,source:'inventoryLot',intent:'consume',consumeFromInventory:true};
+    await run({mode:'append',entries:[preparedLot]});
+    expect(f.fetcher).toHaveBeenCalledTimes(2);
+  });
   it('preserves a caller retry UUID, never retries automatically, and does not leak fetch errors',async()=>{
     const f=fixture(async()=>{throw new Error('PRIVATE_TOKEN transport failure');});
     const args={requestId:id,batchId:id,servings:1,timestamp:'2026-10-04T12:30:00-04:00',timePrecision:'exact'};

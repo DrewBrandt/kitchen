@@ -66,9 +66,9 @@ describe('bounded Kitchen API reads', () => {
     await expect(f.read('/v1/recipes?limit=1')).rejects.toThrow('safe read bound');
   });
   it('filters voided prepared batches before paging and preserves manual leftovers',async()=>{
-    const f=fixture();f.tables.preps=[{id:uid(601),label:'Synthetic leftovers',servings:4,voided_at:null},{id:uid(602),label:'Voided',voided_at:'2026-10-03'}];
-    f.tables.inventory_lots=[{id:uid(701),prep:uid(601),remaining_qty:2,initial_qty:4},{id:uid(702),prep:uid(602),remaining_qty:2,initial_qty:4}];
-    expect(await f.read('/v1/prepared-batches?limit=1')).toMatchObject({batches:[{name:'Synthetic leftovers',sourceType:'manual',servingsRemaining:2}],total:1,hasMore:false});
+    const f=fixture();f.tables.preps=[{id:uid(601),label:'Synthetic leftovers',servings:4,voided_at:null,prepped_at:'2026-09-04T21:33:00Z',time_precision:'estimated'},{id:uid(602),label:'Voided',voided_at:'2026-10-03'}];
+    f.tables.inventory_lots=[{id:uid(701),prep:uid(601),remaining_qty:2,initial_qty:4,location:'fridge',use_by:null},{id:uid(702),prep:uid(602),remaining_qty:2,initial_qty:4}];
+    expect(await f.read('/v1/prepared-batches?limit=1')).toMatchObject({batches:[{name:'Synthetic leftovers',sourceType:'manual',servingsRemaining:2,location:'fridge',preparedAt:'2026-09-04T21:33:00Z',timePrecision:'estimated',bestBy:null,status:'available'}],total:1,hasMore:false});
     expect(await f.read('/v1/prepared-batches?limit=1&includeVoided=true')).toMatchObject({total:2,hasMore:true,nextOffset:1});
   });
   it('hydrates history provenance only for the selected events',async()=>{
