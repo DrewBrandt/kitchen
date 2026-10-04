@@ -28,7 +28,7 @@ All routes below are under the existing pantry-api `/v1` namespace.
 | consume_prepared, consume_inventory, consume_purchased_product, log_manual_consumption | POST consume/prepared, inventory, product, manual |
 | edit_consumption, void_consumption | PATCH history/{id}, POST history/void |
 
-Total: 36 tools, 14 reads/previews and 22 writes. No settings-write or calendar tools.
+Total: 39 tools, 14 reads/previews and 25 writes. No settings-write or calendar tools.
 
 ## Implementation and use
 
@@ -84,10 +84,11 @@ inventory content or credentials. Request bodies remain capped at 16 KiB.
 
 ## Deliberate gaps and verification
 
-Preparation undo, receipt undo, and calendar sync remain unsupported. General
-consumption does not fulfill a chosen plan entry; use fulfill_planned_entry. edit_consumption supports the existing metadata/nutrition/manual portion
-and linked-purchase corrections; it does not expose the separate app-only stock
-consumed-quantity correction RPC. Do not pretend those unsupported actions ran.
+Calendar sync remains unsupported. General consumption does not fulfill a chosen
+plan entry; use fulfill_planned_entry. Use edit_consumption for supported metadata,
+nutrition/manual portion and linked-purchase corrections. Use the bounded correction
+adapters below for whole preparation undo, app shopping receipt undo and single-lot
+consumed quantity correction.
 
 Focused checks cover database query bounds and related-row truncation, existing
 recipe/inventory serializer parity, official MCP discovery and owner rejection,
@@ -256,3 +257,56 @@ source shortages without duplicate demand, existing plans, manual items,
 checked/edited progress, repeated rebuilds and retained inactive rows. The live
 fixture needs an explicit owner rebuild for Oct 5-11 (now expanded to Oct 4-11)
 to refresh its snapshot after deployment. No live rebuild or plan edit was run.
+
+
+## Bounded reversal and quantity correction
+
+These three authenticated RPC adapters preserve the existing owner, client, audience
+and scopes. Existing authenticated execution privileges are reused; no migration,
+new grant or credential is required. All three advertise readOnlyHint=false,
+destructiveHint=true, idempotentHint=true and openWorldHint=false.
+
+Exact argument objects (all fields required; additional fields rejected):
+
+```ts
+undo_preparation({ prepId: UUID })
+undo_grocery_receipt({ requestId: UUID, lotId: UUID })
+correct_consumed_quantity({ requestId: UUID, foodLogId: UUID,
+  expectedQuantity: number /* > 0 */, quantity: number /* > 0 */ })
+```
+
+- undo_preparation calls undo_prep. It restores ingredients, reverses remaining
+  output stock, retains history and resets its source preparation plan. Any active
+  output stock event blocks undo, including eating, waste, adjustment or downstream
+  cooking. There is no automatic cascade. Future leftovers wait for preparation
+  again; review exact-lot plans. Repeating the same prepId is harmless.
+- undo_grocery_receipt calls undo_inventory_receipt. Only lots from the app's
+  receive-shopping-item workflow qualify, with their source item still present.
+  Generic hauls, imports and purchase-and-consume logs do not qualify. Active stock
+  events, changed stock or a pending exact-lot plan block reversal. It retains
+  history and later shopping edits/progress, and conditionally restores only receipt
+  seeded prices that have not subsequently changed. Results are lotId, optional
+  itemId and status `undone` or `already undone`.
+- correct_consumed_quantity calls the identically named RPC. Only one active raw
+  inventory/prepared lot deduction qualifies; manual, purchase-linked, multi-lot,
+  voided/replaced or stale events are rejected. expectedQuantity is the positive
+  magnitude of the active eaten inventoryEvents[].quantity_delta from get_history.
+  Both quantities use that lot's canonical unit (g, fl oz, count, or prepared
+  servings). Increased consumption cannot exceed original consumption plus remaining
+  stock. Zero requires void_consumption. Replacement retains audit history, scales
+  nutrition/cost and rebinds planned consumption. The result is status, id,
+  originalId, lotId, quantity and unit (unit omitted for unchanged quantity).
+  Subsequent correction/void calls must use the returned replacement id.
+
+For the request-key operations, reuse the same requestId and identical arguments
+only for an ambiguous retry. No adapter retries automatically. Dependency failures
+return a safe local explanation and require readback, never compensating writes,
+automatic dependent reversals or plan deletion.
+
+Representative connected verification after refreshing Mise: read get_history,
+select an explicitly authorized eligible single-lot consumption, capture its current
+canonical quantity and ID, call correct_consumed_quantity with a fresh requestId,
+then read history and inventory to verify the replacement ID and stock delta. This
+requires user-authorized live data changes; synthetic tests and deployment alone do
+not prove that connected path. Preparation and receipt undo likewise need eligible
+records and separate user intent. No existing dev data is reset for verification.

@@ -69,6 +69,32 @@ describe('Kitchen MCP synthetic contract', () => {
   const prepResult={prepId:id,lotId:id,mealPlanId:prepArgs.mealPlanId,servingsMade:5.46,servingsRemaining:5.46,location:'fridge',foodLogId:null};
   const prepParams={p_request_id:requestId,p_recipe:id,p_meal_plan:prepArgs.mealPlanId,p_scale:1,p_servings:null,p_location:'fridge',p_eaten_servings:0,p_occurred_at:prepArgs.timestamp};
   workflowCases.push({name:'prepare_planned_recipe',rpc:'prepare_recipe',args:prepArgs,body:prepParams,response:prepResult,expected:prepResult});
+  workflowCases.push(
+    {name:'undo_preparation',rpc:'undo_prep',args:{prepId:id},body:{p_prep:id},response:null,expected:{status:'undone'}},
+    {name:'undo_grocery_receipt',rpc:'undo_inventory_receipt',args:{requestId,lotId:id},body:{p_request_id:requestId,p_lot:id},response:{lotId:id,itemId:id,status:'undone'},expected:{lotId:id,itemId:id,status:'undone'}},
+    {name:'correct_consumed_quantity',rpc:'correct_consumed_quantity',args:{requestId,foodLogId:id,expectedQuantity:100,quantity:80},body:{p_request_id:requestId,p_food_log:id,p_expected_quantity:100,p_quantity:80},response:{status:'corrected',id:requestId,originalId:id,lotId:id,quantity:80,unit:'g'},expected:{status:'corrected',id:requestId,originalId:id,lotId:id,quantity:80,unit:'g'}},
+  );
+  it.each(['undo_preparation','undo_grocery_receipt','correct_consumed_quantity'])('preserves correction retry inputs and handles no-op results: %s',async name=>{
+    const c=workflowCases.find(c=>c.name===name)!; const f=fixture();
+    const response=name==='undo_preparation'?null:name==='undo_grocery_receipt'?{lotId:id,status:'already undone'}:{status:'unchanged',id,originalId:id,lotId:id,quantity:100};
+    for(let n=0;n<2;n++) {
+      f.upstream.mockResolvedValueOnce(Response.json(response));
+      const result=(await (await f.rpc('tools/call',{name,arguments:c.args})).json()).result;
+      expect(result.isError).not.toBe(true);
+    }
+    expect(f.upstream).toHaveBeenCalledTimes(2);
+    for(const [,init] of f.upstream.mock.calls) expect(JSON.parse(String(init?.body))).toEqual(c.body);
+  });
+  it.each([
+    ['undo_preparation',{prepId:id,cascade:true}],
+    ['undo_grocery_receipt',{requestId,lotId:id,deletePlans:true}],
+    ['correct_consumed_quantity',{requestId,foodLogId:id,expectedQuantity:100,quantity:0}],
+    ['correct_consumed_quantity',{requestId,foodLogId:id,expectedQuantity:-100,quantity:80}],
+    ['correct_consumed_quantity',{requestId,foodLogId:id,expectedQuantity:100,quantity:80,unit:'oz'}],
+  ])('rejects unsafe correction arguments %s %j',async(name,args)=>{
+    const f=fixture();const result=await(await f.rpc('tools/call',{name,arguments:args})).json();
+    expect(result.error || result.result?.isError).toBeTruthy();expect(f.upstream).not.toHaveBeenCalled();
+  });
   it('selects the piece overload once and preserves plan, actual weight, yield and stable retry inputs',async()=>{
     const f=fixture(); const piece={ingredientId:id,lotId:id,pieces:4,expectedRemaining:825.54,weightGrams:825.54,scaleRecipe:true,useIngredientNutrition:true};
     const args={...prepArgs,servingsMade:2,pieceInputs:[piece]};

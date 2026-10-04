@@ -1,11 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { correctionTools } from './corrections.ts';
 import { plannedPreparationTool } from './preparation.ts';
 
 const uuid = z.string().uuid();
 type Args = Record<string, unknown>;
 export const workflowTools = [
   plannedPreparationTool,
+  ...correctionTools,
   {
     name: 'fulfill_planned_entry', rpc: 'consume_planned_meals',
     description: 'Log eating one exact saved plan entry and mark its planned consumption fulfilled, using the app transaction and its stock rules. Read get_plan first and use the entry ID, not its consumption ID. Does not cook a recipe: its batch must already be prepared. Requires actual eaten servings and an offset-bearing timestamp. Reuse requestId and identical arguments after an ambiguous failure; never also call generic consumption for this eating event.',
@@ -56,7 +58,8 @@ export function registerWorkflowTools(server: McpServer, options: {
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result };
     } catch {
       options.audit({ requestId: options.requestId, event: 'tool_call', tool: spec.name, status: status >= 400 ? status : 502 });
-      return { isError: true, content: [{ type: 'text' as const, text: `Mise transaction was not confirmed. Read back the affected plan/lot before retrying; check the exact ID, available stock and current status. Preserve the requestId and arguments for the same action. Reference: ${options.requestId}` }] };
+      const hint = 'failureHint' in spec ? spec.failureHint : '';
+      return { isError: true, content: [{ type: 'text' as const, text: `Mise transaction was not confirmed. ${hint} Read back the affected plan/lot before retrying; check the exact ID, available stock and current status. Preserve the requestId and arguments for the same action. Reference: ${options.requestId}` }] };
     }
   });
 }
