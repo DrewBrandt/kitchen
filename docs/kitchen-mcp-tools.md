@@ -261,6 +261,23 @@ to refresh its snapshot after deployment. No live rebuild or plan edit was run.
 
 ## Bounded reversal and quantity correction
 
+Consumption tools, correction/void tools and history discovery now distinguish a
+pending approval from a committed event. A revision of an unexecuted action must
+revise that intent, not select a similar older history entry. Corrections require
+a successful returned event in the current conversation or an existing meal the
+user explicitly identifies; ambiguous targets require clarification. Superseded
+approvals must be declined/cancelled before a replacement can execute. Ambiguous
+outcomes require reconciliation; identical retries retain their request ID,
+whereas revised actions use a fresh one. Clear new eating reports need no extra
+confirmation merely because a similar meal exists.
+
+These instructions are emitted in both initialize and tools/list (including the
+quantity correction foodLogId field), not only this document. Date-only eating
+reports use dateOnly/local noon rather than claiming the logging clock is the
+exact eating time. The planned-fulfillment RPC lacks a precision field, so unknown
+actual times need clarification without abandoning plan linkage. This is model
+guidance, not a server-enforced conversation ledger or proof of correct intent.
+
 These three authenticated RPC adapters preserve the existing owner, client, audience
 and scopes. Existing authenticated execution privileges are reused; no migration,
 new grant or credential is required. All three advertise readOnlyHint=false,

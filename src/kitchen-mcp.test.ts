@@ -58,6 +58,34 @@ function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: bo
 }
 
 describe('Kitchen MCP synthetic contract', () => {
+  it('delivers pending-action safeguards through discovery, not only initialization', async () => {
+    const f = fixture();
+    const initialized = await (await f.rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'intent-test', version: '1' } })).json();
+    expect(initialized.result.instructions).toContain('pending-approval');
+    const discovery = await (await f.rpc('tools/list')).json();
+    const tools = discovery.result.tools;
+    expect(tools).toHaveLength(39);
+    for (const name of ['consume_prepared', 'consume_inventory', 'consume_purchased_product', 'log_manual_consumption', 'fulfill_planned_entry']) {
+      const tool = tools.find((tool: { name: string }) => tool.name === name);
+      expect(tool.description).toContain('revise the pending intent');
+      expect(tool.description).toContain('cancel/decline the superseded approval');
+      expect(tool.description).toContain('original requestId and identical arguments');
+      expect(tool.description).toContain('clear normal eating report needs no extra confirmation');
+      expect(tool.description).toContain('dateOnly with local noon');
+      expect(tool.description).toContain('not evidence of the exact eating time');
+    }
+    for (const name of ['correct_consumed_quantity', 'edit_consumption', 'void_consumption', 'get_history']) {
+      const tool = tools.find((tool: { name: string }) => tool.name === name);
+      expect(tool.description).toContain('successful write in this conversation');
+      expect(tool.description).toContain('existing meal the user explicitly identifies');
+      expect(tool.description).toContain('Do not search history for a superficially similar older event');
+      expect(tool.description).toContain('ask which action/meal they mean');
+    }
+    const correction = tools.find((tool: { name: string }) => tool.name === 'correct_consumed_quantity');
+    expect(correction.inputSchema.properties.foodLogId.description).toContain('Never substitute an older similar log');
+    expect(correction.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    expect(f.upstream).not.toHaveBeenCalled();
+  });
   const id = '10000000-0000-4000-8000-000000000021';
   const requestId = '10000000-0000-4000-8000-000000000022';
   const workflowCases: { name: string; rpc: string; args: Record<string, unknown>; body: Record<string, unknown>; response: unknown; expected: Record<string, unknown> }[] = [

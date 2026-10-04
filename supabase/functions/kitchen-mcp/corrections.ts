@@ -22,7 +22,7 @@ export const correctionTools = [
   },
   {
     name: 'correct_consumed_quantity', rpc: 'correct_consumed_quantity',
-    schema: z.object({ requestId: uuid, foodLogId: uuid,
+    schema: z.object({ requestId: uuid, foodLogId: uuid.describe('Exact committed event ID from a successful write in this conversation or an existing meal explicitly identified by the user. Never substitute an older similar log for a pending or unapproved action; clarify ambiguous targets.'),
       expectedQuantity: z.number().positive().describe('Positive magnitude of the current single inventoryEvents[].quantity_delta from get_history, not food-log servings for a raw lot.'),
       quantity: z.number().positive().describe('Replacement consumed quantity in the same canonical unit: g for weight, fl oz for volume, count for discrete lots, servings for prepared batches. Zero is unsupported; use void_consumption to remove eating.'),
     }).strict(),

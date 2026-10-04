@@ -1,3 +1,4 @@
+import { intentDescription } from './intent-guidance.ts';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { correctionTools } from './corrections.ts';
@@ -36,7 +37,7 @@ export function registerWorkflowTools(server: McpServer, options: {
   audit: (event: { requestId: string; event: 'tool_call'; tool: string; status: number }) => void;
 }) {
   for (const spec of workflowTools) server.registerTool(spec.name, {
-    description: spec.description, inputSchema: spec.schema,
+    description: intentDescription(spec.name, spec.description), inputSchema: spec.schema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     _meta: { securitySchemes: [{ type: 'oauth2', scopes: ['openid'] }] },
   }, async (input: unknown) => {
