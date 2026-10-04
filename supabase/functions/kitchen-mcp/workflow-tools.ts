@@ -54,7 +54,7 @@ export function registerWorkflowTools(server: McpServer, options: {
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result };
     } catch {
       options.audit({ requestId: options.requestId, event: 'tool_call', tool: spec.name, status: status >= 400 ? status : 502 });
-      return { isError: true, content: [{ type: 'text' as const, text: `Kitchen transaction was not confirmed. Read back the affected plan/lot before retrying; check the exact ID, available stock and current status. Preserve the requestId and arguments for the same action. Reference: ${options.requestId}` }] };
+      return { isError: true, content: [{ type: 'text' as const, text: `Mise transaction was not confirmed. Read back the affected plan/lot before retrying; check the exact ID, available stock and current status. Preserve the requestId and arguments for the same action. Reference: ${options.requestId}` }] };
     }
   });
 }

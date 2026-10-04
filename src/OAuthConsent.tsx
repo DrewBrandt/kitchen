@@ -33,7 +33,7 @@ export function OAuthConsent({ config = configuration, redirect = navigate }: {
   }
 
   useEffect(() => {
-    if (!available) { setState('error'); setMessage('Kitchen connection setup is incomplete.'); return; }
+    if (!available) { setState('error'); setMessage('Mise connection setup is incomplete.'); return; }
     let active = true;
     start.current ??= (async () => {
       id.current = pendingConsent(new URL(window.location.href), sessionStorage);
@@ -107,13 +107,13 @@ export function OAuthConsent({ config = configuration, redirect = navigate }: {
   }
 
   return <main className="auth-page"><section className="auth-card">
-    <div className="eyebrow">PRIVATE KITCHEN</div><h1>Connect Kitchen to ChatGPT</h1>
+    <div className="eyebrow">PRIVATE MISE</div><h1>Connect Mise to ChatGPT</h1>
     {state === 'loading' && <p role="status">Checking your owner account…</p>}
-    {state === 'login' && <><p>Continue with the Google account you already use for Kitchen.</p>
+    {state === 'login' && <><p>Continue with the Google account you already use for Mise.</p>
       <button className="button" disabled={busy} onClick={() => void signIn()}>Continue with Google</button></>}
     {state === 'consent' && <>
-      <p>Connect <strong>{details?.client.name || 'Kitchen'}</strong> using your verified Kitchen owner account.</p>
-      <p>The first connection test exposes inventory reading only. Your Supabase login token can also authorize other owner operations, including account or profile changes. This is owner access, not a read-only credential.</p>
+      <p>Connect <strong>Mise</strong> using your verified Mise owner account.</p>
+      <p>Connected tools can read your records and carry out approved recipe, plan, stock, preparation and consumption updates. Your Supabase login token can also authorize other owner operations, including account or profile changes. This is owner access, not a read-only credential.</p>
       <p>Requested identity scopes: <strong>{details?.scope}</strong>.</p>
       <button className="button" disabled={busy} onClick={() => void decide(true)}>Connect with owner access</button>
       <button className="button" disabled={busy} onClick={() => void decide(false)}>Cancel</button>
@@ -121,6 +121,6 @@ export function OAuthConsent({ config = configuration, redirect = navigate }: {
     {state === 'return' && <><p>This connection already has your consent.</p>
       <button className="button" disabled={busy} onClick={() => void returnToChatGPT()}>Return to ChatGPT</button></>}
     {message && <p role="alert">{message}</p>}
-    <a href="./">Return to Kitchen</a>
+    <a href="./">Return to Mise</a>
   </section></main>;
 }

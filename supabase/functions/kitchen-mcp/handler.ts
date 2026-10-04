@@ -42,7 +42,7 @@ export function createHandler(config: Config, deps: Dependencies) {
       return json({ error: 'Forbidden' }, 403);
     if (metadataPaths.includes(url.pathname) && request.method === 'GET') {
       return json({ resource: config.resource, authorization_servers: [config.issuer],
-        scopes_supported: ['openid'], bearer_methods_supported: ['header'], resource_name: 'Kitchen' }, 200);
+        scopes_supported: ['openid'], bearer_methods_supported: ['header'], resource_name: 'Mise' }, 200);
     }
     if (!resourcePaths.includes(url.pathname)) return json({ error: 'Not found' }, 404);
     const challenge = { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid"` };
@@ -52,11 +52,11 @@ export function createHandler(config: Config, deps: Dependencies) {
     } catch { return json({ error: 'Unauthorized' }, 401, challenge); }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, { allow: 'POST' });
 
-    const server = new McpServer({ name: 'kitchen', version: '0.4.0' }, { instructions: operatingRules });
+    const server = new McpServer({ name: 'mise', title: 'Mise', version: '0.4.0' }, { instructions: operatingRules });
     registerTools(server, [...readTools, ...operationTools], { ...config, fetch: deps.fetch, requestId, audit: deps.audit });
     registerWorkflowTools(server, { ...config, token, fetch: deps.fetch, requestId, audit: deps.audit });
     server.registerTool('get_inventory', {
-      title: 'Read Kitchen inventory',
+      title: 'Read Mise inventory',
       description: 'Read product-backed inventory lots, at most 50 per page. Use nextOffset until hasMore is false. Prepared lots are excluded. Pages are live, not a snapshot; restart if inventory changes. Never interpret a partial page as the full inventory.',
       inputSchema: argumentsSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
