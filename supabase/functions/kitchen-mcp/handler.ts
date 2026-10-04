@@ -3,9 +3,10 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod';
 import { authorize, isUuid, type AuthConfig, type IdentityProvider } from './auth.ts';
 import { operatingRules, readTools, registerTools } from './tools.ts';
+import { registerWorkflowTools } from './workflow-tools.ts';
 import { operationTools } from './operations.ts';
 
-export type Config = AuthConfig & { supabaseUrl: string; pantryToken: string };
+export type Config = AuthConfig & { supabaseUrl: string; pantryToken: string; anonKey: string };
 type Audit = { requestId: string; event: 'inventory_read' | 'request' | 'tool_call'; tool?: string; status: number; count?: number };
 type Dependencies = { identity: IdentityProvider; fetch: typeof fetch; audit: (event: Audit) => void };
 const argumentsSchema = z.object({
@@ -22,7 +23,7 @@ export function createHandler(config: Config, deps: Dependencies) {
   const routedPaths = (path: string) => [path, path.replace(/^\/functions\/v1/, ''), path.replace(/^\/functions\/v1\/kitchen-mcp/, '')];
   const resourcePaths = routedPaths(resource.pathname);
   const metadataPaths = routedPaths(new URL(metadataUrl).pathname);
-  const ready = Boolean(isUuid(config.ownerId) && isUuid(config.clientId) && config.pantryToken &&
+  const ready = Boolean(isUuid(config.ownerId) && isUuid(config.clientId) && config.pantryToken && config.anonKey &&
     resource.protocol === 'https:' && config.issuer === `${config.supabaseUrl}/auth/v1` &&
     config.resource === `${config.supabaseUrl}/functions/v1/kitchen-mcp/mcp`);
   return async (request: Request): Promise<Response> => {
@@ -51,8 +52,9 @@ export function createHandler(config: Config, deps: Dependencies) {
     } catch { return json({ error: 'Unauthorized' }, 401, challenge); }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, { allow: 'POST' });
 
-    const server = new McpServer({ name: 'kitchen', version: '0.3.0' }, { instructions: operatingRules });
+    const server = new McpServer({ name: 'kitchen', version: '0.4.0' }, { instructions: operatingRules });
     registerTools(server, [...readTools, ...operationTools], { ...config, fetch: deps.fetch, requestId, audit: deps.audit });
+    registerWorkflowTools(server, { ...config, token, fetch: deps.fetch, requestId, audit: deps.audit });
     server.registerTool('get_inventory', {
       title: 'Read Kitchen inventory',
       description: 'Read product-backed inventory lots, at most 50 per page. Use nextOffset until hasMore is false. Prepared lots are excluded. Pages are live, not a snapshot; restart if inventory changes. Never interpret a partial page as the full inventory.',

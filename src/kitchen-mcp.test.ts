@@ -1,9 +1,11 @@
 // @vitest-environment node
+import Ajv from 'ajv';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createHandler, type Config } from '../supabase/functions/kitchen-mcp/handler';
+import { workflowTools } from '../supabase/functions/kitchen-mcp/workflow-tools';
 import { operationTools } from '../supabase/functions/kitchen-mcp/operations';
 import { readTools } from '../supabase/functions/kitchen-mcp/tools';
 import { createIdentityProvider } from '../supabase/functions/kitchen-mcp/identity';
@@ -11,7 +13,7 @@ import { createIdentityProvider } from '../supabase/functions/kitchen-mcp/identi
 const config: Config = {
   supabaseUrl: 'https://synthetic.supabase.co', issuer: 'https://synthetic.supabase.co/auth/v1',
   resource: 'https://synthetic.supabase.co/functions/v1/kitchen-mcp/mcp',
-  ownerId: '10000000-0000-4000-8000-000000000001', clientId: '10000000-0000-4000-8000-000000000002', pantryToken: 'synthetic-server-secret',
+  ownerId: '10000000-0000-4000-8000-000000000001', clientId: '10000000-0000-4000-8000-000000000002', pantryToken: 'synthetic-server-secret', anonKey: 'synthetic-public-key',
 };
 const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: 'jwk' }), alg: 'RS256', use: 'sig', kid: 'fixture-key' };
@@ -56,6 +58,60 @@ function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: bo
 }
 
 describe('Kitchen MCP synthetic contract', () => {
+  const id = '10000000-0000-4000-8000-000000000021';
+  const requestId = '10000000-0000-4000-8000-000000000022';
+  const workflowCases = [
+    { name: 'fulfill_planned_entry', rpc: 'consume_planned_meals', args: { requestId, planEntryId: id, servings: 0.5, timestamp: '2026-10-04T19:00:00-04:00' }, body: { p_request_id: requestId, p_meal_plans: [id], p_servings: [0.5], p_occurred_at: '2026-10-04T19:00:00-04:00' }, response: [id], expected: { foodLogIds: [id], status: 'fulfilled' } },
+    { name: 'discard_inventory_lot', rpc: 'set_inventory_lot_quantity', args: { requestId, lotId: id, remainingQuantity: 1.5, reason: 'Dropped' }, body: { p_request_id: requestId, p_lot: id, p_remaining: 1.5, p_discard: true, p_note: 'Dropped' }, response: id, expected: { adjustmentEventId: id, status: 'discarded' } },
+    { name: 'undo_inventory_adjustment', rpc: 'undo_inventory_adjustment', args: { adjustmentEventId: id }, body: { p_event: id }, response: null, expected: { status: 'undone' } },
+  ];
+  it.each(workflowCases)('authenticates and forwards only the exact app transaction: $name', async c => {
+    const f = fixture(); const params = { name: c.name, arguments: c.args };
+    for (const bearer of [null, token({ sub: '10000000-0000-4000-8000-000000000099' }), token({ client_id: id }), token({ aud: 'authenticated' })]) {
+      expect((await f.rpc('tools/call', params, bearer)).status).toBe(401);
+    }
+    expect(f.upstream).not.toHaveBeenCalled();
+    const bearer = token();
+    f.upstream.mockResolvedValueOnce(Response.json(c.response));
+    const result = (await (await f.rpc('tools/call', params, bearer)).json()).result;
+    expect(result.structuredContent).toMatchObject(c.expected);
+    expect(f.upstream).toHaveBeenCalledTimes(1);
+    const [url, init] = f.upstream.mock.calls[0];
+    expect(url).toBe(`${config.supabaseUrl}/rest/v1/rpc/${c.rpc}`);
+    expect(init).toMatchObject({ method: 'POST', redirect: 'error', headers: { apikey: config.anonKey, authorization: `Bearer ${bearer}` } });
+    expect(JSON.parse(String(init?.body))).toEqual(c.body);
+    expect(JSON.stringify(result)).not.toContain(bearer);
+    expect(JSON.stringify(f.audit.mock.calls)).not.toContain(bearer);
+    expect(JSON.stringify(f.audit.mock.calls)).not.toContain('Dropped');
+  });
+  it.each([
+    ['fulfill_planned_entry', { ...workflowCases[0].args, servings: 0 }],
+    ['fulfill_planned_entry', { ...workflowCases[0].args, timestamp: '2026-10-04T19:00:00' }],
+    ['discard_inventory_lot', { ...workflowCases[1].args, remainingQuantity: -1 }],
+    ['discard_inventory_lot', { ...workflowCases[1].args, reason: ' ' }],
+    ['undo_inventory_adjustment', { adjustmentEventId: 'not-an-id' }],
+    ['undo_inventory_adjustment', { adjustmentEventId: id, rpc: 'undo_prep' }],
+  ])('rejects invalid workflow arguments %s %j', async (name, args) => {
+    const f = fixture(); const body = await (await f.rpc('tools/call', { name, arguments: args })).json();
+    expect(body.error || body.result?.isError).toBeTruthy(); expect(f.upstream).not.toHaveBeenCalled();
+  });
+  it.each(workflowCases)('sanitizes failures without retrying $name', async c => {
+    const f = fixture(); f.upstream.mockResolvedValue(Response.json({ message: 'secret-private-record' }, { status: 400 }));
+    const result = (await (await f.rpc('tools/call', { name: c.name, arguments: c.args })).json()).result;
+    expect(result.isError).toBe(true); expect(JSON.stringify(result)).not.toContain('secret-private-record');
+    expect(f.upstream).toHaveBeenCalledTimes(1);
+  });
+  it('preserves no-op discard and tolerates void RPC 204; rejects malformed success', async () => {
+    const f = fixture();
+    f.upstream.mockResolvedValueOnce(Response.json(null));
+    expect((await (await f.rpc('tools/call', { name: workflowCases[1].name, arguments: workflowCases[1].args })).json()).result.structuredContent).toMatchObject({ status: 'unchanged', adjustmentEventId: null });
+    f.upstream.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    expect((await (await f.rpc('tools/call', { name: workflowCases[2].name, arguments: workflowCases[2].args })).json()).result.structuredContent.status).toBe('undone');
+    f.upstream.mockResolvedValueOnce(Response.json({ secret: 'not-a-log-id' }));
+    const result = (await (await f.rpc('tools/call', { name: workflowCases[0].name, arguments: workflowCases[0].args })).json()).result;
+    expect(result.isError).toBe(true); expect(JSON.stringify(result)).not.toContain('not-a-log-id');
+  });
+
   it('requires owner authentication for writes and preserves the domain retry ID', async () => {
     const f=fixture(); const args={requestId:'10000000-0000-4000-8000-000000000011',batchId:'10000000-0000-4000-8000-000000000012',servings:1,timestamp:'2026-10-04T12:30:00-04:00',timePrecision:'exact'};
     const params={name:'consume_prepared',arguments:args};
@@ -80,7 +136,7 @@ describe('Kitchen MCP synthetic contract', () => {
     expect((await f.handler(request(token({ aud: `https://synthetic.supabase.co${prefix}/mcp?wrong` })))).status).toBe(401);
     const result = await f.handler(request(token()));
     expect(result.status).toBe(200);
-    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), 'get_inventory']);
+    expect((await result.json()).result.tools.map((t: { name: string }) => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), ...workflowTools.map(t => t.name), 'get_inventory']);
   });
   it('interoperates with the official client: initialize, discovery, bounded pages and continuation', async () => {
     const f = fixture();
@@ -92,7 +148,14 @@ describe('Kitchen MCP synthetic contract', () => {
     await client.connect(transport);
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), 'get_inventory']);
+      expect(tools.tools.map(t => t.name)).toEqual([...readTools.map(t => t.name), ...operationTools.map(t => t.name), ...workflowTools.map(t => t.name), 'get_inventory']);
+      const ajv = new Ajv({ strictSchema: true, strictTypes: false, validateFormats: false });
+      for (const spec of workflowTools) {
+        const tool = tools.tools.find(t => t.name === spec.name)!;
+        expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+        const validate = ajv.compile(tool.inputSchema);
+        expect(validate(workflowCases.find(c => c.name === spec.name)!.args)).toBe(true);
+      }
       expect(tools.tools[0].annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       const first = await client.callTool({ name: 'get_inventory', arguments: { limit: 50 } });
       const firstPage = first.structuredContent as Record<string, unknown>;

@@ -21,7 +21,7 @@ for (const [path, methods] of Object.entries(contract.paths)) for (const [method
   const deduplicated=Boolean(schema.required?.includes('requestId'));
   let description=[op.summary, op.description].filter(Boolean).join('. ');
   description+=readOnly?' Read-only what-if: never saves a plan, food, inventory or history.':deduplicated?' Requires a stable domain requestId UUID for this exact approved action. Reuse it on an ambiguous retry; changed arguments require a new approved action.':' No request-key deduplication is provided. Do not automatically retry after an ambiguous failure; read back first.';
-  if(name==='prepare_batch')description+=' Cooking does not mean eating. Use consume_prepared separately. This does not fulfill a specific plan entry or support preparation undo/discard.';
+  if(name==='prepare_batch')description+=' Cooking does not mean eating. Use consume_prepared for unplanned eating or fulfill_planned_entry for a saved plan. Use discard_inventory_lot for waste and undo_inventory_adjustment to reverse waste. Preparation undo remains unsupported.';
   if(name==='save_meal_plan')description+=' Append for one addition; replaceWeek only for an explicitly requested complete week replacement. Read back get_plan and get_groceries.';
   if(name==='void_consumption')description+=' Use the exact event ID and reason. Never create a cancelling event.';
   tools.push({name,path,method:method.toUpperCase(),description,schema,readOnly,destructive:!readOnly&&!additive.has(name),deduplicated});

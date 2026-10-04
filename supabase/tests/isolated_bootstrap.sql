@@ -6,6 +6,8 @@ create table isolated_test.marker(id integer);
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin;
+-- Existing OAuth hook migrations grant this managed Supabase role access.
+create role supabase_auth_admin nologin;
 create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
 create table auth.sessions(id uuid primary key,user_id uuid references auth.users);
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
