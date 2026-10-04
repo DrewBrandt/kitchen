@@ -28,7 +28,7 @@ All routes below are under the existing pantry-api `/v1` namespace.
 | consume_prepared, consume_inventory, consume_purchased_product, log_manual_consumption | POST consume/prepared, inventory, product, manual |
 | edit_consumption, void_consumption | PATCH history/{id}, POST history/void |
 
-Total: 35 tools, 14 reads/previews and 21 writes. No settings-write or calendar tools.
+Total: 36 tools, 14 reads/previews and 22 writes. No settings-write or calendar tools.
 
 ## Implementation and use
 
@@ -113,8 +113,8 @@ RPC names are fixed, redirects fail, and each invocation makes one attempt.
 
 Fulfillment selects an exact meal-plan entry, consumes using its existing source
 and stock rules, and links the food log to the planned consumption. It does not
-cook an unprepared recipe. Recipe-plan fulfillment requires a batch already
-linked to that plan by the app; prepare_batch does not create that linkage.
+cook an unprepared recipe. Recipe-plan fulfillment requires a batch linked to that plan. Use
+prepare_planned_recipe for that linkage; prepare_batch remains unplanned.
 An inventoryLot plan can instead reference a prepared batch explicitly. Discard supports prepared lots (servings) and product
 lots (their returned base units); remainingQuantity means the quantity left,
 not the amount discarded. Waste changes stock/cost without changing eating or
@@ -159,3 +159,69 @@ context first, verify serialization of original date/storage fields, and exercis
 rejected/valid linked-plan arguments. They do not prove model recommendation
 quality: repeat the focused dinner scenario in a fresh @Mise chat after refreshing
 tools. No live plan, cooking or inventory mutation was used for this correction.
+
+## Planned recipe preparation
+
+`prepare_planned_recipe` adds one authenticated adapter to the existing retryable
+app `prepare_recipe` overloads. No grants, migrations, scopes or credentials are
+changed. `prepare_batch` retains its existing unplanned/manual/backfill behavior.
+Never invoke both for one cooking event. The new tool always sets eaten servings
+to zero: preparation and eating remain separate actions.
+
+Callable arguments (unknown properties rejected):
+
+| Field | Type / meaning |
+|---|---|
+| requestId | Required UUID; identical ID and payload on ambiguous retry |
+| recipeId | Required saved recipe UUID |
+| mealPlanId | Required UUID of an existing matching recipe preparation plan |
+| timestamp | Required offset-bearing date-time for cooking now; app records batch creation now, so this tool is not historical backfill |
+| location | Required `fridge` or `freezer` |
+| servingsMade | Optional positive actual yield; omit for recipe servings × effective scale |
+| pieceInputs | Optional nonempty array, maximum 50, distinct ingredient IDs |
+| pieceInputs[].ingredientId | Required recipe ingredient UUID |
+| pieceInputs[].lotId | Required matching inventory lot UUID |
+| pieceInputs[].pieces | Required positive multiple of 0.25; requested pieces, not servings or evidence of a physically counted lot |
+| pieceInputs[].expectedRemaining | Required positive latest lot quantity in grams; stale stock is rejected |
+| pieceInputs[].weightGrams | Optional positive actual selected-piece weight; requires saved recipe piece basis |
+| pieceInputs[].scaleRecipe | Optional boolean; true on an anchor uses selected weight / anchor grams as whole-recipe scale |
+| pieceInputs[].useIngredientNutrition | Optional boolean; explicitly choose ingredient nutrition for changed proportions |
+
+Without pieceInputs the adapter sends the normal retryable overload. With them it
+sends the piece overload, once, without fallback or retries. It never supplies
+lotPieces: if neither a saved recipe basis nor a recorded lot basis exists, the
+transaction rejects the input instead of inventing/writing a count. Explicit
+weight changes grams; it does not prove that a lighter whole lot contains four
+pieces. All other ingredients still must cover the effective scale. Existing
+nutrition-override checks apply. Plan scale is used unless an explicitly selected
+anchor overrides it; servingsMade changes yield, not ingredient deduction scale.
+
+The result contains prepId, lotId, mealPlanId, servingsMade, servingsRemaining,
+location, foodLogId=null, and auditRequestId. Read back the plan and prepared lot;
+then fulfill_planned_entry can consume the dinner and exact linked leftover entry.
+Do not append a second dinner consumption row: a preparation plan already owns its
+planned consumption. A small synthetic SQL check verifies this linkage, shortage
+rollback, replay, weight-derived yield, and unchanged null piece count.
+
+Minimal invocation shape (replace placeholders with actual returned UUIDs and the
+current offset-bearing cooking timestamp; do not execute as literal text):
+
+```json
+{
+  "requestId": "<stable UUID>",
+  "recipeId": "<saved recipe UUID>",
+  "mealPlanId": "<saved preparation plan UUID>",
+  "timestamp": "<current cooking-action timestamp>",
+  "location": "fridge"
+}
+```
+
+For selected pieces, add pieceInputs with verified ingredient/lot IDs and the
+latest remaining quantity. Do not fill in a physical count or selected weight
+from the recipe estimate. A representative verification path is: read all
+ingredients/inventory and generated shortages; save/read back preparation and
+linked leftover plans; cook once with this tool; read back matching mealPlanId and
+actual yield; fulfill the chosen entry only when eating is actually reported.
+No live cooking was performed for this adapter. The browser-observed stale batch
+“Ready to eat”/unknown-status label in the existing app UI remains a separate gap;
+this change does not redesign that UI or food-storage policy.

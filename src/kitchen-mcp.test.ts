@@ -60,11 +60,40 @@ function fixture(options: { owner?: boolean; anonymous?: boolean; confirmed?: bo
 describe('Kitchen MCP synthetic contract', () => {
   const id = '10000000-0000-4000-8000-000000000021';
   const requestId = '10000000-0000-4000-8000-000000000022';
-  const workflowCases = [
+  const workflowCases: { name: string; rpc: string; args: Record<string, unknown>; body: Record<string, unknown>; response: unknown; expected: Record<string, unknown> }[] = [
     { name: 'fulfill_planned_entry', rpc: 'consume_planned_meals', args: { requestId, planEntryId: id, servings: 0.5, timestamp: '2026-10-04T19:00:00-04:00' }, body: { p_request_id: requestId, p_meal_plans: [id], p_servings: [0.5], p_occurred_at: '2026-10-04T19:00:00-04:00' }, response: [id], expected: { foodLogIds: [id], status: 'fulfilled' } },
     { name: 'discard_inventory_lot', rpc: 'set_inventory_lot_quantity', args: { requestId, lotId: id, remainingQuantity: 1.5, reason: 'Dropped' }, body: { p_request_id: requestId, p_lot: id, p_remaining: 1.5, p_discard: true, p_note: 'Dropped' }, response: id, expected: { adjustmentEventId: id, status: 'discarded' } },
     { name: 'undo_inventory_adjustment', rpc: 'undo_inventory_adjustment', args: { adjustmentEventId: id }, body: { p_event: id }, response: null, expected: { status: 'undone' } },
   ];
+  const prepArgs={ requestId, recipeId:id, mealPlanId:'10000000-0000-4000-8000-000000000023', timestamp:'2026-10-04T18:00:00-04:00', location:'fridge' };
+  const prepResult={prepId:id,lotId:id,mealPlanId:prepArgs.mealPlanId,servingsMade:5.46,servingsRemaining:5.46,location:'fridge',foodLogId:null};
+  const prepParams={p_request_id:requestId,p_recipe:id,p_meal_plan:prepArgs.mealPlanId,p_scale:1,p_servings:null,p_location:'fridge',p_eaten_servings:0,p_occurred_at:prepArgs.timestamp};
+  workflowCases.push({name:'prepare_planned_recipe',rpc:'prepare_recipe',args:prepArgs,body:prepParams,response:prepResult,expected:prepResult});
+  it('selects the piece overload once and preserves plan, actual weight, yield and stable retry inputs',async()=>{
+    const f=fixture(); const piece={ingredientId:id,lotId:id,pieces:4,expectedRemaining:825.54,weightGrams:825.54,scaleRecipe:true,useIngredientNutrition:true};
+    const args={...prepArgs,servingsMade:2,pieceInputs:[piece]};
+    for(let n=0;n<2;n++) {
+      f.upstream.mockResolvedValueOnce(Response.json({...prepResult,servingsMade:2,servingsRemaining:2}));
+      const result=(await (await f.rpc('tools/call',{name:'prepare_planned_recipe',arguments:args})).json()).result;
+      expect(result.structuredContent).toMatchObject({servingsMade:2,foodLogId:null,mealPlanId:prepArgs.mealPlanId});
+    }
+    expect(f.upstream).toHaveBeenCalledTimes(2);
+    for(const [url,init] of f.upstream.mock.calls) {
+      expect(url).toBe(`${config.supabaseUrl}/rest/v1/rpc/prepare_recipe`);
+      expect(JSON.parse(String(init?.body))).toEqual({...prepParams,p_servings:2,p_piece_inputs:[piece]});
+    }
+  });
+  it.each([
+    {mealPlanId:undefined}, {pieceInputs:[]}, {servingsMade:0},
+    {pieceInputs:[{ingredientId:id,lotId:id,pieces:4.1,expectedRemaining:825.54}]},
+    {pieceInputs:[{ingredientId:id,lotId:id,pieces:4,expectedRemaining:825.54,lotPieces:4}]},
+    {pieceInputs:[{ingredientId:id,lotId:id,pieces:4,expectedRemaining:825.54,weightGrams:0}]},
+    {pieceInputs:Array(2).fill({ingredientId:id,lotId:id,pieces:1,expectedRemaining:825.54})},
+    {eatenServings:1},
+  ])('rejects invalid preparation or count-writing arguments %j before RPC',async overrides=>{
+    const f=fixture();const body=await (await f.rpc('tools/call',{name:'prepare_planned_recipe',arguments:{...prepArgs,...overrides}})).json();
+    expect(body.error || body.result?.isError).toBeTruthy();expect(f.upstream).not.toHaveBeenCalled();
+  });
   it.each(workflowCases)('authenticates and forwards only the exact app transaction: $name', async c => {
     const f = fixture(); const params = { name: c.name, arguments: c.args };
     for (const bearer of [null, token({ sub: '10000000-0000-4000-8000-000000000099' }), token({ client_id: id }), token({ aud: 'authenticated' })]) {

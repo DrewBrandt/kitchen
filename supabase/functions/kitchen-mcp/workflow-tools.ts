@@ -1,9 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { plannedPreparationTool } from './preparation.ts';
 
 const uuid = z.string().uuid();
 type Args = Record<string, unknown>;
 export const workflowTools = [
+  plannedPreparationTool,
   {
     name: 'fulfill_planned_entry', rpc: 'consume_planned_meals',
     description: 'Log eating one exact saved plan entry and mark its planned consumption fulfilled, using the app transaction and its stock rules. Read get_plan first and use the entry ID, not its consumption ID. Does not cook a recipe: its batch must already be prepared. Requires actual eaten servings and an offset-bearing timestamp. Reuse requestId and identical arguments after an ambiguous failure; never also call generic consumption for this eating event.',
