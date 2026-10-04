@@ -10,7 +10,7 @@ import { QuantityCorrectionEditor } from './QuantityCorrectionEditor';
 import type { Json } from './database.types';
 import { ManualConsumptionEditor } from './ManualConsumptionEditor';
 import { completeFormAttempt, createFormAttempt, isDefiniteMutationFailure, mutationError, pendingMutationPayload } from './lib/mutation-feedback';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccountAvatar } from './AccountAvatar';
 import { MobileAccount } from './MobileAccount';
 import type { IScannerControls } from '@zxing/browser';
@@ -947,6 +947,13 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onUndoDiscard, onOpen, onOpenC
   const { foodLogByDate, history, preparationHistory, receiptHistory = [], discardHistory = [], settings } = usePantryData();
   const [range, setRange] = useState(30);
   const [activity, setActivity] = useState('Food log');
+  const activityScroll = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (activityScroll.current === null) return;
+    document.documentElement.scrollTop = activityScroll.current;
+    document.body.scrollTop = activityScroll.current;
+    activityScroll.current = null;
+  }, [activity]);
 
   const cutoff = new Date();
   cutoff.setHours(12, 0, 0, 0);
@@ -1001,7 +1008,7 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onUndoDiscard, onOpen, onOpenC
   const missingCost = days.reduce((total, day) => total + (day.mealsMissingCost ?? 0), 0);
 
   return (
-    <div className="stack">
+    <div className="stack history-page">
       <div className="range-bar">
         <div className="range-chips">{[7, 30, 90].map((option) => <button key={option} className={cx('filter-chip', range === option && 'active')} onClick={() => setRange(option)}>{option} days</button>)}</div>
 
@@ -1018,7 +1025,7 @@ function HistoryPage({ onUndoPrep, onUndoReceipt, onUndoDiscard, onOpen, onOpenC
         <div className="heat-strip">{cells.map((cell) => <i key={cell.key} style={{ background: heatColor(cell.share) }} title={cell.day ? `${cell.label} · ${Math.round(cell.day.protein ?? 0)} g protein · ${usd(cell.day.cost)}` : `${cell.label} · not logged`} />)}</div>
       </Card>
 
-      <div className="activity-tabs" role="group" aria-label="History activity">{['Food log', 'Cooking', 'Shopping', 'Discarded'].map((label) => <button className={cx('filter-chip', activity === label && 'active')} aria-pressed={activity === label} key={label} onClick={() => setActivity(label)}>{label}</button>)}</div>
+      <div className="activity-tabs" role="group" aria-label="History activity">{['Food log', 'Cooking', 'Shopping', 'Discarded'].map((label) => <button className={cx('filter-chip', activity === label && 'active')} aria-pressed={activity === label} key={label} onClick={() => { if (label === activity) return; activityScroll.current = document.scrollingElement?.scrollTop ?? document.documentElement.scrollTop; setActivity(label); }}>{label}</button>)}</div>
       {activity === 'Cooking' && <Card>
         <SectionTitle title="What I made" action={`${preparations.length} batch${preparations.length === 1 ? '' : 'es'}`} />
         {preparations.map((prep) => <div className="prep-history-row" key={prep.id}><span className="row-emoji">{prep.emoji}</span><div className="grow"><strong>{prep.name}</strong><small>{formatPreparedAt(prep.preparedAt, settings.timeZone)}</small></div><div><span>Made</span><strong>{formatServings(prep.servingsMade)}</strong></div><div><span>Stored</span><strong>{prep.location}</strong></div><div><span>Remaining</span><strong>{formatAmount(prep.servingsRemaining)}</strong></div><DurableUndo label={`Undo prep ${prep.name}`} action={onUndoPrep ? () => onUndoPrep(prep.id) : undefined} /></div>)}

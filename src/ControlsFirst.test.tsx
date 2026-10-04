@@ -47,3 +47,16 @@ it('keeps total shortage separate from the retained list quantity', async () => 
   expect(screen.queryByText('old prose')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Rebuild from plan' })).toBeEnabled();
 });
+it('preserves History filter scroll while primary navigation still resets it', async () => {
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: 'History' }));
+  const filters = screen.getByRole('group', { name: 'History activity' });
+  await userEvent.click(within(filters).getByRole('button', { name: 'Cooking' }));
+  document.documentElement.scrollTop = 114;
+  await userEvent.click(within(filters).getByRole('button', { name: 'Food log' }));
+  expect(document.documentElement.scrollTop).toBe(114);
+  expect(document.body.scrollTop).toBe(114);
+  expect(screen.getByRole('heading', { name: 'Day by day' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Inventory' }));
+  expect(document.documentElement.scrollTop).toBe(0);
+});

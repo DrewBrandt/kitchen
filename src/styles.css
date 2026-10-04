@@ -1314,3 +1314,5 @@ button.soon-row:hover { background: #121715; }
   .planned-portion.named-portion { grid-template-columns: 1fr; gap: 5px; }
   .named-portion .portion-values { gap: 6px 8px; }
 }
+/* Replacing activity results must not choose a new browser scroll anchor. */
+.history-page { overflow-anchor: none; }
