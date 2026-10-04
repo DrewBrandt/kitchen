@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { describe, expect, it, vi } from 'vitest';
-import { preparedPlanningContext, leftoverPlanningGuidance } from '../supabase/functions/kitchen-mcp/planning-context';
+import { preparedPlanningContext, leftoverPlanningGuidance, groceryScopeGuidance } from '../supabase/functions/kitchen-mcp/planning-context';
 import { readTools, registerTools } from '../supabase/functions/kitchen-mcp/tools';
 function fixture(response: () => Response = () => Response.json({ status: 'ok' })) {
   const calls = new Map<string, { config: any; run: (args: unknown) => Promise<any> }>();
@@ -25,6 +25,12 @@ describe('Kitchen tool forwarding',()=>{
     expect(text.indexOf('planningContext')).toBeLessThan(text.indexOf('old-fridge'));
     expect(f.calls.get('get_prepared_foods')!.config.description).toContain(preparedPlanningContext.statusMeaning);
     expect(f.fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('returns saved-range limitations even for an empty grocery page',async()=>{
+    const f=fixture(()=>Response.json({groceries:[],limit:20,offset:0,total:0,hasMore:false,nextOffset:null}));
+    const result=await f.calls.get('get_groceries')!.run({});
+    expect(result.structuredContent.planningContext).toEqual({groceryScopeGuidance});
+    expect(f.calls.get('get_groceries')!.config.description).toContain(groceryScopeGuidance);
   });
   it('returns explicit leftover linkage instructions with plan reads',async()=>{
     const f=fixture(()=>Response.json({entries:[],limit:20,offset:0,total:0,hasMore:false,nextOffset:null}));

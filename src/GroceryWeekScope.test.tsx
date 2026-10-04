@@ -165,3 +165,14 @@ it('loads actual saved ranges without treating hidden, mixed, manual or legacy r
   await userEvent.click(screen.getByRole('button', { name: /Grocery list/ }));
   expect(saved()).toHaveTextContent('some ranges unavailable');
 });
+
+it('warns on uncovered selection while recognizing an expanded cross-week source range', async()=>{
+  const rebuild=vi.fn();
+  render(<PantryDataProvider data={{...data,groceryGeneration:{ranges:[{from:oldRange.through,through:currentRange.through}],unknownRange:false}}}><App onRebuildShopping={rebuild}/></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button',{name:/Grocery list/}));
+  expect(screen.queryByLabelText('Grocery coverage warning')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button',{name:'Previous week'}));
+  expect(screen.getByLabelText('Grocery coverage warning')).toHaveTextContent('Changing weeks does not regenerate groceries');
+  expect(saved()).toHaveTextContent(/Dec 27, 2026 . Jan 3, 2027/);
+  expect(rebuild).not.toHaveBeenCalled();
+});

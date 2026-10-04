@@ -231,7 +231,7 @@ async function boundedRead(db: Supabase, path: string, params: URLSearchParams) 
     query = query.order('use_by', { nullsFirst: false });
   }
   if (path === '/v1/plans') {
-    if (table === 'shopping_items') query = query.is('lot', null).order('created_at');
+    if (table === 'shopping_items') query = query.is('lot', null).or('source.neq.generated,generated_active.eq.true').order('created_at');
     else {
       for (const key of ['from', 'to']) if (params.has(key) && !/^\d{4}-\d{2}-\d{2}$/.test(params.get(key)!)) throw new ApiError(`${key} must be a local YYYY-MM-DD date`);
       if (params.get('from')) query = query.gte('plan_date', params.get('from')!);
@@ -264,7 +264,22 @@ async function boundedRead(db: Supabase, path: string, params: URLSearchParams) 
     const preps = await related('preps', 'id', ids(rows, 'prep'));
     result = { batches: await prepared(db, true, true, wrap(rows, preps, await related('recipes', 'id', ids(preps, 'recipe')))) };
   } else if (path === '/v1/plans') {
-    if (table === 'shopping_items') result = { groceries: rows };
+    if (table === 'shopping_items') {
+      const [foodRows, productRows, units] = await Promise.all([
+        related('base_foods', 'id', ids(rows, 'food')),
+        related('products', 'id', [...ids(rows, 'generated_product'), ...ids(rows, 'pinned_product')]),
+        related('measure_conversions', 'id', ids(rows, 'unit')),
+      ]);
+      const productName = (id: unknown) => { const product = productRows.find(p => p.id === id); return product ? [product.brand, product.name].filter(Boolean).join(' ') : null; };
+      result = { groceries: rows.map(row => {
+        const foodName = foodRows.find(food => food.id === row.food)?.name ?? null;
+        const unitAbbreviation = units.find(unit => unit.id === row.unit)?.short_name ?? null;
+        const quantity = inventoryNumber(row.qty_needed);
+        return { ...row, name: row.free_text ?? foodName ?? productName(row.generated_product), foodName,
+          requiredProductName: productName(row.generated_product), pinnedProductName: productName(row.pinned_product), unitAbbreviation,
+          quantityDisplay: quantity !== null && unitAbbreviation ? `${new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6, useGrouping: false }).format(quantity)} ${unitAbbreviation}` : row.quantity_label ?? null };
+      }) };
+    }
     else {
       const lots = await related('inventory_lots', 'id', ids(rows, 'inventory_lot'));
       const data = await planning(db, wrap(rows, await related('planned_consumptions', 'meal_plan', ids(rows)), [], await related('recipes', 'id', ids(rows, 'recipe')), await related('meals', 'id', ids(rows, 'meal')), await related('products', 'id', [...ids(rows, 'product'), ...ids(lots, 'product')]), lots));

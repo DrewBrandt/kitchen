@@ -28,6 +28,7 @@ function fixture() {
           counted = args[1]?.count === 'exact';
           if(args[0].includes('preps!inner')) rows=rows.filter(row=>tables.preps.some(prep=>prep.id===row.prep)).map(row=>({...row,'preps.voided_at':tables.preps.find(prep=>prep.id===row.prep)?.voided_at}));
         }
+        if(key === 'or' && args[0] === 'source.neq.generated,generated_active.eq.true') { record.filters.push('active-groceries'); rows=rows.filter(r=>r.source!=='generated'||r.generated_active===true); }
         if(key === 'range') record.range = args;
         if(key === 'order') orders.push(args[0]);
         if(['eq','in','is','gt','gte','lte','ilike'].includes(String(key))) {
@@ -60,6 +61,21 @@ describe('bounded Kitchen API reads', () => {
     const f=fixture();expect(await f.read('/v1/plans?collection=entries&from=2026-10-04&to=2026-10-04&limit=2')).toMatchObject({entries:[{source:'recipe',sourceId:uid(1)}],total:1});
     expect(await f.read('/v1/plans?collection=groceries&limit=2')).toMatchObject({groceries:[{source:'manual'}],total:1});
     expect(await f.read('/v1/plans?from=2026-10-05&limit=2')).toMatchObject({entries:[],total:0});
+  });
+  it('pages active groceries with known names and nonzero small quantities, preserving manual rows',async()=>{
+    const f=fixture();
+    f.tables.base_foods=[{id:uid(201),name:'Oregano'}];
+    f.tables.measure_conversions=[{id:uid(301),short_name:'oz'}];
+    f.tables.products=[{id:uid(901),name:'Dried oregano',brand:'Fixture'}];
+    f.tables.shopping_items=[
+      {id:uid(501),source:'generated',generated_active:false,food:uid(201),lot:null,qty_needed:9},
+      {id:uid(502),source:'generated',generated_active:true,food:uid(201),lot:null,qty_needed:0.011757987317254566,unit:uid(301),quantity_label:'0 oz',generated_product:uid(901),generated_from:'2026-10-04',generated_through:'2026-10-11'},
+      {id:uid(503),source:'manual',free_text:'Keep my milk',lot:null},
+    ];
+    const first=await f.read('/v1/plans?collection=groceries&limit=1');
+    expect(first).toMatchObject({total:2,hasMore:true,nextOffset:1,groceries:[{id:uid(502),name:'Oregano',foodName:'Oregano',requiredProductName:'Fixture Dried oregano',quantityDisplay:'0.011758 oz',qty_needed:0.011757987317254566,generated_from:'2026-10-04'}]});
+    expect(f.requests[0]).toMatchObject({range:[0,0],filters:['is:lot','active-groceries']});
+    expect(await f.read('/v1/plans?collection=groceries&limit=1&offset=1')).toMatchObject({groceries:[{name:'Keep my milk'}],hasMore:false,total:2});
   });
   it('never silently truncates related records',async()=>{
     const f=fixture();f.tables.recipe_ingredients=Array.from({length:1001},(_,i)=>({id:uid(i+5000),recipe:uid(1)}));

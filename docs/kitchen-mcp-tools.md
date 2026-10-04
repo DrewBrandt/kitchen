@@ -177,7 +177,7 @@ Callable arguments (unknown properties rejected):
 | mealPlanId | Required UUID of an existing matching recipe preparation plan |
 | timestamp | Required offset-bearing date-time for cooking now; app records batch creation now, so this tool is not historical backfill |
 | location | Required `fridge` or `freezer` |
-| servingsMade | Optional positive actual yield; omit for recipe servings ◊ effective scale |
+| servingsMade | Optional positive actual yield; omit for recipe servings √ó effective scale |
 | pieceInputs | Optional nonempty array, maximum 50, distinct ingredient IDs |
 | pieceInputs[].ingredientId | Required recipe ingredient UUID |
 | pieceInputs[].lotId | Required matching inventory lot UUID |
@@ -223,5 +223,36 @@ ingredients/inventory and generated shortages; save/read back preparation and
 linked leftover plans; cook once with this tool; read back matching mealPlanId and
 actual yield; fulfill the chosen entry only when eating is actually reported.
 No live cooking was performed for this adapter. The browser-observed stale batch
-ìReady to eatî/unknown-status label in the existing app UI remains a separate gap;
+‚ÄúReady to eat‚Äù/unknown-status label in the existing app UI remains a separate gap;
 this change does not redesign that UI or food-storage policy.
+
+## Cross-week grocery dependencies
+
+A saved grocery list has its own persisted date range. Selecting a different UI
+week does not regenerate it. The UI explicitly warns when stored ranges are
+unknown, mixed or do not all cover the selected week. MCP requires checking those
+ranges against requested meal AND source-preparation dates before claiming
+coverage; empty results do not prove that all ingredients are present.
+
+reconcile_shopping_demand now expands its requested range to include pending
+source preparations referenced by unfulfilled leftovers across week boundaries.
+Expansion closes over dependencies exposed by the wider range. Each pending
+preparation still counts once; already-made sources add no raw-ingredient demand.
+Effective dates are saved on existing grocery rows. No new tables or grants,
+historical repair DML, or live fixture rebuild are part of deployment. Existing
+row IDs, manual items, checks, notes, pins, edited quantities and receipt fields
+are retained. Inactive generated rows remain stored; their range metadata still
+describes the latest reconciliation, as before.
+
+The paged grocery API filters inactive generated rows before counting/paging. It
+hydrates only selected food/product/unit IDs and supplies name, foodName,
+requiredProductName, pinnedProductName, unitAbbreviation and quantityDisplay.
+Canonical qty_needed and source/range fields remain unchanged. Significant-digit
+formatting keeps small positive quantities nonzero. Unknown names remain null.
+This is a saved unacquired list, not an automatic forecast for read-time dates.
+
+Focused SQL checks cover successive Sunday preparation/Monday leftover appends,
+source shortages without duplicate demand, existing plans, manual items,
+checked/edited progress, repeated rebuilds and retained inactive rows. The live
+fixture needs an explicit owner rebuild for Oct 5-11 (now expanded to Oct 4-11)
+to refresh its snapshot after deployment. No live rebuild or plan edit was run.

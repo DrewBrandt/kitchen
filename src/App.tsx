@@ -730,6 +730,8 @@ function WeekSelector({ range, onChangeWeek }: WeekSelectionProps) {
 function GroceryPage({ range, onChangeWeek, onReceive, checked, toggle, shoppingMode, onShoppingMode, onRemove, notify }: WeekSelectionProps & { onReceive?: (id: string, receipt: ShoppingReceipt) => Promise<void>; checked: Set<string>; toggle: (item: { id?: string; name: string }) => void; shoppingMode: boolean; onShoppingMode: (value: boolean) => void; onRemove?: (id: string) => Promise<void>; notify: Notify }) {
   const { grocerySections, groceryGeneration, inventorySections, settings } = usePantryData();
   const [receiving, setReceiving] = useState<GroceryItem | null>(null);
+  const rangeCovered = !groceryGeneration.unknownRange && groceryGeneration.ranges.length > 0 &&
+    groceryGeneration.ranges.every(saved => saved.from <= range.from && saved.through >= range.through);
   const weekly = settings.weeklyFoodBudget;
   const itemKey = (item: { id?: string; name: string }) => item.id ?? item.name;
   const total = grocerySections.flatMap((section) => section.items).length;
@@ -745,6 +747,7 @@ function GroceryPage({ range, onChangeWeek, onReceive, checked, toggle, shopping
         <WeekSelector range={range} onChangeWeek={onChangeWeek} />
         <small aria-label="Saved grocery ranges">{groceryGeneration.ranges.length ? `Generated for: ${groceryGeneration.ranges.map(formatPlanningRange).join('; ')}${groceryGeneration.unknownRange ? '; some ranges unavailable' : ''}` : groceryGeneration.unknownRange ? 'Generated range unavailable' : 'No saved generated range'}</small>
       </div>
+      {!rangeCovered && <p role="status" aria-label="Grocery coverage warning">The saved grocery list does not confirm coverage for this selected week. Rebuild from plan to check its needs, including earlier preparations for linked leftovers. Changing weeks does not regenerate groceries.</p>}
       <Card className="grocery-summary">
         <div className="grow"><div className="grocery-count"><strong>{done}<span>/{total}</span></strong><span>{demandChanges ? `${demandChanges} changed demand${demandChanges === 1 ? '' : 's'} to review` : total - done === 0 ? 'All items checked' : `${total - done} items left`}</span></div><Progress value={total ? done / total * 100 : 100} /></div>
         <div className="budget-panel">
