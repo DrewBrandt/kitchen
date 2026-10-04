@@ -240,3 +240,23 @@ it('remounts a staged card after an uncertain cooking response and replays only 
   expect(screen.getByLabelText('Recipe multiplier for Chicken')).toHaveValue(3);
   expect(localStorage.getItem('mise.pending-mutations.v1')).toBe('{}');
 });
+
+it('associates grouped planned and eaten portions with their named dishes', async () => {
+  const dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: data.settings.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const base = { ...previewPantryData.plannedMeals[0], dateKey, groupId: 'named-dinner', status: 'made' as const, isLeftover: false, slot: 'DINNER' };
+  const save = vi.fn().mockResolvedValue(undefined);
+  const plans = [{ ...base, id: 'broccoli', name: 'Broccoli', plannedServings: 1, actualServings: .5, consumptionStatus: 'fulfilled' }, { ...base, id: 'rice', name: 'Rice', plannedServings: 2, consumptionStatus: 'planned' }];
+  render(<PantryDataProvider data={{ ...data, plannedMeals: plans }}><App onSetPlannedConsumptionServings={save} /></PantryDataProvider>);
+  await userEvent.click(screen.getByRole('button', { name: 'This week' }));
+  const broccoli = screen.getByRole('group', { name: 'Broccoli portion' });
+  const rice = screen.getByRole('group', { name: 'Rice portion' });
+  expect(within(broccoli).getByText('Broccoli')).toBeVisible();
+  expect(within(broccoli).getByLabelText('Planned servings for Broccoli')).toHaveValue(1);
+  expect(within(broccoli).getByLabelText('Planned servings for Broccoli')).toBeDisabled();
+  expect(within(broccoli).getByText('½ servings eaten')).toBeVisible();
+  expect(within(rice).getByText('Rice')).toBeVisible();
+  expect(within(rice).getByLabelText('Planned servings for Rice')).toHaveValue(2);
+  fireEvent.change(within(rice).getByLabelText('Planned servings for Rice'), { target: { value: '1.5' } });
+  await userEvent.click(within(rice).getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith('rice', 1.5));
+});

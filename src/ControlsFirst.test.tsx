@@ -4,6 +4,19 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { PantryDataProvider, previewPantryData } from './pantry-data';
 afterEach(() => vi.useRealTimers());
+it('resets scroll on primary route changes without resetting in-page interactions', async () => {
+  render(<App />);
+  document.documentElement.scrollTop = 600;
+  document.body.scrollTop = 600;
+  await userEvent.click(screen.getByRole('button', { name: 'Grocery list' }));
+  expect(document.documentElement.scrollTop).toBe(0);
+  expect(document.body.scrollTop).toBe(0);
+  document.documentElement.scrollTop = 400;
+  await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
+  expect(document.documentElement.scrollTop).toBe(400);
+  await userEvent.click(screen.getByRole('button', { name: 'This week' }));
+  expect(document.documentElement.scrollTop).toBe(0);
+});
 it('uses the owner calendar for Food log and historical day selection', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-01-05T00:30:00Z'));

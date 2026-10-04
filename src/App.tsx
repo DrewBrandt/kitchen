@@ -168,6 +168,10 @@ export function App({ onReceiveShopping, onUndoReceipt, ownerName = 'Drew', owne
   const pantryData = usePantryData();
   const { foodLog, grocerySections, history, inventorySections, recipes, weekDays } = pantryData;
   const [page, setPage] = useState<PageId>('today');
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [page]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [rebuildingShopping, setRebuildingShopping] = useState(false);
   const [panel, setPanel] = useState<PanelState | null>(null);
@@ -785,14 +789,14 @@ function GroceryPage({ range, onChangeWeek, onRebuild, rebuilding, onReceive, ch
   );
 }
 
-function PlannedServingEditor({ meal, notify, onSave }: { meal: { id?: string; name: string; plannedServings?: number; actualServings?: number; consumptionStatus?: string }; notify: Notify; onSave?: (id: string, servings: number) => Promise<void> }) {
+function PlannedServingEditor({ meal, notify, onSave, showName = false }: { showName?: boolean; meal: { id?: string; name: string; plannedServings?: number; actualServings?: number; consumptionStatus?: string }; notify: Notify; onSave?: (id: string, servings: number) => Promise<void> }) {
   const editable = (value: number | undefined) => String(Number(Number(value ?? 1).toFixed(3)));
   const [value, setValue] = useState(editable(meal.plannedServings));
   useEffect(() => setValue(editable(meal.plannedServings)), [meal.plannedServings]);
   const servings = Number(value);
   const changed = Number.isFinite(servings) && servings > 0 && servings !== (meal.plannedServings ?? 1);
   const eaten = meal.consumptionStatus === 'fulfilled';
-  return <span className="planned-portion"><input aria-label={`Planned servings for ${meal.name}`} type="number" min="0.01" step="any" value={value} disabled={eaten} onChange={(event) => setValue(event.target.value)} /><span>{formatServings(servings)} planned</span>{eaten && meal.actualServings !== undefined ? <strong>{formatServings(meal.actualServings)} eaten</strong> : null}{changed && meal.id && onSave && !eaten ? <button type="button" onClick={() => void onSave(meal.id!, servings).then(() => notify(`Planned portion updated to ${formatServings(servings)}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update the planned portion.'))}>Save</button> : null}</span>;
+  return <span className={cx("planned-portion", showName && "named-portion")} role="group" aria-label={meal.name + " portion"}>{showName && <strong className="portion-food">{meal.name}</strong>}<span className="portion-values"><input aria-label={`Planned servings for ${meal.name}`} type="number" min="0.01" step="any" value={value} disabled={eaten} onChange={(event) => setValue(event.target.value)} /><span>{showName ? "servings planned" : formatServings(servings) + " planned"}</span>{eaten && meal.actualServings !== undefined ? <strong className="portion-eaten">{formatServings(meal.actualServings)} eaten</strong> : null}{changed && meal.id && onSave && !eaten ? <button type="button" onClick={() => void onSave(meal.id!, servings).then(() => notify(`Planned portion updated to ${formatServings(servings)}.`)).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Could not update the planned portion.'))}>Save</button> : null}</span></span>;
 }
 
 function PlannedMealEatEditor({ meals, notify, onConsume }: { meals: Array<{ id?: string; name: string; plannedServings?: number; preparedServingsAvailable?: number; sourceServingsAvailable?: number }>; notify: Notify; onConsume?: (consumptions: PlannedMealConsumption[]) => Promise<string[]> }) {
@@ -865,7 +869,7 @@ function WeekPage({ range, onChangeWeek, onCookMeal, onOpen, notify, onRemove, o
                         <strong>{meals.map((meal) => meal.name).join(' + ')}</strong>
                         <small>{meals[0].slot.split(' · ')[0]}{meals[0].isLeftover ? ' · leftovers' : ''}</small>
                       </button> : <div className="week-meal-detail"><strong>{meals.map((meal) => meal.name).join(' + ')}</strong><small>{meals[0].slot.split(' · ')[0]} · {meals[0].consumeFromInventory === false ? 'outside pantry' : meals[0].sourceKind === 'lot' ? 'exact lot' : 'pantry item'}</small></div>}
-                      <div className="planned-portions">{meals.map((meal) => <PlannedServingEditor key={meal.id ?? meal.name} meal={meal} notify={notify} onSave={onSetServings} />)}</div>
+                      <div className="planned-portions">{meals.map((meal) => <PlannedServingEditor key={meal.id ?? meal.name} showName={meals.length > 1} meal={meal} notify={notify} onSave={onSetServings} />)}</div>
                     </div>
                     <span className={cx('plan-status', displayStatus.tone)}>{displayStatus.label}</span>
                     <strong className="week-meal-cost spend">{costLabel(groupCost, meals.some((meal) => meal.costIsEstimated))}<small>planned portions</small></strong>

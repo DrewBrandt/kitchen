@@ -1304,3 +1304,13 @@ button.soon-row:hover { background: #121715; }
   .grocery-summary .budget-panel { margin: 0; }
 }
 .single-recipe .deck-card-body > .state-badge { grid-column: 2; justify-self: start; }
+.portion-values { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.planned-portion.named-portion { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr); gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--line); color: var(--text-2); font-size: 11px; }
+.named-portion .portion-food { color: var(--text); font: 500 12px/1.4 'Public Sans', system-ui, sans-serif; overflow-wrap: anywhere; }
+.named-portion input { height: 30px; font-size: 12px; }
+.named-portion input:disabled { color: var(--text-2); opacity: 1; }
+.named-portion .portion-eaten { color: var(--mint); font-weight: 500; }
+@media (max-width: 720px) {
+  .planned-portion.named-portion { grid-template-columns: 1fr; gap: 5px; }
+  .named-portion .portion-values { gap: 6px 8px; }
+}
