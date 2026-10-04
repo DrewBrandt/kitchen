@@ -48,11 +48,11 @@ export function QuantityCorrectionEditor({ id, label, snapshot, save, close }: {
     catch (cause) { if (isDefiniteMutationFailure(cause)) setPending(undefined); setError(mutationError(cause)); }
     finally { setBusy(false); }
   }}>
-    <strong>Correct only {label}</strong>
-    <p>Recorded: {formatAmount(displayedOriginal)} {snapshot.displayUnit} ({formatAmount(original)} {snapshot.canonicalUnit}).</p>
+    <strong>{label}</strong>
+    <div className="state-badge">Recorded: {formatAmount(displayedOriginal)} {snapshot.displayUnit}</div>
     <label className="field"><span>Correct amount eaten ({snapshot.displayUnit})</span><input type="number" min="0" step="any" value={amount} disabled={busy || Boolean(pending) || !hydrated} onChange={(event) => setAmount(event.target.value)} /></label>
-    {valid && <div role="status"><p>Corrected amount: {formatAmount(quantity)} {snapshot.canonicalUnit}. {delta >= 0 ? 'Return' : 'Deduct'} {formatAmount(Math.abs(delta))} {snapshot.canonicalUnit} {delta >= 0 ? 'to' : 'from'} the original lot.</p><p>Corrected totals: {value(snapshot.calories, 'cal')} · {value(snapshot.protein, 'g protein')} · Recorded cost {snapshot.cost === null ? 'unknown' : `$${(snapshot.cost * ratio).toFixed(2)}`}{snapshot.estimated ? ' · estimated' : ''}.</p></div>}
-    <p>This replaces the old event and cannot be undone. To record none, remove the event.</p>
+    {valid && <div className="correction-summary" role="status"><div><span>Corrected amount</span><strong>{formatAmount(quantity)} {snapshot.canonicalUnit}</strong></div><div><span>{delta >= 0 ? 'Return to original lot' : 'Deduct from original lot'}</span><strong>{formatAmount(Math.abs(delta))} {snapshot.canonicalUnit}</strong></div><div><span>Nutrition{snapshot.estimated ? ' · estimated' : ''}</span><strong>{value(snapshot.calories, 'cal')} · {value(snapshot.protein, 'g protein')}</strong></div><div><span>Recorded cost{snapshot.estimated ? ' · estimated' : ''}</span><strong>{snapshot.cost === null ? 'Unknown' : `$${(snapshot.cost * ratio).toFixed(2)}`}</strong></div></div>}
+    <small className="warning">Replaces this event · cannot be undone. Zero eaten? Remove the event.</small>
     {pending && <p>Retrying the same correction.</p>}
     {error && <p role="alert">{error}</p>}
     <button className="button primary" disabled={!hydrated || busy || !valid || (!pending && quantity === original)}>{busy ? 'Saving…' : pending ? 'Retry correction' : 'Save quantity correction'}</button>

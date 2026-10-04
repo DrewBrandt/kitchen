@@ -36,6 +36,6 @@ it('shows scoped grocery identity and cumulative exact-lot shortage from actual 
  const consume=vi.fn();render(<PantryDataProvider data={data}><App onConsumePlannedMeals={consume} /></PantryDataProvider>);
  await userEvent.click(screen.getByRole('button',{name:/This week/}));
  expect(screen.getAllByText('Check source')).toHaveLength(3);
- expect(screen.getAllByText('Selected lot is short for this week. Adjust portions or remove a plan.')).toHaveLength(3);
+ expect(screen.getAllByText('Stock short · adjust portion')).toHaveLength(3);
  expect(screen.getAllByRole('button',{name:/Remove required/})).toHaveLength(3);
 });

@@ -172,7 +172,7 @@ it('warns on uncovered selection while recognizing an expanded cross-week source
   await userEvent.click(screen.getByRole('button',{name:/Grocery list/}));
   expect(screen.queryByLabelText('Grocery coverage warning')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button',{name:'Previous week'}));
-  expect(screen.getByLabelText('Grocery coverage warning')).toHaveTextContent('Changing weeks does not regenerate groceries');
+  expect(screen.getByLabelText('Grocery coverage warning')).toHaveTextContent('Week not checked');
   expect(saved()).toHaveTextContent(/Dec 27, 2026 . Jan 3, 2027/);
   expect(rebuild).not.toHaveBeenCalled();
 });

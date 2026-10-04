@@ -16,7 +16,7 @@ it('blocks nonuniform overridden cooking until explicit batch-only consent', asy
   await user.click(screen.getByRole('button', { name: 'Make batch' }));
   const card = screen.getByRole('article', { name: 'Piece test' });
   await waitFor(() => expect(within(card).getByRole('button', { name: 'Finish cooking' })).toBeDisabled());
-  expect(within(card).getByText('Saved recipe nutrition stays unchanged.')).toBeInTheDocument();
+  expect(within(card).getByText('Nutrition proportions changed')).toBeInTheDocument();
   await user.click(within(card).getByLabelText('Use ingredient nutrition for this batch'));
   await user.click(within(card).getByRole('button', { name: 'Finish cooking' }));
   await waitFor(() => expect(onCookRecipe).toHaveBeenCalledWith('piece-test', expect.objectContaining({ useIngredientNutrition: true })));

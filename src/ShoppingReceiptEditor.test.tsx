@@ -32,8 +32,10 @@ it('offers durable prep/receipt undo in history and shows dependency errors inli
   expect(screen.getByText('Food cost')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'History' }));
   expect(screen.getByText('Food cost')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Cooking' }));
   await userEvent.click(screen.getByRole('button', { name: 'Undo prep QA batch' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('already been eaten');
+  await userEvent.click(screen.getByRole('button', { name: 'Shopping' }));
   await userEvent.click(screen.getByRole('button', { name: 'Undo receipt QA groceries' }));
   expect(undoReceipt).toHaveBeenCalledWith('receipt');
 });

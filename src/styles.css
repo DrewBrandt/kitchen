@@ -1174,3 +1174,133 @@ button.soon-row:hover { background: #121715; }
 
 .estimate-badge { display: inline-block; padding: 2px 7px; border-radius: 5px; background: #1c2b23; color: var(--mint); font-size: 11px; line-height: 1.5; }
 .estimate-provenance { display: grid; gap: 4px; }
+/* Controls-first layouts: data and actions share one row; secondary detail opens on demand. */
+:root { --faint: #91a098; --muted: #a7b4ad; }
+.page-heading h1 { margin-bottom: 0; }
+.state-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 6px; background: #20332a; color: var(--mint); font-size: 11px; line-height: 1.35; }
+.warning { color: #f3c777; }
+.state-badge.warning { background: #352b1a; }
+.inline-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 0 0 16px; border: 1px solid #493c25; background: #211d15; border-radius: 10px; font-size: 13px; }
+.inline-status svg { width: 17px; height: 17px; }
+.inline-status .button { margin-left: auto; }
+.compact-details, .range-details { font-size: 12px; color: var(--muted); }
+.compact-details summary, .range-details summary { cursor: pointer; padding: 7px 0; color: var(--text-2); }
+.compact-details[open] > span, .compact-details[open] > small { display: block; padding: 5px 0; }
+.grocery-range { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.grocery-range .week-switcher { margin: 0; padding: 0; border: 0; }
+.range-details { text-align: right; max-width: 45%; }
+.range-details small { display: block; padding: 8px; }
+.grocery-grid { grid-template-columns: 1fr; gap: 14px; align-items: start; }
+.grocery-section .inventory-section-head { padding: 12px 18px; background: #171e1a; }
+.grocery-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 16px; padding: 8px 16px; cursor: default; }
+.grocery-toggle { min-width: 0; min-height: 38px; }
+.grocery-toggle strong, .grocery-toggle small { display: block; }
+.grocery-toggle small { margin-top: 4px; color: var(--muted); font: 11px/1.4 inherit; }
+.grocery-quantity { text-align: right; }
+.grocery-quantity strong { display: block; color: var(--text-2); font: 500 13px 'JetBrains Mono', monospace; }
+.grocery-quantity small { display: block; margin-top: 5px; font-size: 12px; }
+.grocery-row.checked .grocery-quantity strong { text-decoration: none; color: var(--text-2); }
+.grocery-actions { display: flex; align-items: center; gap: 7px; }
+.demand-comparison { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; margin: 6px 0 2px 28px; padding: 9px 12px; border-left: 2px solid var(--warn); background: #211e17; color: var(--muted); font-size: 12px; }
+.demand-comparison strong { margin-left: 5px; color: var(--text); text-decoration: none !important; }
+.demand-comparison details { margin-left: auto; }
+.grocery-saved { grid-column: 1 / -1; margin-left: 28px; }
+.grocery-summary { padding: 16px 20px; margin-bottom: 16px; }
+.inventory-name { flex: 1; }
+.inventory-name small { color: var(--muted); margin-top: 5px; }
+.inventory-lot-count { min-width: 70px; color: var(--muted); font-size: 12px; }
+.inventory-total { min-width: 140px; text-align: right; font-size: 15px; }
+.cost-inline { color: var(--spend); font-size: 12px; }
+.inventory-due { min-width: 100px; text-align: right; font-size: 12px; }
+.prepared-row .grow small { color: var(--muted); }
+.prepared-row .due { display: inline-block; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; }
+.week-row.empty-day { align-items: center; min-height: 58px; padding-top: 9px; padding-bottom: 9px; }
+.empty-day .week-row-date { display: flex; align-items: center; gap: 9px; width: 118px; }
+.empty-day .week-row-date > small { margin: 0; font-size: 16px; }
+.empty-day .week-add { align-self: flex-start; min-width: 145px; border: 0; justify-content: flex-start; color: var(--muted); }
+.week-row.today { box-shadow: inset 3px 0 var(--mint); background: #152019; }
+.week-row-date strong { font-size: 12px; }
+.week-meal-card { gap: 12px; }
+.planned-portion { align-items: center; }
+.activity-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-insights > summary { padding: 12px 0; }
+.workspace-count { color: var(--muted); font-size: 13px; }
+.on-deck-toolbar { border: 0; background: transparent; padding: 0 0 12px; min-height: 36px; }
+.layout-switcher { margin-left: auto; }
+.layout-switcher button { padding: 7px 10px; }
+.layout-switcher button span { display: none; }
+.on-deck-board.single-recipe { display: block; height: auto; min-height: 0; overflow: visible; }
+.single-recipe .on-deck-card { height: auto; min-height: 0; }
+.single-recipe .deck-card-body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(270px, 1fr); gap: 16px 24px; overflow: visible; }
+.single-recipe .deck-method { grid-column: 1; grid-row: 1; }
+.single-recipe .deck-ingredients { grid-column: 2; grid-row: 1; }
+.single-recipe .batch-scale { grid-column: 2; grid-row: 2; }
+.single-recipe .deck-plan-link { grid-column: 2; grid-row: 3; }
+.single-recipe .deck-nutrition { grid-column: 1; grid-row: 2; }
+.single-recipe .cooking-progress { grid-column: 1; grid-row: 3; }
+.single-recipe .deck-finish { grid-column: 1 / -1; grid-row: 4; }
+.single-recipe .deck-section { margin: 0; }
+.deck-finish { padding: 14px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; }
+.deck-card-body .deck-finish h3 { margin-top: 0; color: var(--text-2); }
+.deck-batch-fields { gap: 12px; }
+.correction-summary { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.correction-summary > div { padding: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; }
+.correction-summary span, .correction-summary strong { display: block; }
+.correction-summary span { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+.correction-summary strong { font-size: 13px; }
+.mobile-more-menu { position: fixed; bottom: 78px; left: 12px; right: 12px; padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #17201b; border: 1px solid #405047; border-radius: 16px; box-shadow: 0 0 0 100vmax #0008; }
+.mobile-more-menu > button { display: flex; gap: 10px; align-items: center; padding: 12px; border: 0; border-radius: 8px; background: var(--card); color: var(--text); font-size: 13px; }
+.mobile-more-menu > .icon-button { grid-column: 1 / -1; justify-self: end; }
+.mobile-more-menu svg { width: 18px; height: 18px; }
+.mobile-more-menu [aria-current] { color: var(--mint); background: #223b2d; }
+@media (max-width: 720px) {
+  .header-actions .button, .on-deck-shell .header-actions .button { display: inline-flex; min-height: 36px; padding: 0 10px; }
+  .header-actions .button.secondary { display: none; }
+  .header-actions .button.primary span { display: inline; font-size: 12px; }
+  .header-actions .button.primary svg { display: none; }
+  .page-header-inner { align-items: center; gap: 8px; }
+  .page-heading h1 { font-size: 23px; }
+  .mobile-nav { grid-template-columns: repeat(5, 1fr); }
+  .mobile-nav > .scan-fab { display: none; }
+  .mobile-more-button { order: 5; }
+  .mobile-nav .mobile-more-button { display: flex; flex-direction: column; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--muted); font-size: 10px; }
+  .mobile-more-button svg { width: 20px; height: 20px; }
+  .grocery-range { gap: 6px; flex-wrap: wrap; }
+  .range-details { max-width: 100%; text-align: left; }
+  .grocery-range .week-switcher { flex: 1; }
+  .grocery-summary { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; }
+  .grocery-summary > .grow { flex: 1 1 45%; }
+  .grocery-summary .budget-panel { flex: 1 1 40%; padding: 0; border: 0; }
+  .grocery-summary .next-aisle { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; padding: 0; border: 0; }
+  .next-aisle > span, .next-aisle > strong { display: none; }
+  .grocery-summary .next-aisle .button { width: 100%; }
+  .grocery-row { gap: 5px 10px; padding: 9px 12px; }
+  .grocery-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .grocery-actions:empty { display: none; }
+  .grocery-quantity strong { font-size: 12px; }
+  .demand-comparison { margin-left: 0; gap: 8px 12px; }
+  .inventory-lot-count { display: none; }
+  .inventory-name { flex: 1; min-width: 100px; }
+  .inventory-total { min-width: 75px; }
+  .inventory-due { min-width: 0; margin-left: 40px; }
+  .prepared-row .servings { display: block; margin-left: 40px; }
+  .prepared-row .due { display: inline-block; }
+  .prepared-row .prepared-eat-quantity { margin-left: 40px; }
+  .week-row.empty-day { gap: 8px; }
+  .week-row-date { width: 70px; flex-basis: 70px; }
+  .empty-day .week-row-date { width: 80px; flex-basis: 80px; }
+  .on-deck-toolbar { flex-direction: row; padding: 0 0 10px; align-items: center; }
+  .on-deck-toolbar .layout-switcher { display: none; }
+  .single-recipe .deck-card-body { display: flex; flex-direction: column; }
+  .on-deck-card { height: auto; min-height: 0; }
+  .deck-card-body { overflow: visible; }
+  .deck-batch-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .consumption-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 720px) {
+  .page-header-inner { padding-top: 22px; }
+  .grocery-summary .budget-panel > .progress, .grocery-summary .budget-panel > small { display: none; }
+  .grocery-summary .grow { border: 0; padding-bottom: 0; }
+  .grocery-summary .budget-panel { margin: 0; }
+}
+.single-recipe .deck-card-body > .state-badge { grid-column: 2; justify-self: start; }

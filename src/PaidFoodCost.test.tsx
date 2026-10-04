@@ -85,6 +85,7 @@ it('keeps partial nutrition separate from its estimated flag, provenance and edi
   await userEvent.click(row);
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getAllByText('Estimated nutrition').length).toBeGreaterThan(0);
+  await userEvent.click(within(dialog).getByText('Estimated nutrition · source'));
   expect(within(dialog).getByText('Source: Visual portion estimate')).toBeVisible();
   expect(within(dialog).getByText('Confidence: low')).toBeVisible();
   expect(within(dialog).getByText('Small slice, recipe unknown')).toBeVisible();

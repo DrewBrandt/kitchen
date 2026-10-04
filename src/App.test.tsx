@@ -100,7 +100,7 @@ describe('Pantry web UI', () => {
     render(<App />);
 
     expect(screen.getByRole('heading', { name: /Good (morning|afternoon|evening), Drew/ })).toBeInTheDocument();
-    expect(screen.getByText('Ready to eat')).toBeInTheDocument();
+    expect(screen.getByText('Prepared food')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Inventory' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Grocery list/ })).toBeInTheDocument();
     expect(screen.getByText('Routine & food profile')).toBeInTheDocument();
@@ -422,7 +422,7 @@ describe('Pantry web UI', () => {
     await user.type(within(card).getByLabelText('Pieces currently in this package'), '6');
     await user.click(within(card).getByRole('button', { name: 'Half' }));
     expect(within(card).getByText(/~75 g/)).toBeInTheDocument();
-    expect(within(card).getByText(/Original recipe requirement: 600 g chicken.*replaced by pieces/)).toBeInTheDocument();
+    expect(within(card).getByText(/Recipe: 600 g chicken/)).toBeInTheDocument();
     expect(within(card).getByText(/Adjusted nutrition & cost unavailable/)).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Quarter' }));
     expect(within(card).getByLabelText('Pieces to cook')).toHaveValue(0.25);
@@ -450,7 +450,7 @@ describe('Pantry web UI', () => {
     expect(within(card).getByText('200 g rice')).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Choose pieces instead for chicken' }));
     await user.click(within(card).getByRole('button', { name: 'Half' }));
-    expect(within(card).getByText(/Original recipe requirement: 1200 g chicken.*replaced by pieces/)).toBeInTheDocument();
+    expect(within(card).getByText(/Recipe: 1200 g chicken/)).toBeInTheDocument();
     expect(within(card).getByText(/~75 g/)).toBeInTheDocument();
     const yieldInput = within(card).getByLabelText('Servings of ' + recipe.name + ' made');
     await user.clear(yieldInput);
@@ -816,6 +816,7 @@ describe('Pantry web UI', () => {
 
     await user.click(screen.getByRole('button', { name: 'History' }));
 
+    await userEvent.click(screen.getByRole('button', { name: 'Cooking' }));
     const card = screen.getByRole('heading', { name: 'What I made' }).closest('.card') as HTMLElement;
     expect(within(card).getByText('4 servings')).toBeInTheDocument();
     expect(within(card).getAllByText('fridge')).toHaveLength(2);

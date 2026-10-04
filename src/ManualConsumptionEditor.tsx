@@ -40,11 +40,12 @@ export function ManualConsumptionEditor({ id, original, save, close }: { id: str
     catch (cause) { setError(mutationError(cause, 'Could not save this correction.')); }
     finally { setBusy(false); }
   }}>
-    <p>Changing the portion text won’t update nutrition or cost.</p>
+
     <label className="field"><span>Food name</span><input name="label" required defaultValue={original.label} /></label>
-    <label className="field"><span>Portion description</span><input name="portionLabel" defaultValue={original.portionLabel ?? ''} /></label>
+    <label className="field"><span>Portion description</span><input aria-describedby="portion-label-note" name="portionLabel" defaultValue={original.portionLabel ?? ''} /></label>
+    <small id="portion-label-note">Label only · totals entered separately</small>
     <label className="field"><span>Note</span><input name="note" defaultValue={original.note ?? ''} /></label>
-    <p>Nutrition totals · blank = unknown</p>
+    <strong>Nutrition totals</strong><span className="state-badge">Blank = unknown</span>
     {Object.entries(nutrients).map(([key, label]) => <label className="field" key={key}><span>{label}</span><input name={key} type="number" min="0" step="any" defaultValue={original.nutrition[key] === null ? '' : String(original.nutrition[key] ?? '')} /></label>)}
     <label className="toggle-row"><input name="estimated" type="checkbox" defaultChecked={Boolean(original.nutrition.estimated)} /><span>Nutrition is estimated</span></label>
     {original.nutrition.source && <small>Source: {String(original.nutrition.source)}</small>}

@@ -133,7 +133,7 @@ export function DayPlanFields({ values = {}, onValidityChange }: { values?: Reco
       {selectedProduct && <LotChoice product={selectedProduct} value={stockChoice} onChange={setStockChoice} />}
     </section>
 
-    {(selectedRecipe || selectedProduct || selectedLeftover || selectedBatch) && <section className="composer-step"><div className="composer-step-title"><i>2</i><div><strong>Set the portion and timing</strong><small>{selectedProduct?.servingLabel ?? (selectedRecipe ? `One serving is 1/${selectedRecipe.servings} of the usual batch.` : selectedBatch ? `One serving is 1/${selectedBatch.servingsTotal} of this actual batch.` : '')}</small></div></div>
+    {(selectedRecipe || selectedProduct || selectedLeftover || selectedBatch) && <section className="composer-step"><div className="composer-step-title"><i>2</i><div><strong>Portion & timing</strong><small>{selectedProduct?.servingLabel ?? (selectedRecipe ? `1 serving = 1/${selectedRecipe.servings} batch` : selectedBatch ? `One serving is 1/${selectedBatch.servingsTotal} prepared batch` : '')}</small></div></div>
       <input type="hidden" name="intent" value={type === 'pantry' || selectedBatch ? 'consume' : type === 'leftover' ? 'leftover' : 'prepare'} />
       <input type="hidden" name="recipe" value={selectedRecipe?.id ?? ''} />
       <input type="hidden" name="product" value={selectedProduct && !exactLot ? selectedProduct.id : ''} />

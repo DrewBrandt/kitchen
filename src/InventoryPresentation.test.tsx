@@ -51,13 +51,13 @@ it('associates receipt labels explicitly and sorts foods without mutating shared
 it('shows recorded grocery quantity and keeps the old label in collapsed details', async () => {
   render(<PantryDataProvider data={{ ...previewPantryData, grocerySections: [{ emoji: '', label: 'Herbs', items: [{ name: 'Dried oregano', quantity: '0.012 oz', savedQuantityLabel: '0 oz', cost: 0.04 }] }] }}><App /></PantryDataProvider>);
   await userEvent.click(screen.getByRole('button', { name: 'Grocery list' }));
-  const row = screen.getByText('Dried oregano').closest('button')!;
-  const labels = row.querySelectorAll('.grocery-quantity small');
+  const row = screen.getByText('Dried oregano').closest('.grocery-row')!;
+  const labels = row.querySelectorAll('.grocery-quantity strong');
   expect(labels[0]).toHaveTextContent('0.012 oz');
   expect(labels).toHaveLength(1);
-  const saved = screen.getByText('Saved label: 0 oz');
+  const saved = screen.getByText('0 oz');
   expect(saved.closest('details')).not.toHaveAttribute('open');
-  await userEvent.click(screen.getByText('Details'));
+  await userEvent.click(screen.getByText('Saved label'));
   expect(saved.closest('details')).toHaveAttribute('open');
 });
 
